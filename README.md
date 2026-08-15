@@ -78,4 +78,4 @@ pnpm pack --config.ignore-scripts=true
 
 ## 仓库范围
 
-本仓库只包含 `dsh-w-*` W 系列插件，不包含第三方 `dsh-deep-whale` 插件，也不包含本机 profile、API Key、运行时状态或桌面版构建目录。
+本仓库只包含 `dsh-w-*` W 系列插件，不包含第三方插件。
