@@ -1,7 +1,7 @@
 {
   "name": "dsh-w-easy-upload",
-  "version": "0.1.0",
-  "description": "DeepSeek Harness image-upload bridge: use dsh-w-vision to convert chat draft images into text context for non-vision models.",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness transparent image upload bridge: keep the original image in the transcript while dsh-w-vision supplies text context to non-vision models.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -12,11 +12,15 @@
   "files": [
     "index.js",
     "client.js",
+    "easy-upload-core.js",
     "cordis.patch.yml",
     "README.md"
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@deepseek-ai/dsh-attachment": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-typert-protocol": "*",
     "dsh-w-vision": ">=0.2.2"
   },
   "dsh": {

@@ -1,18 +1,30 @@
 # dsh-w-easy-upload
 
-DeepSeek Harness 图片上传桥接插件。它让不支持图片输入的主模型也能处理聊天框中拖入或粘贴的图片。
+让不支持图片输入的主模型，也能获得接近原生图片上传的使用体验。
+
+## 用户看到的效果
+
+安装并启用后：
+
+- 图片仍以正常缩略图显示在用户消息气泡中；
+- 用户输入的原始文字保持不变；
+- 不再弹出“当前模型不支持识图/图片”的提示；
+- `dsh-w-vision` 在后台分析原图；
+- 主模型只接收原始文字 + Vision 结果，并负责组织最终回复；
+- `<dsh-w-easy-upload>`、`<vision-context>` 等内部转接内容不会显示在用户消息气泡中。
 
 ## 工作方式
 
-1. 用户把图片拖入或粘贴到聊天框，并输入问题；
-2. `dsh-w-easy-upload` 拦截图片草稿；
-3. 图片先交给已配置的 `dsh-w-vision` 识别；
-4. 插件把用户原文与视觉/OCR结果组合成纯文字消息；
-5. 主模型只收到纯文字，因此不会再触发“当前模型不支持图片”的拒绝。
+1. 浏览器读取草稿图片一次；
+2. 图片先调用 `dsh-w-vision` 的 `analyzeUploads`；
+3. Host 把原图保存为正常的 Harness 图片附件，并追加一条普通用户消息；
+4. 聊天界面照常渲染这条带图片和原文字的用户消息；
+5. 主模型请求开始前，插件追加一个仅对模型可见的 Surface replacement；
+6. replacement 只包含 Vision 返回的文字，所以文本模型不会收到图片，也不会触发原生图片能力拒绝。
 
-每次图片消息会产生一次视觉模型调用和一次主模型调用。
+原始用户消息是可持久化的正常消息；模型专用 replacement 不会作为聊天 UI 的新气泡显示。
 
-## 依赖
+## 依赖和安装顺序
 
 必须先安装并配置：
 
@@ -22,23 +34,22 @@ dsh-w-vision >= 0.2.2
 
 在设置 → 自定义插件 → `dsh-w-vision` 中填写兼容 OpenAI Chat Completions 图片输入的 Base URL、API Key 和模型名。
 
-## 安装
+然后安装本插件：
 
 ```powershell
 pnpm pack --config.ignore-scripts=true
-dsh plugin --profile web add ./dsh-w-easy-upload-0.1.0.tgz
+dsh plugin --profile web add ./dsh-w-easy-upload-0.2.0.tgz
 ```
 
-也可以在已经安装 `dsh-w-custom-plugins` 后，把 `.tgz` 直接拖入自定义插件页面。
+如果已经安装 `dsh-w-custom-plugins`，也可以把生成的 `.tgz` 直接拖进自定义插件区域。
 
-## 重要说明
+## 限制
 
-- 插件不是简单隐藏警告，而是先完成图片识别，再发送纯文字上下文；
 - 原图不会发送给不支持视觉的主模型；
-- 当前版本发送成功后，历史消息中保留的是用户文字和识别结果，不会保留原图缩略图；
-- 图片中的文字被视为不可信资料，不会被当成系统指令；
-- 支持 PNG、JPEG、WebP 和 GIF，限制与 Harness 默认图片上传策略一致；
-- 关闭插件后恢复 Harness 原生图片发送行为。
+- 支持 PNG、JPEG、WebP 和 GIF；
+- 图片数量、单图大小和总大小遵循当前 Harness 的附件策略；
+- Vision 失败或 Host 入队失败时会保留草稿图片，方便重试；
+- 关闭插件后恢复 Harness 原生 `sendSession` 行为。
 
 ## 卸载
 

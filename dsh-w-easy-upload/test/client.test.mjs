@@ -24,7 +24,7 @@ function file(bytes, name = 'sample.png', type = 'image/png') {
   }
 }
 
-function harness(remoteResult) {
+function harness(remoteResult, submitResult = { ok: true, value: { accepted: true } }) {
   const calls = []
   const notices = []
   const released = []
@@ -55,6 +55,7 @@ function harness(remoteResult) {
     },
   }
   const remoteCalls = []
+  const submitCalls = []
   const ctx = {
     remote: {
       async $mount() {
@@ -76,6 +77,14 @@ function harness(remoteResult) {
           },
         }
       }
+      if (name === 'remote.easyUpload') {
+        return {
+          async submit(input) {
+            submitCalls.push(input)
+            return submitResult
+          },
+        }
+      }
       return undefined
     },
     effect(factory) {
@@ -83,7 +92,18 @@ function harness(remoteResult) {
       if (typeof disposer === 'function') effects.push(disposer)
     },
   }
-  return { attachment, calls, conversation, effects, notices, original, released, remoteCalls, ctx }
+  return {
+    attachment,
+    calls,
+    conversation,
+    effects,
+    original,
+    released,
+    notices,
+    remoteCalls,
+    submitCalls,
+    ctx,
+  }
 }
 
 test('text-only sends pass through untouched', async () => {
@@ -92,26 +112,38 @@ test('text-only sends pass through untouched', async () => {
   const session = { sessionId: 's1' }
   await h.conversation.sendSession(session, 'hello', [], 'queue')
   assert.equal(h.remoteCalls.length, 0)
+  assert.equal(h.submitCalls.length, 0)
   assert.deepEqual(h.calls, [{ session, text: 'hello', imageIds: [], mode: 'queue' }])
   assert.equal(h.released.length, 0)
 })
 
-test('images are analyzed and the primary model receives text only', async () => {
+test('images go through Vision and easyUpload without calling native image admission', async () => {
   const h = harness({ ok: true, value: { text: 'Image 1: a warning banner.', count: 1 } })
   await plugin.apply(h.ctx)
   const session = { sessionId: 's1' }
   await h.conversation.sendSession(session, 'What is shown?', ['draft-1'], 'queue')
+
   assert.equal(h.remoteCalls.length, 1)
   assert.equal(h.remoteCalls[0].prompt, 'What is shown?')
   assert.equal(h.remoteCalls[0].images[0].mediaType, 'image/png')
-  assert.equal(h.calls.length, 1)
-  assert.deepEqual(h.calls[0].imageIds, [])
-  assert.match(h.calls[0].text, /What is shown\?/)
-  assert.match(h.calls[0].text, /a warning banner/)
+  assert.equal(h.submitCalls.length, 1)
+  assert.equal(h.submitCalls[0].sessionId, 's1')
+  assert.equal(h.submitCalls[0].mode, 'queue')
+  assert.equal(h.submitCalls[0].text, 'What is shown?')
+  assert.equal(h.submitCalls[0].images[0].data, h.remoteCalls[0].images[0].data)
+  assert.equal(h.submitCalls[0].visionText, 'Image 1: a warning banner.')
+  assert.equal(h.calls.length, 0)
   assert.equal(h.released.length, 1)
 })
 
-test('vision failures notify the scoped composer and retain draft images', async () => {
+test('steer mode is passed to Host unchanged', async () => {
+  const h = harness({ ok: true, value: { text: 'a cat', count: 1 } })
+  await plugin.apply(h.ctx)
+  await h.conversation.sendSession({ sessionId: 's2' }, 'describe', ['draft-1'], 'steer')
+  assert.equal(h.submitCalls[0].mode, 'steer')
+})
+
+test('Vision failures notify the scoped composer and retain draft images', async () => {
   const h = harness({ ok: false, error: { code: 'missing-service' } })
   await plugin.apply(h.ctx)
   await assert.rejects(
@@ -119,10 +151,25 @@ test('vision failures notify the scoped composer and retain draft images', async
     /analyzeUploads failed/,
   )
   assert.equal(h.calls.length, 0)
+  assert.equal(h.submitCalls.length, 0)
   assert.equal(h.released.length, 0)
   assert.equal(h.notices.length, 1)
   assert.equal(h.notices[0].level, 'error')
-  assert.match(h.notices[0].text, /图片识别失败/)
+  assert.match(h.notices[0].text, /图片识别或发送失败/)
+})
+
+test('Host submission failures retain draft images', async () => {
+  const h = harness(
+    { ok: true, value: { text: 'a cat', count: 1 } },
+    { ok: false, error: { code: 'agent-busy', message: 'busy' } },
+  )
+  await plugin.apply(h.ctx)
+  await assert.rejects(
+    h.conversation.sendSession({ sessionId: 's1' }, 'inspect', ['draft-1'], 'queue'),
+    /easyUpload.submit failed/,
+  )
+  assert.equal(h.released.length, 0)
+  assert.equal(h.notices.length, 1)
 })
 
 test('plugin cleanup restores the original sendSession method', async () => {
