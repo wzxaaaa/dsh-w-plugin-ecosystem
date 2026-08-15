@@ -1,0 +1,15 @@
+# Dependencies and local build output
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+*.log
+
+# Local/editor/OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# DeepSeek Harness local profile and runtime state
+.dsh/
+*.dsh-*.json

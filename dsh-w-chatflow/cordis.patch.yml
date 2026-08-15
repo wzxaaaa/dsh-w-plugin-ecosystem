@@ -1,0 +1,5 @@
+# dsh-w-chatflow bundle layer: insert this plugin as one loader row.
+# The bare `name` resolves from the profile directory (pnpm-managed node_modules).
+- insert:
+    - id: dsh-w-chatflow
+      name: dsh-w-chatflow

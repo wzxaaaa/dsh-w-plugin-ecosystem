@@ -1,0 +1,5 @@
+# dsh-w-computer-use bundle layer: one loader row contributes the
+# Host computer-use action tools (index.js). Host-only — no client UI.
+- insert:
+    - id: dsh-w-computer-use
+      name: dsh-w-computer-use

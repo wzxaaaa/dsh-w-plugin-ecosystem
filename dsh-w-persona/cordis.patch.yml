@@ -1,0 +1,5 @@
+# dsh-w-persona bundle layer: one loader row contributes both the
+# Host Remote service (index.js) and the browser Client section (client.js).
+- insert:
+    - id: dsh-w-persona
+      name: dsh-w-persona

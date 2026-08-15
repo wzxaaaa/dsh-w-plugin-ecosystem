@@ -1,0 +1,29 @@
+{
+  "name": "dsh-w-computer-use",
+  "version": "0.3.2",
+  "description": "DeepSeek Harness computer use in physical virtual-desktop pixels, with reliable input, multi-monitor support, and a visible safety overlay.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "controller.ps1",
+    "README.md",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "test": "node test/controller-smoke.mjs"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

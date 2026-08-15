@@ -1,0 +1,5 @@
+# dsh-w-custom-plugins bundle layer: one loader row contributes both the
+# Host Remote service (index.js) and the browser Client tab (client.js).
+- insert:
+    - id: dsh-w-custom-plugins
+      name: dsh-w-custom-plugins

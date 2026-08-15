@@ -1,0 +1,5 @@
+# dsh-w-vision bundle layer: one loader row contributes both the
+# Host service + model tool (index.js) and the browser settings form (client.js).
+- insert:
+    - id: dsh-w-vision
+      name: dsh-w-vision
