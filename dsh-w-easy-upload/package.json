@@ -1,7 +1,7 @@
 {
-  "name": "dsh-w-vision",
-  "version": "0.2.2",
-  "description": "DeepSeek Harness vision for screen coordinates and safe user-upload image analysis.",
+  "name": "dsh-w-easy-upload",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness image-upload bridge: use dsh-w-vision to convert chat draft images into text context for non-vision models.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -12,13 +12,12 @@
   "files": [
     "index.js",
     "client.js",
-    "vision-core.js",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "README.md"
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": "*",
-    "@deepseek-ai/dsh-typert-protocol": "*"
+    "dsh-w-vision": ">=0.2.2"
   },
   "dsh": {
     "bundle": {
@@ -28,8 +27,8 @@
       "inject": [
         "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "dsh-w-vision"
       ],
       "platform": "web"
     }

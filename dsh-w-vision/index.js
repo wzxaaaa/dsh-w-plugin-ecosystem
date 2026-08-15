@@ -2,10 +2,10 @@
  * dsh-w-vision — Host half.
  *
  * Two faces in one service:
- *   1. A `vision` Typert Remote service (`getConfig` / `saveConfig`) so the
- *      browser settings form can edit `base` / `apikey` / `modelname`. Config
- *      lives in a JSON state file in the profile dir and is read live, so it
- *      applies instantly without a restart. The prompt is FIXED (not exposed).
+ *   1. A `vision` Typert Remote service (`getConfig` / `saveConfig` /
+ *      `analyzeUploads`) so the browser settings form can edit the relay and
+ *      dsh-w-easy-upload can turn draft images into safe text context. Config
+ *      lives in a JSON state file in the profile dir and is read live.
  *   2. A model tool `look_at_screen` registered on `ctx.tools`: it captures the
  *      current Windows screen (PowerShell + System.Drawing) and asks the relay
  *      vision model for a structured text description.
@@ -22,6 +22,11 @@ import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
+import {
+  buildUploadVisionContent,
+  callVisionApi,
+  normalizeUploadBatch,
+} from './vision-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -112,6 +117,7 @@ let VisionService = (() => {
   let _instanceExtraInitializers = []
   let _getConfig_decorators
   let _saveConfig_decorators
+  let _analyzeUploads_decorators
   return class VisionService extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0
@@ -125,6 +131,12 @@ let VisionService = (() => {
       __esDecorate(this, null, _saveConfig_decorators, {
         kind: 'method', name: 'saveConfig', static: false, private: false,
         access: { has: (obj) => 'saveConfig' in obj, get: (obj) => obj.saveConfig },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _analyzeUploads_decorators = [Remote('analyzeUploads')]
+      __esDecorate(this, null, _analyzeUploads_decorators, {
+        kind: 'method', name: 'analyzeUploads', static: false, private: false,
+        access: { has: (obj) => 'analyzeUploads' in obj, get: (obj) => obj.analyzeUploads },
         metadata: _metadata,
       }, null, _instanceExtraInitializers)
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
@@ -236,6 +248,20 @@ let VisionService = (() => {
       return { saved: true, config: { ...next } }
     }
 
+    /**
+     * Analyze browser draft images for dsh-w-easy-upload. The main text-only
+     * model receives only the returned description, never the base64 payload.
+     */
+    async analyzeUploads(input) {
+      const batch = normalizeUploadBatch(input)
+      const text = await callVisionApi(
+        await this.readConfig(),
+        buildUploadVisionContent(batch),
+        { maxTokens: 4000 },
+      )
+      return { text, count: batch.images.length }
+    }
+
     /** Capture physical virtual-desktop pixels and return PNG data plus geometry. */
     async captureScreen(signal, region) {
       const dir = await mkdtemp(join(tmpdir(), 'dsh-w-vision-'))
@@ -301,19 +327,8 @@ let VisionService = (() => {
   }
 })()
 
-/** Resolve the chat-completions endpoint from a user-supplied base URL. */
-function chatCompletionsEndpoint(base) {
-  const normalized = String(base || '').replace(/\/+$/, '')
-  if (/\/chat\/completions$/i.test(normalized)) return normalized
-  if (/\/v1$/i.test(normalized)) return normalized + '/chat/completions'
-  return normalized + '/v1/chat/completions'
-}
-
 /** Call the relay vision endpoint and return the model's text answer. */
 async function describeImage(config, capture, question, signal) {
-  if (!config.base) throw new Error('vision is not configured: set the API base URL in Settings → Custom plugins → dsh-w-vision')
-  if (!config.apikey) throw new Error('vision is not configured: set the API key in Settings → Custom plugins → dsh-w-vision')
-  const endpoint = chatCompletionsEndpoint(config.base)
   const parts = [
     FIXED_PROMPT,
     'SCREENSHOT GEOMETRY: the image is exactly ' + capture.width + 'x' + capture.height
@@ -326,33 +341,10 @@ async function describeImage(config, capture, question, signal) {
     parts.push('Additional focus from the requesting agent: ' + String(question))
   }
   const prompt = parts.join('\n\n')
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + config.apikey,
-    },
-    body: JSON.stringify({
-      model: config.modelname,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,' + capture.base64, detail: 'high' } },
-        ],
-      }],
-      max_tokens: 3000,
-    }),
-    signal,
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`vision API ${String(res.status)}: ${text.slice(0, 500)}`)
-  }
-  const json = await res.json()
-  const content = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content
-  if (typeof content !== 'string' || content.length === 0) throw new Error('vision API returned no description')
-  return content
+  return callVisionApi(config, [
+    { type: 'text', text: prompt },
+    { type: 'image_url', image_url: { url: 'data:image/png;base64,' + capture.base64, detail: 'high' } },
+  ], { signal, maxTokens: 3000 })
 }
 
 export { VisionService, VisionService as default }

@@ -1,0 +1,5 @@
+# Browser-side image bridge: dsh-w-vision describes draft images, then the
+# selected text-only model receives the user's text plus the description.
+- insert:
+    - id: dsh-w-easy-upload
+      name: dsh-w-easy-upload

@@ -1,6 +1,6 @@
 # dsh-w-plugin-ecosystem
 
-`wzxaaaa` 的 DeepSeek Harness W 系列插件合集。这里集中维护可直接安装的插件源码和当前版本 `.tgz` 包。
+`wzxaaaa` 的 DeepSeek Harness W 系列插件合集。这里集中维护 6 个可直接安装的插件源码和当前版本 `.tgz` 包。
 
 > 这些插件面向 Windows 桌面版 / Web profile。插件拥有本机代码执行权限，请只安装你信任的版本。
 
@@ -11,14 +11,15 @@
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.1` | 自定义插件管理、启停和拖拽安装；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.1.tgz?raw=1) |
 | [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.2.1` | 用 `content-visibility` 降低长会话滚动与绘制卡顿 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.2.1.tgz?raw=1) |
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
+| [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.1.0` | 用视觉插件预处理聊天图片，让纯文本主模型也能理解图片 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.1.0.tgz?raw=1) |
 | [`dsh-w-persona`](./dsh-w-persona) | `0.2.0` | 查看、编辑、保存和恢复全局人设提示词 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1) |
-| [`dsh-w-vision`](./dsh-w-vision) | `0.2.1` | 屏幕视觉识别与物理桌面坐标输出 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.2.1.tgz?raw=1) |
+| [`dsh-w-vision`](./dsh-w-vision) | `0.2.2` | 屏幕视觉识别、物理桌面坐标输出及安全的上传图片识别接口 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.2.2.tgz?raw=1) |
 
 ## 推荐安装顺序
 
 ### 第一步：先安装 `dsh-w-custom-plugins`
 
-建议先安装 [`dsh-w-custom-plugins`](https://github.com/wzxaaaa/dsh-w-plugin-ecosystem/blob/main/dsh-w-custom-plugins)。它是本插件生态的图形化管理入口，安装以后，其余四个插件都可以直接把 `.tgz` 安装包拖入页面完成安装。
+建议先安装 [`dsh-w-custom-plugins`](https://github.com/wzxaaaa/dsh-w-plugin-ecosystem/blob/main/dsh-w-custom-plugins)。它是本插件生态的图形化管理入口，安装以后，其余五个插件都可以直接把 `.tgz` 安装包拖入页面完成安装。
 
 首次安装管理器时还没有拖拽入口，因此需要使用一次 DeepSeek Harness 官方 CLI：
 
@@ -36,37 +37,47 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.1.t
 
 > **设置 → 插件 → 自定义插件**
 
-### 第二步：拖入其余四个插件
+### 第二步：先安装视觉依赖，再拖入其他插件
 
-下载并依次拖入下面四个当前版本的 `.tgz` 文件：
+下载并依次拖入下面五个当前版本的 `.tgz` 文件：
 
-1. [`dsh-w-chatflow-0.2.1.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.2.1.tgz?raw=1)
-2. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
-3. [`dsh-w-persona-0.2.0.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1)
-4. [`dsh-w-vision-0.2.1.tgz`](./dsh-w-vision/dsh-w-vision-0.2.1.tgz?raw=1)
+1. [`dsh-w-vision-0.2.2.tgz`](./dsh-w-vision/dsh-w-vision-0.2.2.tgz?raw=1)
+2. [`dsh-w-easy-upload-0.1.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.1.0.tgz?raw=1)
+3. [`dsh-w-chatflow-0.2.1.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.2.1.tgz?raw=1)
+4. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
+5. [`dsh-w-persona-0.2.0.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 
 > [!IMPORTANT]
 > 请拖入插件目录中的 **`.tgz` 安装包**，不要拖源码文件夹，也不要下载并拖入整个仓库的 GitHub ZIP。整个仓库包含多个插件，会被安装器的“单插件包”安全校验拒绝。
 
+> [!NOTE]
+> `dsh-w-easy-upload` 依赖 `dsh-w-vision >= 0.2.2`，所以必须先安装并配置视觉插件。图片与文字一起发送时，图片会先由视觉模型识别，再把用户文字和视觉/OCR结果作为纯文字交给当前主模型；它不是简单隐藏“当前模型不支持图片”的提示。每条图片消息会产生一次视觉模型调用和一次主模型调用。
+
 ### 不使用管理器时
 
 其他插件仍然可以单独通过官方 CLI 安装。例如：
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-vision\dsh-w-vision-0.2.1.tgz
+dsh plugin --profile web add .\dsh-w-vision\dsh-w-vision-0.2.2.tgz
 ```
 
 每个插件目录的 README 都有自己的功能说明、依赖和卸载命令。
 
 ## 开发与验证
 
-每个插件保留可安装源码；`dsh-w-computer-use` 还包含不执行点击的控制器 smoke test：
+每个插件保留可安装源码；`dsh-w-computer-use` 包含不执行点击的控制器 smoke test，视觉与图片桥接插件也包含单元测试：
 
 ```powershell
 cd .\dsh-w-computer-use
 node .\test\controller-smoke.mjs
+
+cd ..\dsh-w-vision
+node --test .\test\vision-core.test.mjs
+
+cd ..\dsh-w-easy-upload
+node --test .\test\client.test.mjs
 ```
 
 发布前应至少执行：
