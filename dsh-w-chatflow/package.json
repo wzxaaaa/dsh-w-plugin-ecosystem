@@ -1,11 +1,18 @@
 {
   "name": "dsh-w-chatflow",
-  "version": "0.2.1",
-  "description": "DeepSeek Harness plugin: defer off-screen chat-history row layout/paint via CSS content-visibility to reduce lag in long conversations.",
+  "version": "0.3.0",
+  "description": "DeepSeek Harness chat-flow performance plugin: defer off-screen rendering and optimize very long streamed assistant reasoning.",
   "type": "module",
   "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "index.js",
+    "host-core.js",
+    "client.js",
     "cordis.patch.yml"
   ],
   "license": "MIT",
@@ -15,6 +22,16 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
     }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
   }
 }
