@@ -1,7 +1,7 @@
 {
   "name": "dsh-w-vision",
-  "version": "0.2.2",
-  "description": "DeepSeek Harness vision for screen coordinates and safe user-upload image analysis.",
+  "version": "0.3.1",
+  "description": "DeepSeek Harness vision relay for screen capture, local image files, and safe user-upload analysis.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -13,8 +13,13 @@
     "index.js",
     "client.js",
     "vision-core.js",
-    "cordis.patch.yml"
+    "read-image-tool.js",
+    "cordis.patch.yml",
+    "README.md"
   ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": "*",

@@ -2,13 +2,17 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  buildLocalImageVisionContent,
   buildUploadVisionContent,
   chatCompletionsEndpoint,
   extractVisionText,
+  imageMediaTypeForPath,
+  normalizeLocalImage,
   normalizeUploadBatch,
 } from '../vision-core.js'
 
-const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64')
+const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const png = pngBytes.toString('base64')
 
 test('normalizes a strict image upload batch', () => {
   const value = normalizeUploadBatch({
@@ -40,6 +44,53 @@ test('builds one labeled image part per upload', () => {
   assert.match(content[0].text, /Read this/)
   assert.match(content[1].text, /Image 1/)
   assert.match(content[2].image_url.url, /^data:image\/png;base64,/)
+})
+
+test('normalizes local PNG, JPEG, WebP, and GIF files', () => {
+  const fixtures = [
+    ['shot.png', pngBytes, 'image/png'],
+    ['shot.jpg', Buffer.from([0xff, 0xd8, 0xff]), 'image/jpeg'],
+    ['shot.webp', Buffer.from('RIFF1234WEBP', 'ascii'), 'image/webp'],
+    ['shot.gif', Buffer.from('GIF89a', 'ascii'), 'image/gif'],
+  ]
+  for (const [filePath, bytes, mediaType] of fixtures) {
+    const image = normalizeLocalImage({ filePath, bytes, question: 'Inspect rendering' })
+    assert.equal(image.mediaType, mediaType)
+    assert.equal(image.bytes, bytes.length)
+    assert.equal(image.name, filePath)
+  }
+})
+
+test('builds local image content with the visual question and data URL', () => {
+  const image = normalizeLocalImage({
+    filePath: 'C:\\shots\\scene.png',
+    bytes: pngBytes,
+    question: 'Is the page still loading?',
+  })
+  const content = buildLocalImageVisionContent(image)
+  assert.equal(content.length, 2)
+  assert.match(content[0].text, /Is the page still loading/)
+  assert.match(content[0].text, /scene.png/)
+  assert.match(content[1].image_url.url, /^data:image\/png;base64,/)
+})
+
+test('recognizes supported local image extensions case-insensitively', () => {
+  assert.equal(imageMediaTypeForPath('C:\\temp\\SHOT.PNG'), 'image/png')
+  assert.equal(imageMediaTypeForPath('/tmp/photo.jpeg'), 'image/jpeg')
+  assert.equal(imageMediaTypeForPath('plain.txt'), undefined)
+})
+
+test('rejects local extension mismatches, empty files, and oversized images', () => {
+  assert.throws(() => normalizeLocalImage({ filePath: 'wrong.jpg', bytes: pngBytes }), /extension declares/)
+  assert.throws(() => normalizeLocalImage({ filePath: 'empty.png', bytes: Buffer.alloc(0) }), /empty/)
+  assert.throws(() => normalizeLocalImage({
+    filePath: 'large.png',
+    bytes: Buffer.alloc(5 * 1024 * 1024 + 1),
+  }), /5 MB/)
+  assert.throws(() => normalizeLocalImage({
+    filePath: 'image.bmp',
+    bytes: Buffer.from([0x42, 0x4d]),
+  }), /only accepts/)
 })
 
 test('accepts string and array response content', () => {

@@ -1,7 +1,7 @@
 /**
  * dsh-w-vision — Host half.
  *
- * Two faces in one service:
+ * Three faces in one service:
  *   1. A `vision` Typert Remote service (`getConfig` / `saveConfig` /
  *      `analyzeUploads`) so the browser settings form can edit the relay and
  *      dsh-w-easy-upload can turn draft images into safe text context. Config
@@ -9,6 +9,8 @@
  *   2. A model tool `look_at_screen` registered on `ctx.tools`: it captures the
  *      current Windows screen (PowerShell + System.Drawing) and asks the relay
  *      vision model for a structured text description.
+ *   3. An agent-scoped `read_image` tool that shadows Harness's native image
+ *      attachment tool and sends local PNG/JPEG/WebP/GIF files to the relay.
  *
  * NOTE: decorators are emitted in the tsdown-compiled form because the shipped
  * Node runtime does not enable the native stage-3 decorator syntax by default.
@@ -27,6 +29,7 @@ import {
   callVisionApi,
   normalizeUploadBatch,
 } from './vision-core.js'
+import { createReadImageTool } from './read-image-tool.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -142,7 +145,7 @@ let VisionService = (() => {
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
-    static inject = ['tools']
+    static inject = ['tools', 'fs', 'agents']
 
     constructor(ctx) {
       super(ctx, 'vision')
@@ -202,6 +205,25 @@ let VisionService = (() => {
           }
         },
       }))
+
+      const installed = new Map()
+      const uninstallReadImage = (agent) => {
+        const dispose = installed.get(agent)
+        if (dispose === undefined) return
+        installed.delete(agent)
+        dispose()
+      }
+      const installReadImage = (agent) => {
+        if (installed.has(agent)) return
+        installed.set(agent, agent.ctx.tools.register(defineTool(createReadImageTool(self))))
+      }
+      this.ctx.effect(() => () => {
+        for (const dispose of installed.values()) dispose()
+        installed.clear()
+      }, 'dsh-w-vision: scoped read_image registrations')
+      for (const agent of this.ctx.agents.list()) installReadImage(agent)
+      this.ctx.on('agent/session-start', ({ agent }) => { installReadImage(agent) })
+      this.ctx.on('agent/disposed', ({ agent }) => { uninstallReadImage(agent) })
     }
 
     /** Absolute path of the config state file (resolved from ctx.baseUrl). */
@@ -347,4 +369,5 @@ async function describeImage(config, capture, question, signal) {
   ], { signal, maxTokens: 3000 })
 }
 
-export { VisionService, VisionService as default }
+
+export { VisionService, createReadImageTool, VisionService as default }

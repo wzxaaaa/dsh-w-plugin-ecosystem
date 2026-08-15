@@ -13,7 +13,7 @@
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
 | [`dsh-w-persona`](./dsh-w-persona) | `0.2.0` | 查看、编辑、保存和恢复全局人设提示词 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1) |
-| [`dsh-w-vision`](./dsh-w-vision) | `0.2.2` | 屏幕视觉识别、物理桌面坐标输出及安全的上传图片识别接口 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.2.2.tgz?raw=1) |
+| [`dsh-w-vision`](./dsh-w-vision) | `0.3.1` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.1.tgz?raw=1) |
 
 ## 推荐安装顺序
 
@@ -41,7 +41,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.1.t
 
 下载并依次拖入下面五个当前版本的 `.tgz` 文件：
 
-1. [`dsh-w-vision-0.2.2.tgz`](./dsh-w-vision/dsh-w-vision-0.2.2.tgz?raw=1)
+1. [`dsh-w-vision-0.3.1.tgz`](./dsh-w-vision/dsh-w-vision-0.3.1.tgz?raw=1)
 2. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
 3. [`dsh-w-chatflow-0.3.1.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1)
 4. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
@@ -53,14 +53,14 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.1.t
 > 请拖入插件目录中的 **`.tgz` 安装包**，不要拖源码文件夹，也不要下载并拖入整个仓库的 GitHub ZIP。整个仓库包含多个插件，会被安装器的“单插件包”安全校验拒绝。
 
 > [!NOTE]
-> `dsh-w-easy-upload` 依赖 `dsh-w-vision >= 0.2.2`，所以必须先安装并配置视觉插件。`0.2.0` 会在聊天记录中保留原图缩略图和用户原文字，同时用只对模型可见的 Surface replacement 把视觉/OCR结果交给当前主模型；因此不是简单隐藏“当前模型不支持图片”的提示，也不会把内部视觉上下文显示成用户气泡。每条图片消息会产生一次视觉模型调用和一次主模型调用。
+> `dsh-w-easy-upload` 依赖 `dsh-w-vision >= 0.2.2`，所以必须先安装并配置视觉插件。`dsh-w-vision 0.3.1` 还会在每个 agent 会话中用 scoped `read_image` 覆盖内置工具，把本地图片和落盘截图统一发送到配置的视觉中转模型，因此主模型不需要声明图片输入能力。`0.2.0` 会在聊天记录中保留原图缩略图和用户原文字，同时用只对模型可见的 Surface replacement 把视觉/OCR结果交给当前主模型；因此不是简单隐藏“当前模型不支持图片”的提示，也不会把内部视觉上下文显示成用户气泡。每条图片消息会产生一次视觉模型调用和一次主模型调用。
 
 ### 不使用管理器时
 
 其他插件仍然可以单独通过官方 CLI 安装。例如：
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-vision\dsh-w-vision-0.2.2.tgz
+dsh plugin --profile web add .\dsh-w-vision\dsh-w-vision-0.3.1.tgz
 ```
 
 每个插件目录的 README 都有自己的功能说明、依赖和卸载命令。
@@ -74,7 +74,7 @@ cd .\dsh-w-computer-use
 node .\test\controller-smoke.mjs
 
 cd ..\dsh-w-vision
-node --test .\test\vision-core.test.mjs
+npm test
 
 cd ..\dsh-w-easy-upload
 node --test .\test\client.test.mjs .\test\core.test.mjs
