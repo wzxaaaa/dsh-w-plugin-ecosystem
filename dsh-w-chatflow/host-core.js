@@ -8,6 +8,17 @@ export function normalizeIntrinsicSize(value) {
   return Math.max(MIN_INTRINSIC_SIZE, Math.min(MAX_INTRINSIC_SIZE, Math.round(number)))
 }
 
+export function normalizeHostConfig(config = {}) {
+  return {
+    enabled: config.enabled !== false,
+    optimizeStreaming: config.optimizeStreaming !== false,
+    // A guessed intrinsic row height can fight Harness scroll anchoring when
+    // very tall messages enter the viewport, so this optimization is opt-in.
+    deferOffscreenRows: config.deferOffscreenRows === true,
+    intrinsicSize: normalizeIntrinsicSize(config.intrinsicSize),
+  }
+}
+
 export function buildStyleTag(intrinsicSize) {
   const css = [
     '[data-chat-anchor-key] {',

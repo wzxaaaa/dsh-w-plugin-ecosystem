@@ -9,7 +9,7 @@
 | 插件 | 当前版本 | 作用 | 安装包 |
 | --- | ---: | --- | --- |
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.1` | 自定义插件管理、启停和拖拽安装；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.1.tgz?raw=1) |
-| [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.0` | 跳过屏外消息渲染，并消除超长流式思维链的累计文本重复扫描 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.0.tgz?raw=1) |
+| [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.1` | 消除超长流式思维链的重复扫描；屏外延迟渲染改为可选，避免长消息向上滚动回弹 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1) |
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
 | [`dsh-w-persona`](./dsh-w-persona) | `0.2.0` | 查看、编辑、保存和恢复全局人设提示词 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1) |
@@ -43,7 +43,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.1.t
 
 1. [`dsh-w-vision-0.2.2.tgz`](./dsh-w-vision/dsh-w-vision-0.2.2.tgz?raw=1)
 2. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
-3. [`dsh-w-chatflow-0.3.0.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.0.tgz?raw=1)
+3. [`dsh-w-chatflow-0.3.1.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1)
 4. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
 5. [`dsh-w-persona-0.2.0.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1)
 

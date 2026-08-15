@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  buildConfigTag, buildStyleTag, injectConfig, injectStyle, normalizeIntrinsicSize,
+  buildConfigTag, buildStyleTag, injectConfig, injectStyle, normalizeHostConfig,
+  normalizeIntrinsicSize,
 } from '../host-core.js'
 
 test('normalizes the intrinsic row height', () => {
@@ -9,6 +10,16 @@ test('normalizes the intrinsic row height', () => {
   assert.equal(normalizeIntrinsicSize(4200), 4000)
   assert.equal(normalizeIntrinsicSize('320.4'), 320)
   assert.equal(normalizeIntrinsicSize('nope'), 260)
+})
+
+test('keeps off-screen row deferral opt-in to preserve scroll stability', () => {
+  assert.deepEqual(normalizeHostConfig({}), {
+    enabled: true,
+    optimizeStreaming: true,
+    deferOffscreenRows: false,
+    intrinsicSize: 260,
+  })
+  assert.equal(normalizeHostConfig({ deferOffscreenRows: true }).deferOffscreenRows, true)
 })
 
 test('injects idempotent style and client configuration tags', () => {
