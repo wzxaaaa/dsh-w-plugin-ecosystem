@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-persona",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DeepSeek Harness persona manager: a Persona settings section that shows the harness default system prompt, edits/saves a custom one, and resets to default.",
   "type": "module",
   "main": "index.js",
@@ -12,6 +12,7 @@
   "files": [
     "index.js",
     "client.js",
+    "persona-core.js",
     "cordis.patch.yml"
   ],
   "license": "MIT",
@@ -34,5 +35,8 @@
       ],
       "platform": "web"
     }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
   }
 }

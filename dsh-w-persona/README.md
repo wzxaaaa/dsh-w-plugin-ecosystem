@@ -1,6 +1,6 @@
 # dsh-w-persona
 
-DeepSeek Harness 人设（人格）管理插件：在「设置」左侧 **Agent预设** 下面新增一个「**人设**」页面。
+DeepSeek Harness 人设（人格）管理插件：在「设置」左侧 **Agent 预设** 下面新增一个「**人设**」页面。
 
 ## 功能
 
@@ -8,16 +8,28 @@ DeepSeek Harness 人设（人格）管理插件：在「设置」左侧 **Agent�
 - **编辑** 当前生效的 system 提示词（textarea）；
 - 输入框右上角的 **↺ 回旋箭头**：一键把输入框重置为默认提示词；
 - **保存**：把自定义提示词写入 profile 的 `cordis.patch.yml`（覆盖 `system-prompt` 行的 `config.persona`），保存与默认一致时自动移除覆盖（干净回退）；
-- **即时生效**：插件注册了一个全局 `system-prompt/assemble` 监听器，在每次模型回合把组装好的 `deployment:persona` 段改写为已保存的人设，因此**无需重启**即可对新会话生效（这会覆盖各 Agent 预设自带的 persona，否则预设 persona 会遮蔽全局设置）。
+- **即时生效**：插件注册全局 `system-prompt/assemble` 监听器，在每次模型回合把组装好的 `deployment:persona` 段改写为已保存的人设，因此无需重启即可对新会话生效；
+- **缺失段自动补齐**：如果 Harness 当前装配结果没有 `deployment:persona`，插件会在 `harness:identity` 后自动插入该段，而不是只替换已存在的段；
+- **外部修改自动检测**：每次装配或读取状态时检查 `cordis.patch.yml` 的文件签名，直接编辑该文件后无需重启即可刷新缓存；
+- **刷新 Harness 默认提示词**：没有自定义覆盖时，可从当前 Harness `system-prompt` loader 重新捕获默认提示词；有覆盖时按钮会禁用，避免把覆盖内容误当成 Harness 默认值；
+- **实际装配诊断**：设置页显示当前是否使用自定义覆盖，以及最近一次请求是替换了已有 Persona 段、补齐了缺失 Persona 段，还是使用默认值。
 
 ## 安装
 
 ```powershell
 pnpm pack
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-persona-0.2.0.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-persona-0.3.0.tgz
 ```
 
 重启桌面版（或 `dsh web`）后，设置 → 左侧「人设」即可使用。
+
+## 开发与测试
+
+```powershell
+npm test
+node --check .\index.js
+node --check .\client.js
+```
 
 ## 卸载
 

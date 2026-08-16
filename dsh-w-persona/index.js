@@ -23,6 +23,12 @@ import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { basename, dirname, join } from 'node:path'
 import * as yaml from 'js-yaml'
+import {
+  PERSONA_SECTION,
+  PROMPT_ROW_ID,
+  patchPersonaAssembly,
+  updatePersonaPatch,
+} from './persona-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -62,8 +68,6 @@ var __esDecorate = function (ctor, descriptorIn, decorators, contextIn, initiali
 
 const PATCH_FILE = 'cordis.patch.yml'
 const DEFAULT_STATE_FILE = '.dsh-w-persona-default.txt'
-const PROMPT_ROW_ID = 'system-prompt'
-const PERSONA_SECTION = 'deployment:persona'
 const MAX_PERSONA_BYTES = 1024 * 1024
 const PATCH_LOCK_SUFFIX = '.dsh-w.lock'
 const PATCH_LOCK_STALE_MS = 30_000
@@ -155,43 +159,12 @@ function profileEntryId(entryId) {
   return entryId.startsWith(includePrefix) ? entryId.slice(includePrefix.length) : entryId
 }
 
-function updatePersonaPatch(data, text, defaultText) {
-  const next = []
-  let targetIndex = -1
-  for (const row of data) {
-    if (!row || row.id !== PROMPT_ROW_ID) {
-      next.push(row)
-      continue
-    }
-    const preserved = { ...row }
-    if (preserved.config != null && (typeof preserved.config !== 'object' || Array.isArray(preserved.config))) {
-      throw new Error('system-prompt config must be an object; refusing to overwrite it')
-    }
-    const config = preserved.config ? { ...preserved.config } : {}
-    delete config.persona
-    if (Object.keys(config).length > 0) preserved.config = config
-    else delete preserved.config
-    if (Object.keys(preserved).some(key => key !== 'id')) {
-      targetIndex = next.length
-      next.push(preserved)
-    }
-  }
-  if (text !== defaultText) {
-    if (targetIndex === -1) {
-      next.push({ id: PROMPT_ROW_ID, config: { persona: text } })
-    } else {
-      const target = next[targetIndex]
-      next[targetIndex] = { ...target, config: { ...(target.config || {}), persona: text } }
-    }
-  }
-  return next
-}
-
 let PersonaManagerGateway = (() => {
   let _classSuper = TypertRemoteService
   let _instanceExtraInitializers = []
   let _getState_decorators
   let _save_decorators
+  let _refreshDefault_decorators
   return class PersonaManagerGateway extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0
@@ -207,6 +180,12 @@ let PersonaManagerGateway = (() => {
         access: { has: (obj) => 'save' in obj, get: (obj) => obj.save },
         metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _refreshDefault_decorators = [Remote('refreshDefault')]
+      __esDecorate(this, null, _refreshDefault_decorators, {
+        kind: 'method', name: 'refreshDefault', static: false, private: false,
+        access: { has: (obj) => 'refreshDefault' in obj, get: (obj) => obj.refreshDefault },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
@@ -218,6 +197,8 @@ let PersonaManagerGateway = (() => {
 
       // undefined = not yet read, null = no override, string = saved override.
       this._customPersona = undefined
+      this._overrideSignature = undefined
+      this._lastAssembly = null
 
       // The `system-prompt` config override alone is NOT enough: every shipped
       // agent preset mounts its own `@deepseek-ai/dsh-persona` row that SHADOWS
@@ -227,16 +208,20 @@ let PersonaManagerGateway = (() => {
       // `next()` returns the downstream (inner) result, so we patch that value
       // and return it as authoritative.
       const self = this
-      this.ctx.on('system-prompt/assemble', async (assembly, _context, next) => {
+      this.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
         const assembled = await next()
         const custom = await self.getCustomPersona()
-        if (custom === null || !assembled || !Array.isArray(assembled.sections)) return assembled
-        return {
-          ...assembled,
-          sections: assembled.sections.map((section) =>
-            section.name === PERSONA_SECTION ? { ...section, text: custom } : section,
-          ),
+        const hadSection = Array.isArray(assembled?.sections)
+          && assembled.sections.some(section => section?.name === PERSONA_SECTION)
+        const result = patchPersonaAssembly(assembled, custom)
+        self._lastAssembly = {
+          at: Date.now(),
+          customActive: custom !== null,
+          hadSection,
+          applied: result.status.applied,
+          inserted: result.status.inserted,
         }
+        return result.assembly
       })
     }
 
@@ -283,10 +268,23 @@ let PersonaManagerGateway = (() => {
       return null
     }
 
-    /** The saved custom persona (cached after first read). */
+    /** Signature used to invalidate the cached patch override after external edits. */
+    async patchSignature() {
+      try {
+        const info = await stat(this.patchPath())
+        return `${info.mtimeMs}:${info.ctimeMs}:${info.size}`
+      } catch (error) {
+        if (error?.code === 'ENOENT') return 'missing'
+        throw error
+      }
+    }
+
+    /** The saved custom persona; re-reads cordis.patch.yml when it changes externally. */
     async getCustomPersona() {
-      if (this._customPersona !== undefined) return this._customPersona
+      const signature = await this.patchSignature()
+      if (this._customPersona !== undefined && signature === this._overrideSignature) return this._customPersona
       this._customPersona = await this.readOverrideFromPatch()
+      this._overrideSignature = signature
       return this._customPersona
     }
 
@@ -314,7 +312,28 @@ let PersonaManagerGateway = (() => {
     async getState() {
       const custom = await this.getCustomPersona()
       const defaultText = await this.readDefaultPersona()
-      return { current: custom ?? defaultText, defaultText }
+      return {
+        current: custom ?? defaultText,
+        defaultText,
+        hasOverride: custom !== null,
+        canRefreshDefault: custom === null,
+        diagnostics: {
+          sectionName: PERSONA_SECTION,
+          patchPath: this.patchPath(),
+          defaultStatePath: this.defaultStatePath(),
+          lastAssembly: this._lastAssembly,
+        },
+      }
+    }
+
+    async refreshDefault() {
+      const custom = await this.getCustomPersona()
+      if (custom !== null) {
+        return { ...(await this.getState()), refreshed: false, reason: 'override-active' }
+      }
+      const current = await this.readCurrentPersona()
+      await writeFile(this.defaultStatePath(), current, 'utf8')
+      return { ...(await this.getState()), refreshed: true }
     }
 
     async save(text) {
@@ -326,10 +345,11 @@ let PersonaManagerGateway = (() => {
       // Update the in-memory cache so the `system-prompt/assemble` listener
       // rewrites the persona on the very next model turn — no restart needed.
       this._customPersona = text !== defaultText ? text : null
+      this._overrideSignature = await this.patchSignature()
 
-      return { saved: true, current: text, defaultText, applied: true }
+      return { ...(await this.getState()), saved: true, applied: true }
     }
   }
 })()
 
-export { PersonaManagerGateway, PersonaManagerGateway as default, updatePersonaPatch }
+export { PersonaManagerGateway, PersonaManagerGateway as default, patchPersonaAssembly, updatePersonaPatch }
