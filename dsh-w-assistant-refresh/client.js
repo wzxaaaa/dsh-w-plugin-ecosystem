@@ -10,7 +10,8 @@ window.__ModuleLoader__.load({
 
     var NS = "assistantRefresh";
     var CSS = [
-      ".dshwar-slot{display:inline-flex;align-items:center;order:20;gap:6px}",
+      ".dshwar-slot{display:inline-flex;align-items:center;order:1;gap:6px}",
+      ".dshwar-slot~span{order:2}",
       ".dshwar-action{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:6px;border:0;border-radius:28px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}",
       ".dshwar-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}",
       ".dshwar-action[data-unavailable]{cursor:default;opacity:.4}",
@@ -133,14 +134,11 @@ window.__ModuleLoader__.load({
       return parts;
     }
 
-    async function createBlankSession(ctx, sessions, sessionId) {
+    async function createBlankSession(sessions, sessionId) {
       var summary = sessions.list.getSnapshot().byId[sessionId];
       var payload = {};
       if (summary?.cwd !== undefined) payload.cwd = summary.cwd;
-      if (summary?.agentPreset !== undefined) payload.agentPreset = summary.agentPreset;
-      var created = await ctx.remote.sessions.create(payload);
-      if (!created.ok) throw new Error(created.error.message || "new session creation failed");
-      return created.value.sessionId;
+      return sessions.create(payload);
     }
 
     async function refreshAssistant(ctx, sessionId, target) {
@@ -149,7 +147,7 @@ window.__ModuleLoader__.load({
       if (sourceSession === undefined) throw new Error("source session is unavailable");
       var prompt = await replayContent(sourceSession, target.content);
       var childId = target.cutSeq === undefined
-        ? await createBlankSession(ctx, ctx.sessions, sessionId)
+        ? await createBlankSession(ctx.sessions, sessionId)
         : await ctx.sessions.fork({ sessionId: sessionId, atSeq: target.cutSeq, increaseTitle: true });
       var childSession = await waitForBinding(ctx.sessions, childId);
       var accepted = await childSession.prompt(prompt, "queue");
@@ -212,7 +210,7 @@ window.__ModuleLoader__.load({
     }
 
     exports.apply = apply;
-    exports.inject = ["slots", "sessions", "remote", "locale"];
+    exports.inject = ["slots", "sessions", "locale"];
     module.exports = exports;
     return module.exports;
   },
