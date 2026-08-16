@@ -37,26 +37,45 @@ export function patchPersonaAssembly(assembly, customPersona) {
   if (customPersona === null || !assembly || !Array.isArray(assembly.sections)) {
     return {
       assembly,
-      status: { applied: false, hadSection: false, inserted: false },
+      status: { applied: false, hadSection: false, inserted: false, minimal: false, removedSections: [] },
     }
   }
 
-  const existing = assembly.sections.find(section => section?.name === PERSONA_SECTION)
-  const hadSection = existing !== undefined
-  const persona = existing === undefined
-    ? { name: PERSONA_SECTION, text: customPersona }
-    : { ...existing, text: customPersona }
+  const source = assembly.sections
+  const existingIndex = source.findIndex(section => section?.name === PERSONA_SECTION)
+  const hadSection = existingIndex >= 0
+  let personaIndex
+  let persona
 
-  // The waterfall result is rendered in array order without a second order
-  // sort. Remove every existing persona contribution and reinsert one canonical
-  // section at index 0 so the custom Persona is the first model-facing text.
-  const sections = [
-    persona,
-    ...assembly.sections.filter(section => section?.name !== PERSONA_SECTION),
-  ]
+  if (hadSection) {
+    personaIndex = existingIndex
+    persona = { ...source[existingIndex], text: customPersona }
+  } else {
+    const routerIndex = source.findIndex(section => section?.name === 'router-persona')
+    const identityIndex = source.findIndex(section => section?.name === 'harness:identity')
+    personaIndex = (routerIndex >= 0 ? routerIndex : identityIndex) + 1
+    persona = { name: PERSONA_SECTION, text: customPersona }
+  }
+
+  // Keep everything before Persona, including router-persona when it is
+  // present. Remove every prompt section after Persona. The separately
+  // transported tools/contexts/variables metadata remains untouched.
+  const keptBefore = source
+    .slice(0, personaIndex)
+    .filter(section => section?.name !== PERSONA_SECTION)
+  const removedSections = source
+    .slice(personaIndex + (hadSection ? 1 : 0))
+    .map(section => section?.name)
+    .filter(name => typeof name === 'string')
 
   return {
-    assembly: { ...assembly, sections },
-    status: { applied: true, hadSection, inserted: !hadSection },
+    assembly: { ...assembly, sections: [...keptBefore, persona] },
+    status: {
+      applied: true,
+      hadSection,
+      inserted: !hadSection,
+      minimal: true,
+      removedSections,
+    },
   }
 }

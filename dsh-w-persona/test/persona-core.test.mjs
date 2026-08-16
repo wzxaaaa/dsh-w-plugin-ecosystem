@@ -41,73 +41,98 @@ test('refuses to overwrite an invalid system-prompt config shape', () => {
   )
 })
 
-test('replaces an existing deployment persona section and moves it to the front', () => {
+test('replaces Persona and removes only sections after it', () => {
   const input = {
     sections: [
-      { name: 'harness:identity', text: 'identity' },
+      { name: 'router-persona', text: 'router' },
       { name: PERSONA_SECTION, text: 'preset' },
-      { name: 'tool:read', text: 'read' },
+      { name: 'tools:guidance', text: 'tools' },
+      { name: 'later:rules', text: 'later' },
     ],
     contexts: [],
     tools: [],
     variables: {},
   }
   const result = patchPersonaAssembly(input, 'custom')
-  assert.deepEqual(result.status, { applied: true, hadSection: true, inserted: false })
-  assert.equal(result.assembly.sections[0].name, PERSONA_SECTION)
-  assert.equal(result.assembly.sections[0].text, 'custom')
-  assert.deepEqual(result.assembly.sections.map(section => section.name), [
-    PERSONA_SECTION,
-    'harness:identity',
-    'tool:read',
+  assert.deepEqual(result.status, {
+    applied: true,
+    hadSection: true,
+    inserted: false,
+    minimal: true,
+    removedSections: ['tools:guidance', 'later:rules'],
+  })
+  assert.deepEqual(result.assembly.sections, [
+    { name: 'router-persona', text: 'router' },
+    { name: PERSONA_SECTION, text: 'custom' },
   ])
   assert.equal(input.sections[1].text, 'preset')
 })
 
-test('inserts a missing deployment persona before the harness identity', () => {
+test('inserts Persona after router-persona and removes only what follows it', () => {
   const input = {
     sections: [
-      { name: 'harness:identity', text: 'identity' },
-      { name: 'tool:read', text: 'read' },
-    ],
-  }
-  const result = patchPersonaAssembly(input, 'custom')
-  assert.deepEqual(result.status, { applied: true, hadSection: false, inserted: true })
-  assert.deepEqual(result.assembly.sections.map(section => section.name), [
-    PERSONA_SECTION,
-    'harness:identity',
-    'tool:read',
-  ])
-})
-
-test('inserts a missing deployment persona at the start when no harness identity exists', () => {
-  const input = { sections: [{ name: 'tool:read', text: 'read' }] }
-  const result = patchPersonaAssembly(input, 'custom')
-  assert.deepEqual(result.assembly.sections.map(section => section.name), [
-    PERSONA_SECTION,
-    'tool:read',
-  ])
-  assert.deepEqual(result.status, { applied: true, hadSection: false, inserted: true })
-})
-
-test('collapses duplicate persona sections into one first section', () => {
-  const input = {
-    sections: [
-      { name: PERSONA_SECTION, text: 'first', source: 'keep' },
-      { name: 'harness:identity', text: 'identity' },
-      { name: PERSONA_SECTION, text: 'duplicate' },
+      { name: 'router-persona', text: 'router' },
+      { name: 'tools:guidance', text: 'tools' },
     ],
   }
   const result = patchPersonaAssembly(input, 'custom')
   assert.deepEqual(result.assembly.sections, [
-    { name: PERSONA_SECTION, text: 'custom', source: 'keep' },
-    { name: 'harness:identity', text: 'identity' },
+    { name: 'router-persona', text: 'router' },
+    { name: PERSONA_SECTION, text: 'custom' },
   ])
+  assert.deepEqual(result.status.removedSections, ['tools:guidance'])
+})
+
+test('inserts Persona after harness identity when no router exists', () => {
+  const input = {
+    sections: [
+      { name: 'harness:identity', text: 'identity' },
+      { name: 'tools:guidance', text: 'tools' },
+    ],
+  }
+  const result = patchPersonaAssembly(input, 'custom')
+  assert.deepEqual(result.assembly.sections, [
+    { name: 'harness:identity', text: 'identity' },
+    { name: PERSONA_SECTION, text: 'custom' },
+  ])
+})
+
+test('inserts Persona first when no preferred anchor exists', () => {
+  const input = { sections: [{ name: 'tools:guidance', text: 'tools' }] }
+  const result = patchPersonaAssembly(input, 'custom')
+  assert.deepEqual(result.assembly.sections, [{ name: PERSONA_SECTION, text: 'custom' }])
+})
+
+test('preserves non-section assembly metadata while truncating prompt sections', () => {
+  const input = {
+    sections: [
+      { name: 'router-persona', text: 'router' },
+      { name: PERSONA_SECTION, text: 'first', source: 'keep' },
+      { name: 'tools:guidance', text: 'tools' },
+    ],
+    contexts: [{ name: 'runtime', text: 'context' }],
+    tools: [{ name: 'pwsh' }],
+    variables: { model: 'test' },
+  }
+  const result = patchPersonaAssembly(input, 'custom')
+  assert.deepEqual(result.assembly.sections, [
+    { name: 'router-persona', text: 'router' },
+    { name: PERSONA_SECTION, text: 'custom', source: 'keep' },
+  ])
+  assert.deepEqual(result.assembly.contexts, input.contexts)
+  assert.deepEqual(result.assembly.tools, input.tools)
+  assert.deepEqual(result.assembly.variables, input.variables)
 })
 
 test('leaves the assembly unchanged when no override is active', () => {
   const input = { sections: [{ name: 'harness:identity', text: 'identity' }] }
   const result = patchPersonaAssembly(input, null)
   assert.equal(result.assembly, input)
-  assert.deepEqual(result.status, { applied: false, hadSection: false, inserted: false })
+  assert.deepEqual(result.status, {
+    applied: false,
+    hadSection: false,
+    inserted: false,
+    minimal: false,
+    removedSections: [],
+  })
 })

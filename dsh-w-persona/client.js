@@ -199,6 +199,10 @@ window.__ModuleLoader__.load({
       function assemblyMessage(lastAssembly) {
         if (!lastAssembly) return t("assemblyNone");
         if (!lastAssembly.customActive) return t("assemblyDefault");
+        if (lastAssembly.minimal) {
+          var removedCount = Array.isArray(lastAssembly.removedSections) ? lastAssembly.removedSections.length : 0;
+          return t("assemblyMinimal") + " (" + removedCount + ")";
+        }
         if (lastAssembly.inserted) return t("assemblyInserted");
         if (lastAssembly.applied) return t("assemblyReplaced");
         return t("assemblyUnavailable");
@@ -346,8 +350,9 @@ window.__ModuleLoader__.load({
         overrideActive: "当前使用自定义人设覆盖",
         overrideDefault: "当前使用 Harness 默认人设",
         assemblyNone: "尚未发生模型提示词装配",
-        assemblyReplaced: "最近一次请求已将 Persona 置于 system prompt 第一段",
-        assemblyInserted: "最近一次请求已在 system prompt 最前面插入 Persona",
+        assemblyReplaced: "最近一次请求已更新 Persona，并保留其前面的提示词",
+        assemblyMinimal: "最近一次请求保留 Persona 前的提示词，并移除了后续提示词段数",
+        assemblyInserted: "最近一次请求已插入 Persona，并移除了其后面的提示词",
         assemblyDefault: "最近一次请求未启用自定义 Persona",
         assemblyUnavailable: "最近一次提示词装配中无法应用 Persona",
         patchPath: "配置文件",
@@ -373,8 +378,9 @@ window.__ModuleLoader__.load({
         overrideActive: "Using a custom persona override",
         overrideDefault: "Using the Harness default persona",
         assemblyNone: "No model prompt assembly has occurred yet",
-        assemblyReplaced: "The latest request moved Persona to the first system-prompt section",
-        assemblyInserted: "The latest request inserted Persona at the very front of the system prompt",
+        assemblyReplaced: "The latest request updated Persona while preserving prompt sections before it",
+        assemblyMinimal: "The latest request kept sections before Persona and removed following prompt sections",
+        assemblyInserted: "The latest request inserted Persona and removed following prompt sections",
         assemblyDefault: "The latest request used no custom Persona override",
         assemblyUnavailable: "Persona could not be applied during the latest assembly",
         patchPath: "Config file",

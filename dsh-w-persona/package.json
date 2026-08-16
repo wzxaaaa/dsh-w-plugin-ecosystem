@@ -1,7 +1,7 @@
 {
   "name": "dsh-w-persona",
-  "version": "0.4.0",
-  "description": "DeepSeek Harness persona manager with first-section prompt placement, live overrides, default refresh, and assembly diagnostics.",
+  "version": "0.6.0",
+  "description": "DeepSeek Harness persona manager that preserves prompt sections before deployment:persona and removes sections after it, with live overrides, default refresh, and diagnostics.",
   "type": "module",
   "main": "index.js",
   "exports": {
