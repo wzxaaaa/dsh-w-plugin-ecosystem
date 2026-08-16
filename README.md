@@ -8,7 +8,7 @@
 
 | 插件 | 当前版本 | 作用 | 安装包 |
 | --- | ---: | --- | --- |
-| [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.1` | 自定义插件管理、启停和拖拽安装；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.1.tgz?raw=1) |
+| [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.2` | 自定义插件管理、启停和拖拽安装；隐藏 preset 内部实现模块；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.2.tgz?raw=1) |
 | [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.1` | 消除超长流式思维链的重复扫描；屏外延迟渲染改为可选，避免长消息向上滚动回弹 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1) |
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
@@ -26,13 +26,13 @@
 首次安装管理器时还没有拖拽入口，因此需要使用一次 DeepSeek Harness 官方 CLI：
 
 ```powershell
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.1.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.tgz
 ```
 
 如果已经配置了全局 `dsh`，也可以使用：
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.1.tgz
+dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.tgz
 ```
 
 安装完成后重启桌面版（或重新启动 `dsh web`），进入：

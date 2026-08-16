@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-custom-plugins",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "DeepSeek Harness plugin manager with enable/disable controls and drag-and-drop archive installation.",
   "type": "module",
   "main": "index.js",
@@ -12,8 +12,12 @@
   "files": [
     "index.js",
     "client.js",
+    "custom-plugin-core.js",
     "cordis.patch.yml"
   ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
   "license": "MIT",
   "dependencies": {
     "js-yaml": "^4.1.0"

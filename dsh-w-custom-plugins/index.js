@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as yaml from 'js-yaml'
+import { isCustomModule } from './custom-plugin-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -144,14 +145,6 @@ async function mutatePatchArray(path, callback) {
     await writePatchArrayAtomic(path, next)
     return next
   })
-}
-
-/** A loader row is "custom" when it is neither a shipped dsh package nor a cordis builtin. */
-function isCustomModule(name) {
-  if (typeof name !== 'string' || name.length === 0) return false
-  if (name.startsWith('@deepseek-ai/')) return false
-  if (name.startsWith('cordis:')) return false
-  return true
 }
 
 /** Map an expanded Loader child id back to the profile-composition row id. */
