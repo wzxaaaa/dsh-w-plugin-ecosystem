@@ -1,0 +1,4 @@
+# dsh-w-assistant-refresh: host loader row for the browser-only action plugin.
+- insert:
+    - id: dsh-w-assistant-refresh
+      name: dsh-w-assistant-refresh
