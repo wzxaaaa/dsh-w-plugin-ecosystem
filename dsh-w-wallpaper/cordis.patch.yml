@@ -1,0 +1,4 @@
+# dsh-w-wallpaper bundle layer: client-side full-window wallpaper and settings.
+- insert:
+    - id: dsh-w-wallpaper
+      name: dsh-w-wallpaper

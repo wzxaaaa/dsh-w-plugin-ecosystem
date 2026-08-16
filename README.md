@@ -1,6 +1,6 @@
 # dsh-w-plugin-ecosystem
 
-`wzxaaaa` 的 DeepSeek Harness W 系列插件合集。这里集中维护 8 个可直接安装的插件源码和当前版本 `.tgz` 包。
+`wzxaaaa` 的 DeepSeek Harness W 系列插件合集。这里集中维护 9 个可直接安装的插件源码和当前版本 `.tgz` 包。
 
 > 这些插件面向 Windows 桌面版 / Web profile。插件拥有本机代码执行权限，请只安装你信任的版本。
 
@@ -16,12 +16,13 @@
 | [`dsh-w-vision`](./dsh-w-vision) | `0.3.2` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1) |
 | [`dsh-w-route-primer`](./dsh-w-route-primer) | `0.3.0` | 路由预热、任务分类与模式工具；感谢风神开源 `routing-suite` 和社区开源贡献 | [下载 `.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1) |
 | [`dsh-w-teacher-help-me`](./dsh-w-teacher-help-me) | `0.2.0` | 主模型受阻时召唤可只读调查工作区的老师模型，获取诊断和解决思路 | [下载 `.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1) |
+| [`dsh-w-wallpaper`](./dsh-w-wallpaper) | `0.1.0` | 用本地图片或视频铺满 Harness 界面，支持视频循环播放和速度调节 | [下载 `.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.1.0.tgz?raw=1) |
 
 ## 推荐安装顺序
 
 ### 第一步：先安装 `dsh-w-custom-plugins`
 
-建议先安装 [`dsh-w-custom-plugins`](https://github.com/wzxaaaa/dsh-w-plugin-ecosystem/blob/main/dsh-w-custom-plugins)。它是本插件生态的图形化管理入口，安装以后，其余七个插件都可以直接把 `.tgz` 安装包拖入页面完成安装。
+建议先安装 [`dsh-w-custom-plugins`](https://github.com/wzxaaaa/dsh-w-plugin-ecosystem/blob/main/dsh-w-custom-plugins)。它是本插件生态的图形化管理入口，安装以后，其余八个插件都可以直接把 `.tgz` 安装包拖入页面完成安装。
 
 首次安装管理器时还没有拖拽入口，因此需要使用一次 DeepSeek Harness 官方 CLI：
 
@@ -41,7 +42,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 
 ### 第二步：先安装视觉依赖，再拖入其他插件
 
-下载并依次拖入下面七个当前版本的 `.tgz` 文件：
+下载并依次拖入下面八个当前版本的 `.tgz` 文件：
 
 1. [`dsh-w-vision-0.3.2.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1)
 2. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
@@ -50,6 +51,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 5. [`dsh-w-persona-0.2.0.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1)
 6. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
 7. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
+8. [`dsh-w-wallpaper-0.1.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.1.0.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 
@@ -90,6 +92,9 @@ cd ..\dsh-w-route-primer
 npm test
 
 cd ..\dsh-w-teacher-help-me
+npm test
+
+cd ..\dsh-w-wallpaper
 npm test
 ```
 
