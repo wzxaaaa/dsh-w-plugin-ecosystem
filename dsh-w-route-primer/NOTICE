@@ -1,0 +1,6 @@
+dsh-w-route-primer includes adapted routing logic from dsh-router-standard
+(https://github.com/yjh051108/dsh-router-standard), commit
+eff787e95132d6c7104214542104a84d656b497e, distributed under the MIT License.
+
+Adaptations preserve dsh-w-persona as a second persona section, scope the
+router to the route-primer preset, and release per-session state on disposal.

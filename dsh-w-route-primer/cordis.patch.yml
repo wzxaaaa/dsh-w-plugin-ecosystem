@@ -1,0 +1,4 @@
+# Installs the scoped routing-suite-compatible route-primer preset.
+- insert:
+    - id: dsh-w-route-primer
+      name: dsh-w-route-primer

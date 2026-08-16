@@ -1,0 +1,33 @@
+{
+  "name": "dsh-w-route-primer",
+  "version": "0.3.0",
+  "description": "Routing-suite-compatible DeepSeek Harness preset with task routing, near-field guidance, mode tools, and a live w-persona second prompt.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "primer-core.js",
+    "route-primer-bootstrap.mjs",
+    "router-core.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "NOTICE",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-agent-presets": "*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
