@@ -41,7 +41,7 @@ test('refuses to overwrite an invalid system-prompt config shape', () => {
   )
 })
 
-test('replaces an existing deployment persona section', () => {
+test('replaces an existing deployment persona section and moves it to the front', () => {
   const input = {
     sections: [
       { name: 'harness:identity', text: 'identity' },
@@ -54,11 +54,17 @@ test('replaces an existing deployment persona section', () => {
   }
   const result = patchPersonaAssembly(input, 'custom')
   assert.deepEqual(result.status, { applied: true, hadSection: true, inserted: false })
-  assert.equal(result.assembly.sections[1].text, 'custom')
+  assert.equal(result.assembly.sections[0].name, PERSONA_SECTION)
+  assert.equal(result.assembly.sections[0].text, 'custom')
+  assert.deepEqual(result.assembly.sections.map(section => section.name), [
+    PERSONA_SECTION,
+    'harness:identity',
+    'tool:read',
+  ])
   assert.equal(input.sections[1].text, 'preset')
 })
 
-test('inserts a missing deployment persona immediately after the harness identity', () => {
+test('inserts a missing deployment persona before the harness identity', () => {
   const input = {
     sections: [
       { name: 'harness:identity', text: 'identity' },
@@ -68,8 +74,8 @@ test('inserts a missing deployment persona immediately after the harness identit
   const result = patchPersonaAssembly(input, 'custom')
   assert.deepEqual(result.status, { applied: true, hadSection: false, inserted: true })
   assert.deepEqual(result.assembly.sections.map(section => section.name), [
-    'harness:identity',
     PERSONA_SECTION,
+    'harness:identity',
     'tool:read',
   ])
 })
@@ -82,6 +88,21 @@ test('inserts a missing deployment persona at the start when no harness identity
     'tool:read',
   ])
   assert.deepEqual(result.status, { applied: true, hadSection: false, inserted: true })
+})
+
+test('collapses duplicate persona sections into one first section', () => {
+  const input = {
+    sections: [
+      { name: PERSONA_SECTION, text: 'first', source: 'keep' },
+      { name: 'harness:identity', text: 'identity' },
+      { name: PERSONA_SECTION, text: 'duplicate' },
+    ],
+  }
+  const result = patchPersonaAssembly(input, 'custom')
+  assert.deepEqual(result.assembly.sections, [
+    { name: PERSONA_SECTION, text: 'custom', source: 'keep' },
+    { name: 'harness:identity', text: 'identity' },
+  ])
 })
 
 test('leaves the assembly unchanged when no override is active', () => {

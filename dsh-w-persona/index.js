@@ -13,7 +13,8 @@
  * `@deepseek-ai/dsh-persona` row that shadows the deployment persona. This
  * plugin therefore also registers a GLOBAL `system-prompt/assemble` listener
  * that rewrites the assembled `deployment:persona` section to the saved
- * override on every model turn, so it applies instantly to new sessions
+ * override and moves it to the first section on every model turn, so it
+ * applies instantly to new sessions
  * regardless of the active preset.
  */
 
@@ -220,6 +221,7 @@ let PersonaManagerGateway = (() => {
           hadSection,
           applied: result.status.applied,
           inserted: result.status.inserted,
+          first: result.assembly?.sections?.[0]?.name === PERSONA_SECTION,
         }
         return result.assembly
       })

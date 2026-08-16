@@ -13,7 +13,7 @@
 | [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.1` | 消除超长流式思维链的重复扫描；屏外延迟渲染改为可选，避免长消息向上滚动回弹 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1) |
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
-| [`dsh-w-persona`](./dsh-w-persona) | `0.3.0` | 全局人设提示词管理；缺失 Persona 段自动补齐、外部 patch 变更检测、默认提示词刷新和装配诊断 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.3.0.tgz?raw=1) |
+| [`dsh-w-persona`](./dsh-w-persona) | `0.4.0` | 将自定义 Persona 强制放在普通 system prompt 第一段，并支持外部 patch 检测、默认提示词刷新和装配诊断 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.4.0.tgz?raw=1) |
 | [`dsh-w-vision`](./dsh-w-vision) | `0.3.2` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1) |
 | [`dsh-w-route-primer`](./dsh-w-route-primer) | `0.3.0` | 路由预热、任务分类与模式工具；感谢风神开源 `routing-suite` 和社区开源贡献 | [下载 `.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1) |
 | [`dsh-w-teacher-help-me`](./dsh-w-teacher-help-me) | `0.2.0` | 主模型受阻时召唤可只读调查工作区的老师模型，获取诊断和解决思路 | [下载 `.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1) |
@@ -49,7 +49,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 2. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
 3. [`dsh-w-chatflow-0.3.1.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1)
 4. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
-5. [`dsh-w-persona-0.3.0.tgz`](./dsh-w-persona/dsh-w-persona-0.3.0.tgz?raw=1)
+5. [`dsh-w-persona-0.4.0.tgz`](./dsh-w-persona/dsh-w-persona-0.4.0.tgz?raw=1)
 6. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
 7. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
 8. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)

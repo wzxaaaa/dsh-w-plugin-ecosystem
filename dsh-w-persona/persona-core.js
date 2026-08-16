@@ -41,27 +41,22 @@ export function patchPersonaAssembly(assembly, customPersona) {
     }
   }
 
-  const hadSection = assembly.sections.some(section => section?.name === PERSONA_SECTION)
-  if (hadSection) {
-    return {
-      assembly: {
-        ...assembly,
-        sections: assembly.sections.map(section =>
-          section?.name === PERSONA_SECTION ? { ...section, text: customPersona } : section,
-        ),
-      },
-      status: { applied: true, hadSection: true, inserted: false },
-    }
-  }
+  const existing = assembly.sections.find(section => section?.name === PERSONA_SECTION)
+  const hadSection = existing !== undefined
+  const persona = existing === undefined
+    ? { name: PERSONA_SECTION, text: customPersona }
+    : { ...existing, text: customPersona }
 
-  const sections = [...assembly.sections]
-  const identityIndex = sections.findIndex(section => section?.name === 'harness:identity')
-  sections.splice(identityIndex >= 0 ? identityIndex + 1 : 0, 0, {
-    name: PERSONA_SECTION,
-    text: customPersona,
-  })
+  // The waterfall result is rendered in array order without a second order
+  // sort. Remove every existing persona contribution and reinsert one canonical
+  // section at index 0 so the custom Persona is the first model-facing text.
+  const sections = [
+    persona,
+    ...assembly.sections.filter(section => section?.name !== PERSONA_SECTION),
+  ]
+
   return {
     assembly: { ...assembly, sections },
-    status: { applied: true, hadSection: false, inserted: true },
+    status: { applied: true, hadSection, inserted: !hadSection },
   }
 }
