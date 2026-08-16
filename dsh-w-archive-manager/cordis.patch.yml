@@ -1,0 +1,5 @@
+# dsh-w-archive-manager bundle layer: Host archive lifecycle service and
+# browser settings section.
+- insert:
+    - id: dsh-w-archive-manager
+      name: dsh-w-archive-manager

@@ -1,6 +1,6 @@
 # dsh-w-plugin-ecosystem
 
-`wzxaaaa` 的 DeepSeek Harness W 系列插件合集。这里集中维护 9 个可直接安装的插件源码和当前版本 `.tgz` 包。
+`wzxaaaa` 的 DeepSeek Harness W 系列插件合集。这里集中维护 10 个可直接安装的插件源码和当前版本 `.tgz` 包。
 
 > 这些插件面向 Windows 桌面版 / Web profile。插件拥有本机代码执行权限，请只安装你信任的版本。
 
@@ -9,6 +9,7 @@
 | 插件 | 当前版本 | 作用 | 安装包 |
 | --- | ---: | --- | --- |
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.2` | 自定义插件管理、启停和拖拽安装；隐藏 preset 内部实现模块；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.2.tgz?raw=1) |
+| [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.1.2` | 在设置中管理已归档对话，支持还原、永久删除、一键清理和真实的 30 天自动清理 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1) |
 | [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.1` | 消除超长流式思维链的重复扫描；屏外延迟渲染改为可选，避免长消息向上滚动回弹 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1) |
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
@@ -22,7 +23,7 @@
 
 ### 第一步：先安装 `dsh-w-custom-plugins`
 
-建议先安装 [`dsh-w-custom-plugins`](https://github.com/wzxaaaa/dsh-w-plugin-ecosystem/blob/main/dsh-w-custom-plugins)。它是本插件生态的图形化管理入口，安装以后，其余八个插件都可以直接把 `.tgz` 安装包拖入页面完成安装。
+建议先安装 [`dsh-w-custom-plugins`](https://github.com/wzxaaaa/dsh-w-plugin-ecosystem/blob/main/dsh-w-custom-plugins)。它是本插件生态的图形化管理入口，安装以后，其余九个插件都可以直接把 `.tgz` 安装包拖入页面完成安装。
 
 首次安装管理器时还没有拖拽入口，因此需要使用一次 DeepSeek Harness 官方 CLI：
 
@@ -42,7 +43,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 
 ### 第二步：先安装视觉依赖，再拖入其他插件
 
-下载并依次拖入下面八个当前版本的 `.tgz` 文件：
+下载并依次拖入下面九个当前版本的 `.tgz` 文件：
 
 1. [`dsh-w-vision-0.3.2.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1)
 2. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
@@ -52,6 +53,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 6. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
 7. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
 8. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)
+9. [`dsh-w-archive-manager-0.1.2.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 
@@ -95,6 +97,9 @@ cd ..\dsh-w-teacher-help-me
 npm test
 
 cd ..\dsh-w-wallpaper
+npm test
+
+cd ..\dsh-w-archive-manager
 npm test
 ```
 
