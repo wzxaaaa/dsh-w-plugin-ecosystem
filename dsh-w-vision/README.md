@@ -11,7 +11,8 @@ DeepSeek Harness 统一视觉插件：把当前 Windows 屏幕、本地图片文
 - 在设置中配置视觉模型的 Base URL、API Key 和模型名；
 - 配置保存在 profile 目录的 `.dsh-w-vision.json`，修改后即时生效；
 - 为 `dsh-w-easy-upload` 批量识别聊天框中的 PNG、JPEG、WebP 和 GIF 图片；
-- 屏幕、本地文件和上传图片使用同一组视觉中转配置，识别结果以纯文本交给主模型。
+- 屏幕、本地文件和上传图片使用同一组视觉中转配置，识别结果以纯文本交给主模型；
+- 大图片 Base64 使用常量栈线性校验，避免 `Maximum call stack size exceeded`。
 
 ## 视觉入口
 
@@ -25,7 +26,7 @@ DeepSeek Harness 统一视觉插件：把当前 Windows 屏幕、本地图片文
 
 ```powershell
 npm pack --ignore-scripts
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-vision-0.3.1.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-vision-0.3.2.tgz
 ```
 
 安装后重启桌面版（或 `dsh web`），然后在设置 -> 自定义插件 -> `dsh-w-vision` 中填写模型配置。

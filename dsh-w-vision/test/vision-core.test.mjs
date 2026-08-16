@@ -32,6 +32,19 @@ test('rejects mismatched media types and malformed base64', () => {
   assert.throws(() => normalizeUploadBatch({
     images: [{ mediaType: 'image/png', data: 'not base64' }],
   }), /base64|invalid/)
+  assert.throws(() => normalizeUploadBatch({
+    images: [{ mediaType: 'image/png', data: 'iVB=Rw==' }],
+  }), /strict base64/)
+})
+
+test('validates a maximum-size upload without recursive regular-expression overflow', () => {
+  const bytes = Buffer.alloc(5 * 1024 * 1024)
+  pngBytes.copy(bytes)
+  const value = normalizeUploadBatch({
+    images: [{ mediaType: 'image/png', data: bytes.toString('base64'), name: 'maximum.png' }],
+  })
+  assert.equal(value.images[0].bytes, bytes.length)
+  assert.equal(value.totalBytes, bytes.length)
 })
 
 test('builds one labeled image part per upload', () => {

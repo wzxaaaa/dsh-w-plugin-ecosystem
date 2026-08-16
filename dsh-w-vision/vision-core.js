@@ -43,8 +43,17 @@ function strictBase64(value, maxBytes) {
   if (typeof value !== 'string' || value.length === 0) throw new Error('image data must be non-empty base64')
   const maxChars = Math.ceil(maxBytes / 3) * 4
   if (value.length > maxChars || value.length % 4 !== 0) throw new Error('image data is invalid or too large')
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value)) {
-    throw new Error('image data is not strict base64')
+
+  let dataEnd = value.length
+  if (value.endsWith('==')) dataEnd -= 2
+  else if (value.endsWith('=')) dataEnd -= 1
+  for (let index = 0; index < dataEnd; index += 1) {
+    const code = value.charCodeAt(index)
+    const valid = (code >= 0x41 && code <= 0x5a)
+      || (code >= 0x61 && code <= 0x7a)
+      || (code >= 0x30 && code <= 0x39)
+      || code === 0x2b || code === 0x2f
+    if (!valid) throw new Error('image data is not strict base64')
   }
   const bytes = Buffer.from(value, 'base64')
   if (bytes.length === 0 || bytes.length > maxBytes || bytes.toString('base64') !== value) {
