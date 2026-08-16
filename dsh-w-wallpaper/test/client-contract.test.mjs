@@ -22,6 +22,22 @@ test('uses a persistent full-window media layer with cover sizing', () => {
   assert.match(source, /URL\.createObjectURL/u)
 })
 
+test('keeps the shell and the left workspace transparent while wallpaper is active', () => {
+  assert.match(source, /--dsw-specific-sidebar-fill:transparent!important/u)
+  assert.match(source, /\[class\*=sidebarCol\]\)\{background:transparent!important\}/u)
+  assert.match(source, /\[class\*=sidebarCol\]\)>div\{background:transparent!important\}/u)
+})
+
+test('persists and applies adjustable wallpaper blur without viewport edge gaps', () => {
+  assert.match(source, /--dsh-w-wallpaper-blur/u)
+  assert.match(source, /--dsh-w-wallpaper-bleed/u)
+  assert.match(source, /filter:blur\(var\(--dsh-w-wallpaper-blur\)\)/u)
+  assert.match(source, /blur: normalizedBlur/u)
+  assert.match(source, /t\("blurLabel"\)/u)
+  assert.match(source, /min: MIN_BLUR/u)
+  assert.match(source, /max: MAX_BLUR/u)
+})
+
 test('configures videos for muted looping playback and adjustable speed', () => {
   assert.match(source, /media\.autoplay = true/u)
   assert.match(source, /media\.loop = true/u)

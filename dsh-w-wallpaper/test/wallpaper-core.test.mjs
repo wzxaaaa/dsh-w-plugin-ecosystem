@@ -2,10 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  DEFAULT_BLUR,
   DEFAULT_PLAYBACK_RATE,
+  MAX_BLUR,
   MAX_PLAYBACK_RATE,
+  MIN_BLUR,
   MIN_PLAYBACK_RATE,
   classifyWallpaper,
+  normalizeBlur,
   normalizePlaybackRate,
 } from '../wallpaper-core.js'
 
@@ -26,4 +30,11 @@ test('normalizes video playback speed to the supported range', () => {
   assert.equal(normalizePlaybackRate(0), MIN_PLAYBACK_RATE)
   assert.equal(normalizePlaybackRate(8), MAX_PLAYBACK_RATE)
   assert.equal(normalizePlaybackRate(1.75), 1.75)
+})
+
+test('normalizes wallpaper blur to the supported range', () => {
+  assert.equal(normalizeBlur('not-a-number'), DEFAULT_BLUR)
+  assert.equal(normalizeBlur(-1), MIN_BLUR)
+  assert.equal(normalizeBlur(80), MAX_BLUR)
+  assert.equal(normalizeBlur(12.5), 12.5)
 })

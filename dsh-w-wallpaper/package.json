@@ -1,7 +1,7 @@
 {
   "name": "dsh-w-wallpaper",
-  "version": "0.1.0",
-  "description": "Full-window image and video wallpaper plugin for DeepSeek Harness with persistent local media and configurable video speed.",
+  "version": "0.2.0",
+  "description": "Full-workspace image and video wallpaper plugin for DeepSeek Harness with persistent local media, configurable blur, and video speed.",
   "type": "module",
   "main": "index.js",
   "exports": {

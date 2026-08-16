@@ -2,6 +2,10 @@ export const MIN_PLAYBACK_RATE = 0.25
 export const MAX_PLAYBACK_RATE = 4
 export const DEFAULT_PLAYBACK_RATE = 1
 
+export const MIN_BLUR = 0
+export const MAX_BLUR = 40
+export const DEFAULT_BLUR = 18
+
 const IMAGE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'jpeg', 'jpg', 'png', 'svg', 'webp'])
 const VIDEO_EXTENSIONS = new Set(['m4v', 'mov', 'mp4', 'ogv', 'webm'])
 
@@ -14,6 +18,12 @@ export function normalizePlaybackRate(value) {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return DEFAULT_PLAYBACK_RATE
   return Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, parsed))
+}
+
+export function normalizeBlur(value) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return DEFAULT_BLUR
+  return Math.min(MAX_BLUR, Math.max(MIN_BLUR, parsed))
 }
 
 export function classifyWallpaper(input) {

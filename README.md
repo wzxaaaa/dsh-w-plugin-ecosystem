@@ -16,7 +16,7 @@
 | [`dsh-w-vision`](./dsh-w-vision) | `0.3.2` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1) |
 | [`dsh-w-route-primer`](./dsh-w-route-primer) | `0.3.0` | 路由预热、任务分类与模式工具；感谢风神开源 `routing-suite` 和社区开源贡献 | [下载 `.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1) |
 | [`dsh-w-teacher-help-me`](./dsh-w-teacher-help-me) | `0.2.0` | 主模型受阻时召唤可只读调查工作区的老师模型，获取诊断和解决思路 | [下载 `.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1) |
-| [`dsh-w-wallpaper`](./dsh-w-wallpaper) | `0.1.0` | 用本地图片或视频铺满 Harness 界面，支持视频循环播放和速度调节 | [下载 `.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.1.0.tgz?raw=1) |
+| [`dsh-w-wallpaper`](./dsh-w-wallpaper) | `0.2.0` | 图片/视频铺满整个工作区（含左侧 sidebar），支持 0–40px 模糊和视频速度调节 | [下载 `.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1) |
 
 ## 推荐安装顺序
 
@@ -51,7 +51,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 5. [`dsh-w-persona-0.2.0.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1)
 6. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
 7. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
-8. [`dsh-w-wallpaper-0.1.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.1.0.tgz?raw=1)
+8. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 

@@ -13,30 +13,34 @@ window.__ModuleLoader__.load({
     var MIN_SPEED = 0.25;
     var MAX_SPEED = 4;
     var DEFAULT_SPEED = 1;
+    var MIN_BLUR = 0;
+    var MAX_BLUR = 40;
+    var DEFAULT_BLUR = 18;
     var IMAGE_EXTENSIONS = ["avif", "bmp", "gif", "jpeg", "jpg", "png", "svg", "webp"];
     var VIDEO_EXTENSIONS = ["m4v", "mov", "mp4", "ogv", "webm"];
 
     var CSS = [
-      "#dsh-w-wallpaper-layer{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;background:#000}",
+      "#dsh-w-wallpaper-layer{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;background:#000;--dsh-w-wallpaper-blur:18px;--dsh-w-wallpaper-bleed:36px;--dsh-w-wallpaper-offset:-36px}",
       "#dsh-w-wallpaper-layer[hidden]{display:none}",
-      "#dsh-w-wallpaper-layer>img,#dsh-w-wallpaper-layer>video{display:block;width:100%;height:100%;object-fit:cover;object-position:center}",
+      "#dsh-w-wallpaper-layer>img,#dsh-w-wallpaper-layer>video{position:absolute;top:var(--dsh-w-wallpaper-offset);left:var(--dsh-w-wallpaper-offset);display:block;width:calc(100% + var(--dsh-w-wallpaper-bleed) + var(--dsh-w-wallpaper-bleed));height:calc(100% + var(--dsh-w-wallpaper-bleed) + var(--dsh-w-wallpaper-bleed));object-fit:cover;object-position:center;filter:blur(var(--dsh-w-wallpaper-blur))}",
       "html[data-dsh-w-wallpaper-active]{background:#000}",
       "html[data-dsh-w-wallpaper-active] body{background:transparent!important}",
       "html[data-dsh-w-wallpaper-active] #root{position:relative;z-index:1;background:transparent!important}",
       "html[data-dsh-w-wallpaper-active] #root>div{background:transparent!important}",
-      "body[data-dsh-w-wallpaper-active]{--dsw-alias-bg-base:transparent!important;--dsw-alias-bg-layer-1:rgb(255 255 255 / 76%)!important;--dsw-alias-bg-layer-2:rgb(255 255 255 / 66%)!important;--dsw-alias-bg-layer-3:rgb(255 255 255 / 88%)!important;--dsw-specific-sidebar-fill:rgb(249 250 251 / 72%)!important;--dsw-specific-input-major:rgb(255 255 255 / 78%)!important;--dsw-specific-selector:rgb(245 246 247 / 72%)!important;--dsw-specific-tip:rgb(245 246 247 / 76%)!important}",
-      "body[data-ds-dark-theme][data-dsh-w-wallpaper-active]{--dsw-alias-bg-layer-1:rgb(35 35 36 / 78%)!important;--dsw-alias-bg-layer-2:rgb(44 44 46 / 70%)!important;--dsw-alias-bg-layer-3:rgb(53 54 56 / 90%)!important;--dsw-specific-sidebar-fill:rgb(21 21 23 / 76%)!important;--dsw-specific-input-major:rgb(35 35 36 / 82%)!important;--dsw-specific-selector:rgb(44 44 46 / 76%)!important;--dsw-specific-tip:rgb(44 44 46 / 80%)!important}",
-      "html[data-dsh-w-wallpaper-active] #root>div>div:first-child{backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}",
+      "body[data-dsh-w-wallpaper-active]{--dsw-alias-bg-base:transparent!important;--dsw-alias-bg-layer-1:rgb(255 255 255 / 76%)!important;--dsw-alias-bg-layer-2:rgb(255 255 255 / 66%)!important;--dsw-alias-bg-layer-3:rgb(255 255 255 / 88%)!important;--dsw-specific-sidebar-fill:transparent!important;--dsw-specific-input-major:rgb(255 255 255 / 78%)!important;--dsw-specific-selector:rgb(245 246 247 / 72%)!important;--dsw-specific-tip:rgb(245 246 247 / 76%)!important}",
+      "body[data-ds-dark-theme][data-dsh-w-wallpaper-active]{--dsw-alias-bg-layer-1:rgb(35 35 36 / 78%)!important;--dsw-alias-bg-layer-2:rgb(44 44 46 / 70%)!important;--dsw-alias-bg-layer-3:rgb(53 54 56 / 90%)!important;--dsw-specific-sidebar-fill:transparent!important;--dsw-specific-input-major:rgb(35 35 36 / 82%)!important;--dsw-specific-selector:rgb(44 44 46 / 76%)!important;--dsw-specific-tip:rgb(44 44 46 / 80%)!important}",
+      "body[data-dsh-w-wallpaper-active] :is([data-pane=sidebar],[class*=sidebarCol]){background:transparent!important}",
+      "body[data-dsh-w-wallpaper-active] :is([data-pane=sidebar],[class*=sidebarCol])>div{background:transparent!important}",
       ".dshww-root{display:flex;flex-direction:column;gap:10px}",
       ".dshww-field{display:flex;flex-direction:column;gap:5px}",
       ".dshww-label{font-size:12px;font-weight:600;line-height:18px}",
       ".dshww-file{box-sizing:border-box;width:100%;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}",
       ".dshww-file::file-selector-button{margin-right:8px;padding:5px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer}",
       ".dshww-meta{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}",
-      ".dshww-speed-row{display:grid;grid-template-columns:minmax(0,1fr) 54px;align-items:center;gap:10px}",
+      ".dshww-slider-row{display:grid;grid-template-columns:minmax(0,1fr) 54px;align-items:center;gap:10px}",
       ".dshww-range{width:100%;accent-color:var(--dsw-alias-state-business-primary)}",
-      ".dshww-speed{box-sizing:border-box;width:54px;padding:5px 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;text-align:center;outline:none}",
-      ".dshww-speed:focus-visible{border-color:var(--dsw-alias-state-business-primary)}",
+      ".dshww-number{box-sizing:border-box;width:54px;padding:5px 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;text-align:center;outline:none}",
+      ".dshww-number:focus-visible{border-color:var(--dsw-alias-state-business-primary)}",
       ".dshww-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}",
       ".dshww-button{border:1px solid transparent;border-radius:7px;padding:5px 13px;font:inherit;font-size:12px;line-height:18px;cursor:pointer}",
       ".dshww-button:disabled{cursor:default;opacity:.55}",
@@ -68,6 +72,12 @@ window.__ModuleLoader__.load({
       var parsed = Number(value);
       if (!Number.isFinite(parsed)) return DEFAULT_SPEED;
       return Math.min(MAX_SPEED, Math.max(MIN_SPEED, parsed));
+    }
+
+    function normalizeBlur(value) {
+      var parsed = Number(value);
+      if (!Number.isFinite(parsed)) return DEFAULT_BLUR;
+      return Math.min(MAX_BLUR, Math.max(MIN_BLUR, parsed));
     }
 
     function detectKind(file) {
@@ -150,6 +160,10 @@ window.__ModuleLoader__.load({
       if (this.objectUrl !== null) URL.revokeObjectURL(this.objectUrl);
       this.objectUrl = null;
       this.record = record;
+      var blur = record === null ? DEFAULT_BLUR : normalizeBlur(record.blur);
+      this.layer.style.setProperty("--dsh-w-wallpaper-blur", blur + "px");
+      this.layer.style.setProperty("--dsh-w-wallpaper-bleed", (blur * 2) + "px");
+      this.layer.style.setProperty("--dsh-w-wallpaper-offset", (-blur * 2) + "px");
       this.layer.replaceChildren();
       if (record === null) {
         this.layer.hidden = true;
@@ -193,6 +207,7 @@ window.__ModuleLoader__.load({
         var record = await databaseRequest(this.db, "readonly", function (store) { return store.get(RECORD_KEY); });
         if (record && record.blob instanceof Blob && (record.kind === "image" || record.kind === "video")) {
           record.speed = normalizeSpeed(record.speed);
+          record.blur = normalizeBlur(record.blur);
           this.applyRecord(record);
           this.publish({ status: "ready", record: record, error: null });
         } else {
@@ -211,9 +226,10 @@ window.__ModuleLoader__.load({
       }
     };
 
-    WallpaperController.prototype.save = async function (file, speed) {
+    WallpaperController.prototype.save = async function (file, speed, blur) {
       if (this.db === null) throw new Error("Wallpaper storage is not ready");
       var normalized = normalizeSpeed(speed);
+      var normalizedBlur = normalizeBlur(blur);
       var current = this.record;
       var kind = file ? detectKind(file) : current && current.kind;
       if (!file && current === null) throw new Error("Choose an image or video first");
@@ -224,6 +240,7 @@ window.__ModuleLoader__.load({
         size: file ? file.size : current.size,
         kind: kind,
         speed: normalized,
+        blur: normalizedBlur,
         updatedAt: Date.now(),
       };
       await databaseRequest(this.db, "readwrite", function (store) { return store.put(record, RECORD_KEY); });
@@ -272,6 +289,9 @@ window.__ModuleLoader__.load({
       var speedSlot = React.useState(DEFAULT_SPEED);
       var speed = speedSlot[0];
       var setSpeed = speedSlot[1];
+      var blurSlot = React.useState(DEFAULT_BLUR);
+      var blur = blurSlot[0];
+      var setBlur = blurSlot[1];
       var savingSlot = React.useState(false);
       var saving = savingSlot[0];
       var setSaving = savingSlot[1];
@@ -285,7 +305,10 @@ window.__ModuleLoader__.load({
       }, [controller]);
 
       React.useEffect(function () {
-        if (pendingFile === null && state.record !== null) setSpeed(normalizeSpeed(state.record.speed));
+        if (pendingFile === null && state.record !== null) {
+          setSpeed(normalizeSpeed(state.record.speed));
+          setBlur(normalizeBlur(state.record.blur));
+        }
       }, [pendingFile, state.record]);
 
       var pendingKind = null;
@@ -298,7 +321,7 @@ window.__ModuleLoader__.load({
       function onApply() {
         setSaving(true);
         setHint(null);
-        controller.save(pendingFile, speed).then(
+        controller.save(pendingFile, speed, blur).then(
           function () {
             setSaving(false);
             setPendingFile(null);
@@ -319,6 +342,7 @@ window.__ModuleLoader__.load({
             setSaving(false);
             setPendingFile(null);
             setSpeed(DEFAULT_SPEED);
+            setBlur(DEFAULT_BLUR);
             setHint({ kind: "success", text: t("removed") });
           },
           function (error) {
@@ -353,6 +377,36 @@ window.__ModuleLoader__.load({
             ? React.createElement("p", { className: "dshww-meta" }, (effectiveFile.name || t("unnamed")) + " · " + formatBytes(effectiveFile.size))
             : React.createElement("p", { className: "dshww-meta" }, t("mediaHint")),
         ),
+        React.createElement(
+          "div",
+          { className: "dshww-field" },
+          React.createElement("label", { className: "dshww-label" }, t("blurLabel")),
+          React.createElement(
+            "div",
+            { className: "dshww-slider-row" },
+            React.createElement("input", {
+              className: "dshww-range",
+              type: "range",
+              min: MIN_BLUR,
+              max: MAX_BLUR,
+              step: 1,
+              value: blur,
+              disabled: saving,
+              onChange: function (event) { setBlur(normalizeBlur(event.currentTarget.value)); },
+            }),
+            React.createElement("input", {
+              className: "dshww-number",
+              type: "number",
+              min: MIN_BLUR,
+              max: MAX_BLUR,
+              step: 1,
+              value: blur,
+              disabled: saving,
+              onChange: function (event) { setBlur(normalizeBlur(event.currentTarget.value)); },
+            }),
+          ),
+          React.createElement("p", { className: "dshww-meta" }, blur.toFixed(0) + " px · " + t("blurHint")),
+        ),
         effectiveKind === "video"
           ? React.createElement(
               "div",
@@ -360,7 +414,7 @@ window.__ModuleLoader__.load({
               React.createElement("label", { className: "dshww-label" }, t("speedLabel")),
               React.createElement(
                 "div",
-                { className: "dshww-speed-row" },
+                { className: "dshww-slider-row" },
                 React.createElement("input", {
                   className: "dshww-range",
                   type: "range",
@@ -372,7 +426,7 @@ window.__ModuleLoader__.load({
                   onChange: function (event) { setSpeed(normalizeSpeed(event.currentTarget.value)); },
                 }),
                 React.createElement("input", {
-                  className: "dshww-speed",
+                  className: "dshww-number",
                   type: "number",
                   min: MIN_SPEED,
                   max: MAX_SPEED,
@@ -419,6 +473,8 @@ window.__ModuleLoader__.load({
       zh: {
         mediaLabel: "背景壁纸",
         mediaHint: "选择本地图片或视频，任意尺寸都会铺满界面。",
+        blurLabel: "壁纸模糊程度",
+        blurHint: "0 为完全清晰",
         speedLabel: "视频播放速度",
         apply: "应用",
         saving: "保存中...",
@@ -433,6 +489,8 @@ window.__ModuleLoader__.load({
       en: {
         mediaLabel: "Background wallpaper",
         mediaHint: "Choose a local image or video. Any dimensions will fill the window.",
+        blurLabel: "Wallpaper blur",
+        blurHint: "0 keeps the wallpaper sharp",
         speedLabel: "Video playback speed",
         apply: "Apply",
         saving: "Saving...",
