@@ -1,7 +1,7 @@
 {
   "name": "dsh-w-persona",
-  "version": "0.6.0",
-  "description": "DeepSeek Harness persona manager that preserves prompt sections before deployment:persona and removes sections after it, with live overrides, default refresh, and diagnostics.",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness persona manager: a Persona settings section that shows the harness default system prompt, edits/saves a custom one, and resets to default.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -12,7 +12,6 @@
   "files": [
     "index.js",
     "client.js",
-    "persona-core.js",
     "cordis.patch.yml"
   ],
   "license": "MIT",
@@ -35,8 +34,5 @@
       ],
       "platform": "web"
     }
-  },
-  "scripts": {
-    "test": "node --test test/*.test.mjs"
   }
 }
