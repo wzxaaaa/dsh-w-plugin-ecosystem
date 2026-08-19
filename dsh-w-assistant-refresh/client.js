@@ -10,207 +10,220 @@ window.__ModuleLoader__.load({
 
     var NS = "assistantRefresh";
     var CSS = [
-      ".dshwar-slot{display:inline-flex;align-items:center;order:1;gap:6px}",
-      ".dshwar-slot~span{order:2}",
+      ".dshwar-slot{display:inline-flex;align-items:center;order:1}",
+      "[data-slot=\"conversation.chat.assistant-actions\"]~span{order:2!important}",
       ".dshwar-action{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:6px;border:0;border-radius:28px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}",
       ".dshwar-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}",
       ".dshwar-action[data-unavailable]{cursor:default;opacity:.4}",
       ".dshwar-action[data-unavailable]:hover{background:transparent;color:var(--dsw-alias-label-tertiary)}",
-      ".dshwar-error{max-width:180px;overflow:hidden;color:var(--dsw-alias-state-danger-primary,#c33);font-size:12px;line-height:20px;text-overflow:ellipsis;white-space:nowrap}",
       ".dshwar-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}",
     ].join("\n");
 
     var zh = {
       refresh: "刷新回复",
       refreshing: "正在刷新回复…",
-      unavailable: "当前回复暂时无法刷新",
       running: "请等待当前请求完成",
       failed: "刷新失败",
     };
     var en = {
       refresh: "Refresh reply",
       refreshing: "Refreshing reply…",
-      unavailable: "This reply cannot be refreshed yet",
       running: "Wait for the current request to finish",
       failed: "Refresh failed",
     };
 
+    // --- hidden chat-row manager ------------------------------------------
+    // Same-session regeneration replaces the model surface, but the client
+    // transcript still folds every append-origin event. The host computes the
+    // exact chat-row keys that were shadowed plus the wake-up trigger rows,
+    // and this client hides those rows with generated CSS. Rules are scoped
+    // to the currently viewed session because row keys (e.g. assistant-step
+    // turn:step) repeat across sessions.
+    var hiddenBySession = new Map();   // sessionId -> Set<key>
+    var fetchedSessions = new Set();   // sessionIds already asked the host
+    var hideStyleNode = null;
+    var appCtx = null;
+
+    function ensureHideStyle() {
+      if (hideStyleNode !== null) return;
+      var selector = 'style[data-plugin-css="dsh-w-assistant-refresh/hide"]';
+      var existing = document.querySelector(selector);
+      if (existing) { hideStyleNode = existing; return; }
+      var node = document.createElement("style");
+      node.dataset.plugin = "dsh-w-assistant-refresh";
+      node.dataset.pluginCss = "dsh-w-assistant-refresh/hide";
+      document.head.appendChild(node);
+      hideStyleNode = node;
+    }
+
+    function currentSessionId() {
+      if (appCtx === null) return undefined;
+      var state = appCtx.sessions.list.getSnapshot();
+      return state === undefined ? undefined : state.current;
+    }
+
+    function cssEscapeKey(key) {
+      return String(key).replace(/["\\]/g, function (ch) { return "\\" + ch; });
+    }
+
+    function rebuildHideStyle() {
+      if (hideStyleNode === null) return;
+      var current = currentSessionId();
+      var keys = current === undefined ? [] : Array.from(hiddenBySession.get(current) || []);
+      hideStyleNode.textContent = keys
+        .map(function (key) { return '[data-chat-flow-key="' + cssEscapeKey(key) + '"]{display:none!important}'; })
+        .join("\n");
+    }
+
+    function installHideKeys(sessionId, keys) {
+      if (typeof sessionId !== "string" || !Array.isArray(keys) || keys.length === 0) return;
+      var set = hiddenBySession.get(sessionId);
+      if (set === undefined) { set = new Set(); hiddenBySession.set(sessionId, set); }
+      keys.forEach(function (key) { set.add(String(key)); });
+      rebuildHideStyle();
+    }
+
     function installStyle() {
       var selector = 'style[data-plugin-css="dsh-w-assistant-refresh/styles"]';
       var existing = document.querySelector(selector);
-      if (existing) return;
+      if (existing) {
+        existing.textContent = CSS;
+        return { node: existing, owned: false };
+      }
       var node = document.createElement("style");
       node.dataset.plugin = "dsh-w-assistant-refresh";
       node.dataset.pluginCss = "dsh-w-assistant-refresh/styles";
       node.textContent = CSS;
       document.head.appendChild(node);
+      return { node: node, owned: true };
     }
 
-    function sameId(left, right) {
-      return left !== undefined && right !== undefined && String(left) === String(right);
+    var passthrough = { parse: function (value) { return value; } };
+    function parameter(name) {
+      return { name: name, wire: name, source: "json", codec: { mode: "strict", typeSymbol: "json", schema: passthrough } };
     }
-
-    function nodeMessageId(node) {
-      if (node?.kind === "assistant") return node.messageId;
-      if (node?.kind === "turn-tail") return node.data?.closing?.finalNode?.messageId;
-      return undefined;
+    function descriptor(method, parameters) {
+      return {
+        id: "dsh-w-assistant-refresh#assistantRefresh/" + method,
+        service: "assistantRefresh",
+        namespace: "assistantRefresh",
+        method: method,
+        invocation: { kind: "direct" },
+        parameters: parameters || [],
+        result: { mode: "strict", typeSymbol: "json", schema: passthrough },
+      };
     }
-
-    function nodeSeq(node) {
-      if (typeof node?.seq === "number") return node.seq;
-      if (typeof node?.data?.seq === "number") return node.data.seq;
-      return undefined;
-    }
-
-    function nodeTurn(node) {
-      if (typeof node?.turn === "number") return node.turn;
-      if (typeof node?.data?.turn === "number") return node.data.turn;
-      return undefined;
-    }
-
-    function findTarget(snapshot, messageId) {
-      var nodes = Array.isArray(snapshot?.nodes) ? snapshot.nodes : [];
-      var assistant = nodes.find(node => sameId(nodeMessageId(node), messageId));
-      if (assistant === undefined) return null;
-      var assistantSeq = nodeSeq(assistant);
-      var turn = nodeTurn(assistant);
-      if (assistantSeq === undefined || turn === undefined) return null;
-      var user = nodes
-        .filter(node => (node?.kind === "user" || node?.kind === "steering") && nodeSeq(node) < assistantSeq)
-        .sort((left, right) => nodeSeq(left) - nodeSeq(right))
-        .at(-1);
-      if (user === undefined || !Array.isArray(user.content)) return null;
-      var cutSeq;
-      if (snapshot?.turnEnds !== undefined && typeof snapshot.turnEnds[Symbol.iterator] === "function") {
-        for (var pair of snapshot.turnEnds) {
-          var candidateTurn = pair[0];
-          var candidateSeq = pair[1];
-          if (typeof candidateTurn !== "number" || candidateTurn >= turn || typeof candidateSeq !== "number") continue;
-          if (cutSeq === undefined || candidateSeq > cutSeq) cutSeq = candidateSeq;
-        }
-      }
-      return { content: user.content, ...(cutSeq === undefined ? {} : { cutSeq }) };
-    }
-
-    function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-
-    async function waitForBinding(sessions, sessionId) {
-      for (var attempt = 0; attempt < 80; attempt += 1) {
-        var binding = sessions.binding(sessionId);
-        if (binding?.session !== undefined) return binding.session;
-        await delay(25);
-      }
-      throw new Error("new session did not become available");
-    }
-
-    function bytesToBase64(data) {
-      var binary = "";
-      var chunk = 0x8000;
-      for (var offset = 0; offset < data.length; offset += chunk) {
-        binary += String.fromCharCode(...data.subarray(offset, offset + chunk));
-      }
-      return btoa(binary);
-    }
-
-    async function replayContent(sourceSession, content) {
-      var parts = [];
-      for (var block of content) {
-        if (block?.type === "text" && typeof block.text === "string") {
-          parts.push({ type: "text", text: block.text });
-          continue;
-        }
-        if (block?.type !== "image" || block.attachment?.attachmentId === undefined) continue;
-        var loaded = await sourceSession.readAttachment(block.attachment.attachmentId);
-        if (!loaded.ok) throw new Error(loaded.error.message || "image replay failed");
-        var attachment = loaded.value.attachment;
-        parts.push({
-          type: "image",
-          mediaType: attachment.mediaType,
-          data: bytesToBase64(loaded.value.data),
-          ...(attachment.name === undefined ? {} : { name: attachment.name }),
-        });
-      }
-      if (parts.length === 0) throw new Error("the original user prompt is unavailable");
-      return parts;
-    }
-
-    async function createBlankSession(sessions, sessionId) {
-      var summary = sessions.list.getSnapshot().byId[sessionId];
-      var payload = {};
-      if (summary?.cwd !== undefined) payload.cwd = summary.cwd;
-      return sessions.create(payload);
-    }
-
-    async function refreshAssistant(ctx, sessionId, target) {
-      var sourceBinding = ctx.sessions.binding(sessionId);
-      var sourceSession = sourceBinding?.session;
-      if (sourceSession === undefined) throw new Error("source session is unavailable");
-      var prompt = await replayContent(sourceSession, target.content);
-      var childId = target.cutSeq === undefined
-        ? await createBlankSession(ctx.sessions, sessionId)
-        : await ctx.sessions.fork({ sessionId: sessionId, atSeq: target.cutSeq, increaseTitle: true });
-      var childSession = await waitForBinding(ctx.sessions, childId);
-      var accepted = await childSession.prompt(prompt, "queue");
-      if (!accepted.ok) throw new Error(accepted.error.message || "reply refresh was rejected");
-      ctx.sessions.open(childId);
-      return childId;
-    }
+    var TYPERT_REMOTE = {
+      package: "dsh-w-assistant-refresh",
+      descriptors: [
+        descriptor("regenerate", [parameter("sessionId"), parameter("assistantMessageId")]),
+        descriptor("hiddenKeys", [parameter("sessionId")]),
+      ],
+    };
 
     function errorMessage(error) {
       return error instanceof Error ? error.message : String(error);
     }
 
     function RefreshAction(props) {
-      var snapshot = props.useSession(value => value);
-      var target = findTarget(snapshot, props.messageId);
-      var unavailable = target === null || snapshot?.running === true;
-      var unavailableLabel = snapshot?.running === true ? props.t("running") : props.t("unavailable");
+      var running = props.useSession(value => value?.running === true);
       var failureState = React.useState(null);
       var failure = failureState[0];
       var setFailure = failureState[1];
       var pendingState = React.useState(false);
       var pending = pendingState[0];
       var setPending = pendingState[1];
+      var unavailable = running || pending;
+
+      // Restore hidden rows after reload / session open: ask the host once
+      // per session for the keys this plugin has hidden there so far.
+      React.useEffect(function () {
+        var sessionId = props.sessionId;
+        if (typeof sessionId !== "string" || fetchedSessions.has(sessionId)) return;
+        fetchedSessions.add(sessionId);
+        Promise.resolve(props.fetchHidden()).catch(function () { fetchedSessions.delete(sessionId); });
+      }, [props.sessionId]);
+
       var onClick = function () {
-        if (pending || unavailable) return;
+        if (unavailable) return;
         setFailure(null);
         setPending(true);
-        Promise.resolve(props.refresh(target))
+        Promise.resolve(props.refresh(props.messageId))
           .catch(error => { setFailure(errorMessage(error)); })
           .finally(() => { setPending(false); });
       };
-      var label = pending ? props.t("refreshing") : failure === null ? props.t("refresh") : props.t("failed");
+      var label = pending ? props.t("refreshing") : failure === null ? props.t("refresh") : props.t("failed") + ": " + failure;
       return React.createElement("span", { className: "dshwar-slot" },
-        React.createElement(Tooltip, { label: unavailable ? unavailableLabel : label, side: "bottom" },
+        React.createElement(Tooltip, { label: running ? props.t("running") : label, side: "bottom" },
           React.createElement("button", {
             type: "button",
             className: "dshwar-action",
             "aria-label": label,
-            "aria-disabled": unavailable || pending || undefined,
-            "data-unavailable": unavailable || pending || undefined,
+            "aria-disabled": unavailable || undefined,
+            "data-unavailable": unavailable || undefined,
             onClick: onClick,
           }, React.createElement(IconRefreshOutline16))),
-        failure !== null && React.createElement("span", { className: "dshwar-error", role: "status" }, failure),
         failure !== null && React.createElement("span", { className: "dshwar-live", "aria-live": "polite" }, props.t("failed")),
       );
     }
 
-    function apply(ctx) {
-      installStyle();
+    async function apply(ctx) {
+      appCtx = ctx;
+      var style = installStyle();
+      ctx.effect(function () { return function () { if (style.owned) style.node.remove(); }; }, "dsh-w-assistant-refresh: styles");
+      ensureHideStyle();
+      ctx.effect(function () {
+        return function () {
+          if (hideStyleNode !== null) { hideStyleNode.remove(); hideStyleNode = null; }
+        };
+      }, "dsh-w-assistant-refresh: hide styles");
       ctx.effect(() => ctx.locale.register(NS, { zh: zh, en: en }), "dsh-w-assistant-refresh: dictionaries");
+      var unmount = await ctx.remote.$mount(TYPERT_REMOTE);
+      ctx.effect(function () { return unmount; }, "dsh-w-assistant-refresh: remote");
+      var remote = ctx.get("remote.assistantRefresh");
+      if (!remote) throw new Error("dsh-w-assistant-refresh: remote.assistantRefresh did not mount");
+
+      async function regenerate(sessionId, messageId) {
+        var result = await remote.regenerate(sessionId, messageId);
+        if (!result.ok) throw new Error("assistantRefresh.regenerate failed: " + JSON.stringify(result.error));
+        var value = result.value;
+        if (value && Array.isArray(value.hideKeys)) installHideKeys(sessionId, value.hideKeys);
+        return value;
+      }
+
+      async function fetchHiddenKeys(sessionId) {
+        var result = await remote.hiddenKeys(sessionId);
+        if (!result.ok) throw new Error("assistantRefresh.hiddenKeys failed: " + JSON.stringify(result.error));
+        installHideKeys(sessionId, result.value && Array.isArray(result.value.keys) ? result.value.keys : []);
+      }
+
+      function onListChange() {
+        rebuildHideStyle();
+        var current = currentSessionId();
+        if (current === undefined || fetchedSessions.has(current)) return;
+        fetchedSessions.add(current);
+        Promise.resolve(fetchHiddenKeys(current)).catch(function () { fetchedSessions.delete(current); });
+      }
+      var unsubscribeList = ctx.sessions.list.subscribe(onListChange);
+      ctx.effect(function () { return unsubscribeList; }, "dsh-w-assistant-refresh: session list");
+
       ctx.slots.inject("conversation.chat.assistant-actions", () => ctx.slots.register({
         name: "conversation.chat.assistant-actions",
         id: "assistant-refresh",
         order: 20,
         locale: NS,
         inject: (sessionId) => ({
-          refresh: target => refreshAssistant(ctx, sessionId, target),
+          refresh: messageId => regenerate(sessionId, messageId),
+          fetchHidden: () => fetchHiddenKeys(sessionId),
         }),
       }, RefreshAction));
+
+      onListChange();
+      rebuildHideStyle();
     }
 
     exports.apply = apply;
-    exports.inject = ["slots", "sessions", "locale"];
+    exports.inject = ["slots", "sessions", "remote", "locale"];
     module.exports = exports;
     return module.exports;
   },

@@ -13,3 +13,5 @@ Thumbs.db
 # DeepSeek Harness local profile and runtime state
 .dsh/
 *.dsh-*.json
+.reasonix/
+third-party/

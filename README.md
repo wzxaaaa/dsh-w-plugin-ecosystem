@@ -10,11 +10,11 @@
 | --- | ---: | --- | --- |
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.2` | 自定义插件管理、启停和拖拽安装；隐藏 preset 内部实现模块；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.2.tgz?raw=1) |
 | [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.1.2` | 在设置中管理已归档对话，支持还原、永久删除、一键清理和真实的 30 天自动清理 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1) |
-| [`dsh-w-assistant-refresh`](./dsh-w-assistant-refresh) | `0.1.0` | 在 AI 回复操作栏添加刷新按钮，通过新分支重放原问题并生成新的回复，支持文字和图片 | [下载 `.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.1.0.tgz?raw=1) |
+| [`dsh-w-assistant-refresh`](./dsh-w-assistant-refresh) | `0.2.2` | 在同一会话内重生成指定 AI 回复，不创建新对话并隐藏被替换的旧回复 | [下载 `.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1) |
 | [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.1` | 消除超长流式思维链的重复扫描；屏外延迟渲染改为可选，避免长消息向上滚动回弹 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1) |
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
-| [`dsh-w-persona`](./dsh-w-persona) | `0.6.0` | 保留 Persona 前置 prompt、删除其后续普通 prompt sections，同时支持外部 patch 检测、默认提示词刷新和装配诊断 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.6.0.tgz?raw=1) |
+| [`dsh-w-persona`](./dsh-w-persona) | `0.2.0` | 在设置中编辑、保存和恢复 Harness 默认 Persona，并实时覆盖已装配的部署 Persona | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1) |
 | [`dsh-w-vision`](./dsh-w-vision) | `0.3.2` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1) |
 | [`dsh-w-route-primer`](./dsh-w-route-primer) | `0.3.0` | 路由预热、任务分类与模式工具；感谢风神开源 `routing-suite` 和社区开源贡献 | [下载 `.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1) |
 | [`dsh-w-teacher-help-me`](./dsh-w-teacher-help-me) | `0.2.0` | 主模型受阻时召唤可只读调查工作区的老师模型，获取诊断和解决思路 | [下载 `.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1) |
@@ -50,12 +50,12 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 2. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
 3. [`dsh-w-chatflow-0.3.1.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1)
 4. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
-5. [`dsh-w-persona-0.6.0.tgz`](./dsh-w-persona/dsh-w-persona-0.6.0.tgz?raw=1)
+5. [`dsh-w-persona-0.2.0.tgz`](./dsh-w-persona/dsh-w-persona-0.2.0.tgz?raw=1)
 6. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
 7. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
 8. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)
 9. [`dsh-w-archive-manager-0.1.2.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1)
-10. [`dsh-w-assistant-refresh-0.1.0.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.1.0.tgz?raw=1)
+10. [`dsh-w-assistant-refresh-0.2.2.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 
