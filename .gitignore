@@ -14,4 +14,4 @@ Thumbs.db
 .dsh/
 *.dsh-*.json
 .reasonix/
-third-party/
+.local-only/
