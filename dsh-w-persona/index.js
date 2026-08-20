@@ -17,12 +17,23 @@
  * regardless of the active preset.
  */
 
+import {
+  createAssistantMessage,
+  createUserMessage,
+  deepFreeze,
+  isAgentLoopRequest,
+} from '@deepseek-ai/dsh-llm'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { randomUUID } from 'node:crypto'
 import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { basename, dirname, join } from 'node:path'
 import * as yaml from 'js-yaml'
+import {
+  defaultDialoguePreset,
+  dialoguePresetTurns,
+  normalizeDialoguePreset,
+} from './dialogue-preset-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -62,12 +73,15 @@ var __esDecorate = function (ctor, descriptorIn, decorators, contextIn, initiali
 
 const PATCH_FILE = 'cordis.patch.yml'
 const DEFAULT_STATE_FILE = '.dsh-w-persona-default.txt'
+const DIALOGUE_STATE_FILE = '.dsh-w-persona-dialogue.json'
 const PROMPT_ROW_ID = 'system-prompt'
 const PERSONA_SECTION = 'deployment:persona'
 const MAX_PERSONA_BYTES = 1024 * 1024
+const MAX_DIALOGUE_BYTES = 1024 * 1024
 const PATCH_LOCK_SUFFIX = '.dsh-w.lock'
 const PATCH_LOCK_STALE_MS = 30_000
 const PATCH_LOCK_TIMEOUT_MS = 10_000
+const DIALOGUE_BYPASS = new WeakSet()
 
 function sleep(ms) {
   return new Promise(resolvePromise => setTimeout(resolvePromise, ms))
@@ -149,6 +163,16 @@ async function mutatePatchArray(path, callback) {
   })
 }
 
+async function writeJsonAtomic(path, value) {
+  const tempPath = join(dirname(path), '.' + basename(path) + '.' + process.pid + '.' + randomUUID() + '.tmp')
+  try {
+    await writeFile(tempPath, JSON.stringify(value, null, 2) + '\n', 'utf8')
+    await rename(tempPath, path)
+  } finally {
+    await rm(tempPath, { force: true }).catch(() => {})
+  }
+}
+
 /** Map an expanded Loader child id back to the profile-composition row id. */
 function profileEntryId(entryId) {
   const includePrefix = 'include:'
@@ -192,6 +216,7 @@ let PersonaManagerGateway = (() => {
   let _instanceExtraInitializers = []
   let _getState_decorators
   let _save_decorators
+  let _saveDialoguePreset_decorators
   return class PersonaManagerGateway extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0
@@ -207,10 +232,16 @@ let PersonaManagerGateway = (() => {
         access: { has: (obj) => 'save' in obj, get: (obj) => obj.save },
         metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _saveDialoguePreset_decorators = [Remote('saveDialoguePreset')]
+      __esDecorate(this, null, _saveDialoguePreset_decorators, {
+        kind: 'method', name: 'saveDialoguePreset', static: false, private: false,
+        access: { has: (obj) => 'saveDialoguePreset' in obj, get: (obj) => obj.saveDialoguePreset },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
-    static inject = ['loader']
+    static inject = ['loader', 'llm']
 
     constructor(ctx) {
       super(ctx, 'personaManager')
@@ -218,6 +249,10 @@ let PersonaManagerGateway = (() => {
 
       // undefined = not yet read, null = no override, string = saved override.
       this._customPersona = undefined
+      // The preset is captured on the first model request per session. Later
+      // setting changes therefore affect new conversations without rewriting
+      // the context of conversations already in progress.
+      this._sessionDialoguePresets = new Map()
 
       // The `system-prompt` config override alone is NOT enough: every shipped
       // agent preset mounts its own `@deepseek-ai/dsh-persona` row that SHADOWS
@@ -238,6 +273,42 @@ let PersonaManagerGateway = (() => {
           ),
         }
       })
+
+      // Harness loop requests are immutable and reconstructable from the
+      // durable session log. To keep the four preset messages hidden from that
+      // log, this outer listener short-circuits into one unmarked request copy.
+      // The nested copy traverses the ordinary adapter middleware once and the
+      // WeakSet guard prevents recursion.
+      this.ctx.on('llm/stream', (options, next) => {
+        if (DIALOGUE_BYPASS.has(options) || !isAgentLoopRequest(options)) return next()
+        return (async function* () {
+          const preset = await self.getSessionDialoguePreset(options.sessionId)
+          const turns = dialoguePresetTurns(preset)
+          if (turns.length === 0) {
+            yield* next()
+            return
+          }
+          const prefix = turns.map(turn => turn.role === 'user'
+            ? createUserMessage({
+              content: [{ type: 'text', text: turn.text }],
+              source: { kind: 'plugin', plugin: 'dsh-w-persona', form: 'recall' },
+            })
+            : createAssistantMessage({
+              content: [{ type: 'text', text: turn.text }],
+              source: { provider: options.provider, model: options.model },
+            }))
+          const replacement = deepFreeze({
+            ...options,
+            messages: [...prefix, ...options.messages],
+          })
+          DIALOGUE_BYPASS.add(replacement)
+          yield* self.ctx.llm.stream(replacement)
+        })()
+      }, { global: true, prepend: true })
+
+      this.ctx.on('agent/disposed', ({ agent }) => {
+        this._sessionDialoguePresets.delete(String(agent.id))
+      }, { global: true })
     }
 
     /** Absolute path of the active profile's user patch file (resolved from ctx.baseUrl). */
@@ -253,6 +324,11 @@ let PersonaManagerGateway = (() => {
     /** Path of the captured harness-default persona state file. */
     defaultStatePath() {
       return join(this.profileDir(), DEFAULT_STATE_FILE)
+    }
+
+    /** Path of the profile-local DeepSeek dialogue preset. */
+    dialogueStatePath() {
+      return join(this.profileDir(), DIALOGUE_STATE_FILE)
     }
 
     /** Find the loader entry of the `system-prompt` row (any expanded id form). */
@@ -311,10 +387,34 @@ let PersonaManagerGateway = (() => {
       }
     }
 
+    async readDialoguePreset() {
+      let raw
+      try {
+        raw = await readFile(this.dialogueStatePath(), 'utf8')
+      } catch (error) {
+        if (error && error.code === 'ENOENT') return defaultDialoguePreset()
+        throw error
+      }
+      if (raw.trim() === '') return defaultDialoguePreset()
+      return normalizeDialoguePreset(JSON.parse(raw))
+    }
+
+    async getSessionDialoguePreset(sessionId) {
+      const key = String(sessionId ?? '')
+      if (this._sessionDialoguePresets.has(key)) return this._sessionDialoguePresets.get(key)
+      const preset = await this.readDialoguePreset()
+      this._sessionDialoguePresets.set(key, preset)
+      return preset
+    }
+
     async getState() {
       const custom = await this.getCustomPersona()
       const defaultText = await this.readDefaultPersona()
-      return { current: custom ?? defaultText, defaultText }
+      return {
+        current: custom ?? defaultText,
+        defaultText,
+        dialoguePreset: await this.readDialoguePreset(),
+      }
     }
 
     async save(text) {
@@ -328,6 +428,16 @@ let PersonaManagerGateway = (() => {
       this._customPersona = text !== defaultText ? text : null
 
       return { saved: true, current: text, defaultText, applied: true }
+    }
+
+    async saveDialoguePreset(value) {
+      const preset = normalizeDialoguePreset(value)
+      if (Buffer.byteLength(JSON.stringify(preset), 'utf8') > MAX_DIALOGUE_BYTES) {
+        throw new Error('dialogue preset exceeds the 1 MB limit')
+      }
+      const path = this.dialogueStatePath()
+      await withPatchLock(path, () => writeJsonAtomic(path, preset))
+      return { saved: true, dialoguePreset: preset, applied: true }
     }
   }
 })()
