@@ -18,7 +18,7 @@
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
 | [`dsh-w-knowledge-base`](./dsh-w-knowledge-base) | `0.4.3` | 双模式跨会话 Markdown 知识库：assistant 笔记与独立 writing 文风语料库、`kb_*` 工具、千万字符整本投喂，以及响应式侧栏界面 | [下载 `.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1) |
-| [`dsh-w-persona`](./dsh-w-persona) | `0.2.1` | 在设置中编辑 Persona，并可配置隐藏的两轮 user/assistant 对话预设, 可破满血中转haiku和sonnet | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.2.1.tgz?raw=1) |
+| [`dsh-w-persona`](./dsh-w-persona) | `0.2.1` | 在设置中编辑 Persona，并可配置隐藏的两轮 user/assistant 对话预设, 可破满血中转haiku和sonnet，  **RP强推** | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.2.1.tgz?raw=1) |
 | [`dsh-w-vision`](./dsh-w-vision) | `0.3.2` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1) |
 | [`dsh-w-route-primer`](./dsh-w-route-primer) | `0.3.0` | 路由预热、任务分类与模式工具；感谢风神开源 `routing-suite` 和社区开源贡献 | [下载 `.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1) |
 | [`dsh-w-teacher-help-me`](./dsh-w-teacher-help-me) | `0.2.0` | 主模型受阻时召唤可只读调查工作区的老师模型，获取诊断和解决思路 | [下载 `.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1) |
