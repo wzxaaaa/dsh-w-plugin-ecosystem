@@ -18,7 +18,6 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { dshHomePath, expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
   advanceProject,
-  applyWriteLinkProjection,
   assertProjectShape,
   defaultProject,
   defaultState,
@@ -27,13 +26,15 @@ import {
   normalizeProject,
   normalizeState,
   normalizeWriteLink,
+  normalizeWriteLinkStore,
   parseWriteCommand,
   projectToolSchema,
   projectPrompt,
   projectExportDocument,
   projectFromImportDocument,
   scenePatchToolSchema,
-  writeLinkFromEvents,
+  updateWriteLinkStore,
+  writeLinkForSession,
 } from './noval-write-core.js'
 import { NovelMutationRoundGuard } from './noval-mutation-guard.js'
 import { saveWorkspaceManuscript } from './noval-file-core.js'
@@ -91,6 +92,15 @@ function readStateSync(path) {
     return normalizeState(JSON.parse(readFileSync(path, 'utf8')))
   } catch (error) {
     if (error && error.code === 'ENOENT') return defaultState()
+    throw error
+  }
+}
+
+function readWriteLinkStoreSync(path) {
+  try {
+    return normalizeWriteLinkStore(JSON.parse(readFileSync(path, 'utf8')))
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return normalizeWriteLinkStore(null)
     throw error
   }
 }
@@ -183,21 +193,6 @@ function concludeStoppedMutation(result, exec) {
 
 const WRITE_USAGE = '用法：/write [<写作任务>|edit <写作任务>|clear]'
 const DEFAULT_WRITE_OBJECTIVE = '在当前工作区持续创作小说，并同步维护角色、世界观、情节和连续性。'
-const writeLinkStateSchema = {
-  parse(value) {
-    if (value === null) return null
-    const link = normalizeWriteLink(value)
-    if (!link) throw new TypeError('invalid novalWrite link state')
-    return link
-  },
-}
-const writeProjectionSchema = {
-  parse(value) {
-    if (value === null) return null
-    const link = writeLinkStateSchema.parse(value && value.link)
-    return { link }
-  },
-}
 
 let NovalWriterService = (() => {
   let _classSuper = TypertRemoteService
@@ -207,6 +202,7 @@ let NovalWriterService = (() => {
   let _exportProject_decorators
   let _importProject_decorators
   let _resetProject_decorators
+  let _getLink_decorators
   let _editLink_decorators
   let _clearLink_decorators
   return class NovalWriterService extends _classSuper {
@@ -237,6 +233,11 @@ let NovalWriterService = (() => {
         kind: 'method', name: 'resetProject', static: false, private: false,
         access: { has: obj => 'resetProject' in obj, get: obj => obj.resetProject }, metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _getLink_decorators = [Remote('getLink')]
+      __esDecorate(this, null, _getLink_decorators, {
+        kind: 'method', name: 'getLink', static: false, private: false,
+        access: { has: obj => 'getLink' in obj, get: obj => obj.getLink }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       _editLink_decorators = [Remote('editLink')]
       __esDecorate(this, null, _editLink_decorators, {
         kind: 'method', name: 'editLink', static: false, private: false,
@@ -260,6 +261,9 @@ let NovalWriterService = (() => {
       this.root = resolveRoot(this.settings.root)
       this.states = new Map()
       this.writeTails = new Map()
+      this.writeLinksPath = join(this.root, 'session-links.json')
+      this.writeLinks = readWriteLinkStoreSync(this.writeLinksPath)
+      this.writeLinkTail = Promise.resolve()
       this.mutationRoundGuard = new NovelMutationRoundGuard()
       this.workspaceRegistry = undefined
       this.knowledgeBase = undefined
@@ -276,20 +280,6 @@ let NovalWriterService = (() => {
           if (this.knowledgeBase === scope.knowledgeBase) this.knowledgeBase = undefined
         }, 'dsh-w-noval-write: release knowledge-base integration')
       })
-      ctx.inject(['sessionProjections'], (scope) => {
-        scope.sessionProjections.register({
-          key: 'novalWrite',
-          stateSchema: writeLinkStateSchema,
-          init: () => null,
-          apply: applyWriteLinkProjection,
-          wire: {
-            viewSchema: writeProjectionSchema,
-            view: state => state === null ? null : { link: state },
-          },
-          stateVersion: 1,
-        })
-      })
-
       ctx.inject(['workspaceRegistry', 'systemPrompt'], (scope) => {
         scope.systemPrompt.section({
           name: 'dsh-w-noval-write:workspace',
@@ -333,7 +323,7 @@ let NovalWriterService = (() => {
             if (command.kind === 'invalid-edit') return { kind: 'error', text: `编辑写作任务需要新内容。\n${WRITE_USAGE}` }
             if (command.kind === 'clear') {
               if (!current) return { kind: 'success', text: '当前对话没有需要清除的小说写作任务。' }
-              this.commitLink(agent, null, 'clear', current.revision)
+              await this.commitLink(agent.session.id, null, 'clear', current.revision)
               return { kind: 'success', text: '已解除当前对话与小说写作工作区的联动；工作区项目数据没有删除。' }
             }
             if (command.kind === 'show' && current) return this.renderLink('小说写作任务', current)
@@ -341,7 +331,7 @@ let NovalWriterService = (() => {
             if (!workspace) return { kind: 'error', text: '当前对话不属于已注册的 Harness 工作区，无法连接小说项目。' }
             if (command.kind === 'edit') {
               if (!current) return { kind: 'error', text: `当前对话还没有小说写作任务。先使用 /write <写作任务>。\n${WRITE_USAGE}` }
-              const edited = this.commitLink(agent, {
+              const edited = await this.commitLink(agent.session.id, {
                 ...current,
                 revision: current.revision + 1,
                 objective: command.objective,
@@ -354,7 +344,7 @@ let NovalWriterService = (() => {
             }
             if (current) return { kind: 'error', text: `当前对话已经有小说写作任务。请直接继续对话，或使用 /write edit <写作任务> 修改、/write clear 清除。` }
             const objective = command.kind === 'create' ? command.objective : DEFAULT_WRITE_OBJECTIVE
-            const linked = this.commitLink(agent, {
+            const linked = await this.commitLink(agent.session.id, {
               revision: 1,
               objective,
               workspaceId: String(workspace.id),
@@ -389,38 +379,29 @@ let NovalWriterService = (() => {
 
     linkForAgent(agent) {
       if (!agent || !agent.session) return null
-      const projections = this.ctx.get('sessionProjections')
-      if (projections) {
-        const projected = projections.stateOf(agent.session, 'novalWrite')
-        if (projected !== undefined) return projected
-      }
-      return writeLinkFromEvents(agent.session.events)
+      return writeLinkForSession(this.writeLinks, agent.session.id)
     }
 
-    agentForSession(sessionId) {
-      const agent = this.ctx.agents.get(String(sessionId))
-      if (!agent || !agent.session) throw new Error('the requested conversation is not live')
-      return agent
-    }
-
-    commitLink(agent, nextValue, operation, expectedRevision) {
-      const current = this.linkForAgent(agent)
-      if (operation === 'link' && current) throw new Error('this conversation already has a novel writing task')
-      if (operation !== 'link') {
-        if (!current) throw new Error('this conversation has no novel writing task')
-        if (!Number.isSafeInteger(expectedRevision) || current.revision !== expectedRevision) {
-          throw new Error('the novel writing task changed; reload before editing it')
+    commitLink(sessionId, nextValue, operation, expectedRevision) {
+      const key = String(sessionId)
+      const queued = this.writeLinkTail.then(async () => {
+        const current = writeLinkForSession(this.writeLinks, key)
+        if (operation === 'link' && current) throw new Error('this conversation already has a novel writing task')
+        if (operation !== 'link') {
+          if (!current) throw new Error('this conversation has no novel writing task')
+          if (!Number.isSafeInteger(expectedRevision) || current.revision !== expectedRevision) {
+            throw new Error('the novel writing task changed; reload before editing it')
+          }
         }
-      }
-      const link = nextValue === null ? null : normalizeWriteLink(nextValue)
-      if (nextValue !== null && !link) throw new Error('invalid novel writing task')
-      agent.session.append('noval-write/change', {
-        kind: 'noval-write/change',
-        version: 1,
-        operation,
-        ...(link ? { link } : {}),
+        const link = nextValue === null ? null : normalizeWriteLink(nextValue)
+        if (nextValue !== null && !link) throw new Error('invalid novel writing task')
+        const nextStore = updateWriteLinkStore(this.writeLinks, key, link)
+        await writeAtomic(this.writeLinksPath, nextStore)
+        this.writeLinks = nextStore
+        return link
       })
-      return link
+      this.writeLinkTail = queued.then(() => {}, () => {})
+      return queued
     }
 
     submitWriteFollowup(invocation, objective) {
@@ -551,11 +532,14 @@ let NovalWriterService = (() => {
       return this.mutate(workspaceId, expectedRevision, current => ({ ...current, project: defaultProject() }))
     }
 
+    async getLink(sessionId) {
+      return writeLinkForSession(this.writeLinks, sessionId)
+    }
+
     async editLink(sessionId, objective, expectedRevision) {
-      const agent = this.agentForSession(sessionId)
-      const current = this.linkForAgent(agent)
+      const current = writeLinkForSession(this.writeLinks, sessionId)
       if (!current) throw new Error('this conversation has no novel writing task')
-      return this.commitLink(agent, {
+      return this.commitLink(sessionId, {
         ...current,
         revision: current.revision + 1,
         objective,
@@ -564,8 +548,7 @@ let NovalWriterService = (() => {
     }
 
     async clearLink(sessionId, expectedRevision) {
-      const agent = this.agentForSession(sessionId)
-      this.commitLink(agent, null, 'clear', expectedRevision)
+      await this.commitLink(sessionId, null, 'clear', expectedRevision)
       return { cleared: true }
     }
 

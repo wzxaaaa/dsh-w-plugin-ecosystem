@@ -2,22 +2,22 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   advanceProject,
-  applyWriteLinkProjection,
   assertProjectShape,
   defaultProject,
   defaultState,
-  isWriteSession,
   mergeProject,
   novelToolContract,
   normalizeProject,
   normalizeState,
+  normalizeWriteLinkStore,
   parseWriteCommand,
   projectShapeIssues,
   projectToolSchema,
   projectPrompt,
   projectExportDocument,
   projectFromImportDocument,
-  writeLinkFromEvents,
+  updateWriteLinkStore,
+  writeLinkForSession,
 } from '../noval-write-core.js'
 
 test('portable framework export round-trips without local workspace binding', () => {
@@ -206,18 +206,22 @@ test('/write parses a goal-like objective, edit, clear, and show grammar', () =>
   assert.deepEqual(parseWriteCommand('CLEAR'), { kind: 'clear' })
 })
 
-test('/write durable link projection survives replay, edits, and clear', () => {
+test('/write plugin-owned link store persists per session, edits, and clear', () => {
   const first = { revision: 1, objective: '写第一章', workspaceId: 'w1', workspaceTitle: '小说', updatedAt: 1 }
   const second = { ...first, revision: 2, objective: '写第二章', updatedAt: 2 }
-  const create = { type: 'noval-write/change', data: { version: 1, operation: 'link', link: first } }
-  const edit = { type: 'noval-write/change', data: { version: 1, operation: 'edit', link: second } }
-  const clear = { type: 'noval-write/change', data: { version: 1, operation: 'clear' } }
-  const unrelated = { type: 'command/run', data: { name: 'write' } }
-  assert.equal(applyWriteLinkProjection(first, unrelated), first)
-  assert.deepEqual(writeLinkFromEvents([create, edit]), second)
-  assert.equal(isWriteSession([create, edit]), true)
-  assert.equal(writeLinkFromEvents([create, edit, clear]), null)
-  assert.equal(isWriteSession([create, edit, clear]), false)
+  const created = updateWriteLinkStore(null, 'session-a', first)
+  assert.deepEqual(created, { version: 1, links: { 'session-a': first } })
+  assert.deepEqual(writeLinkForSession(created, 'session-a'), first)
+  assert.equal(writeLinkForSession(created, 'session-b'), null)
+  const edited = updateWriteLinkStore(created, 'session-a', second)
+  assert.deepEqual(writeLinkForSession(edited, 'session-a'), second)
+  const cleared = updateWriteLinkStore(edited, 'session-a', null)
+  assert.equal(writeLinkForSession(cleared, 'session-a'), null)
+  assert.deepEqual(normalizeWriteLinkStore({ version: 99, links: { good: first, bad: { objective: '' } } }), {
+    version: 1,
+    links: { good: first },
+  })
+  assert.throws(() => updateWriteLinkStore(created, '', first), /sessionId/)
 })
 
 test('prompt renders canon, relationships, current scene, and KB boundary', () => {

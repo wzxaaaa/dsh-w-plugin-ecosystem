@@ -7,6 +7,7 @@ const MAX_PROGRESS = 500
 export const SCHEMA_VERSION = 3
 export const PROJECT_EXPORT_FORMAT = 'dsh-w-noval-write/project'
 export const PROJECT_EXPORT_VERSION = 1
+export const WRITE_LINK_STORE_VERSION = 1
 
 const PROJECT_KEYS = Object.freeze([
   'title',
@@ -568,24 +569,38 @@ export function normalizeWriteLink(value) {
   }
 }
 
-/** Last-wins projection of durable novel-write link events. */
-export function applyWriteLinkProjection(state, event) {
-  if (!event || event.type !== 'noval-write/change' || !event.data || event.data.version !== 1) return state
-  if (event.data.operation === 'clear') return null
-  const link = normalizeWriteLink(event.data.link)
-  return link || state
+/** Normalize the plugin-owned, per-session /write link table. */
+export function normalizeWriteLinkStore(value) {
+  const links = {}
+  if (value && typeof value === 'object' && value.links && typeof value.links === 'object' && !Array.isArray(value.links)) {
+    for (const [sessionId, candidate] of Object.entries(value.links)) {
+      const key = String(sessionId).trim()
+      const link = normalizeWriteLink(candidate)
+      if (key && link) links[key] = link
+    }
+  }
+  return { version: WRITE_LINK_STORE_VERSION, links }
 }
 
-/** Rebuild the current writing link from one session's durable event log. */
-export function writeLinkFromEvents(events) {
-  let state = null
-  if (!Array.isArray(events)) return state
-  for (const event of events) state = applyWriteLinkProjection(state, event)
-  return state
+export function writeLinkForSession(store, sessionId) {
+  const key = String(sessionId ?? '').trim()
+  if (!key) return null
+  return normalizeWriteLinkStore(store).links[key] ?? null
 }
 
-export function isWriteSession(events) {
-  return writeLinkFromEvents(events) !== null
+export function updateWriteLinkStore(store, sessionId, nextValue) {
+  const key = String(sessionId ?? '').trim()
+  if (!key) throw new TypeError('sessionId must be a non-empty string')
+  const current = normalizeWriteLinkStore(store)
+  const links = { ...current.links }
+  if (nextValue === null) {
+    delete links[key]
+  } else {
+    const link = normalizeWriteLink(nextValue)
+    if (!link) throw new TypeError('invalid novel writing task')
+    links[key] = link
+  }
+  return { version: WRITE_LINK_STORE_VERSION, links }
 }
 
 function compact(value) {

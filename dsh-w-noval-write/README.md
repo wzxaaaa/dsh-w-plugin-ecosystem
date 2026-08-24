@@ -6,7 +6,7 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 
 - 一个 Harness 工作区共享一个小说项目。同一工作区下的所有对话和右侧栏看到的是同一份角色、关系、世界观、情节、场景与进展数据。
 - 小说工作台始终可用，没有开启/关闭状态，也没有模式按钮。
-- `/write` 像 `/goal` 一样是一项持久会话能力：写作任务保存为独立 `noval-write/change` 会话事件，并通过 `novalWrite` 投影恢复和推送；重启后仍然有效，不影响其他对话。
+- `/write` 像 `/goal` 一样是一项持久会话能力：写作任务按会话保存在插件自己的 `session-links.json` 中；重启后仍然有效，不污染 Harness 会话事件，也不影响其他对话。
 - AI 对项目数据拥有完整能力：可以读取、局部修改、完整重写并推进进展。长期设定变化应回写项目，而不是只留在聊天文本里。
 
 这和 `dsh-w-whale-tail` 的边界不同：Whale Tail 的状态按对话保存；本插件的数据按工作区保存。
@@ -47,6 +47,8 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 
 `novel_read` 会把当前数据、revision、权威结构和重试协议一并返回给模型。所有写工具的对象参数都使用完整嵌套 JSON Schema；`project`、`patch` 和 `scene` 必须是直接 JSON 对象，不能是 JSON 字符串、Markdown 或再次包裹的整套工具参数。
 
+0.7.2 将 `/write` 的会话绑定迁移到插件自有的原子持久化文件，避免第三方事件导致旧版 Harness 拒绝加载会话；输入栏状态通过插件远程接口自动同步。工作区共享的小说框架存储方式不变。
+
 0.7.1 的工作台使用 schema v3，并新增“设置”页：可导出当前工作区的完整小说框架、校验并原子导入备份，以及在二次确认后重置为空白框架。导出文件是带格式版本的可移植 JSON，不绑定本机工作区 ID 或路径；导入也兼容完整的原始项目 JSON。工作台使用按侧栏自身宽度生效的容器响应式，角色关系等双列表单会在窄栏自动改为单列。
 
 工作台的数据结构包括：
@@ -86,7 +88,10 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 
 ```text
 $DSH_HOME/noval-write/workspaces/<workspaceId>/project.json
+$DSH_HOME/noval-write/session-links.json
 ```
+
+`project.json` 是工作区共享的小说框架；`session-links.json` 只保存各会话的 `/write` 任务与工作区绑定。两者都采用临时文件加原子重命名写入。
 
 可以在 profile 的 `cordis.patch.yml` 中改根目录和提示词上限：
 
@@ -120,7 +125,7 @@ $DSH_HOME/noval-write/workspaces/<workspaceId>/project.json
 3. `dsh-w-noval-write`
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-noval-write-0.7.1.tgz
+dsh plugin --profile web add .\dsh-w-noval-write-0.7.2.tgz
 ```
 
 缺少知识库时，项目工作台与 AI 数据工具不受影响，`/write` 会明确报告知识库未挂载。

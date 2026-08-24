@@ -123,6 +123,7 @@ window.__ModuleLoader__.load({
         descriptor("exportProject", [parameter("workspaceId")]),
         descriptor("importProject", [parameter("workspaceId"), parameter("input"), parameter("expectedRevision")]),
         descriptor("resetProject", [parameter("workspaceId"), parameter("expectedRevision")]),
+        descriptor("getLink", [parameter("sessionId")]),
         descriptor("editLink", [parameter("sessionId"), parameter("objective"), parameter("expectedRevision")]),
         descriptor("clearLink", [parameter("sessionId"), parameter("expectedRevision")]),
       ],
@@ -150,8 +151,9 @@ window.__ModuleLoader__.load({
     }
 
     function WriteDock(props) {
-      var projection = props.useProjection("novalWrite");
-      var link = projection && projection.link ? projection.link : null;
+      var linkSlot = React.useState(null);
+      var link = linkSlot[0];
+      var setLink = linkSlot[1];
       var editingSlot = React.useState(false);
       var editing = editingSlot[0];
       var setEditing = editingSlot[1];
@@ -164,22 +166,26 @@ window.__ModuleLoader__.load({
       var errorSlot = React.useState("");
       var actionError = errorSlot[0];
       var setActionError = errorSlot[1];
-      var clearedSlot = React.useState(false);
-      var cleared = clearedSlot[0];
-      var setCleared = clearedSlot[1];
       var pendingRef = React.useRef(false);
       var mountedRef = React.useRef(true);
       var revision = link ? link.revision : 0;
 
       React.useEffect(function () {
         mountedRef.current = true;
-        return function () { mountedRef.current = false; };
-      }, []);
+        var stopped = false;
+        function refresh() {
+          props.loadLink().then(function (value) {
+            if (!stopped && mountedRef.current && !pendingRef.current) setLink(value || null);
+          }).catch(function () {});
+        }
+        refresh();
+        var timer = setInterval(refresh, 750);
+        return function () { stopped = true; mountedRef.current = false; clearInterval(timer); };
+      }, [props.loadLink]);
 
       React.useEffect(function () {
         setEditing(false);
         setActionError("");
-        setCleared(false);
       }, [revision]);
 
       function run(action, onSuccess) {
@@ -197,7 +203,7 @@ window.__ModuleLoader__.load({
         });
       }
 
-      if (!link || cleared) return null;
+      if (!link) return null;
       if (editing) {
         return React.createElement("div", { className: "dshwnw-dock", "data-noval-write-bar": "true" },
           React.createElement("div", { className: "dshwnw-writebar" },
@@ -207,13 +213,13 @@ window.__ModuleLoader__.load({
               "aria-label": props.t("writeObjectiveAria"),
               onChange: function (event) { setDraft(event.target.value); },
               onKeyDown: function (event) {
-                if (event.key === "Enter" && draft.trim()) run(function () { return props.onEdit(draft.trim(), link.revision); }, function () { setEditing(false); });
+                if (event.key === "Enter" && draft.trim()) run(function () { return props.onEdit(draft.trim(), link.revision); }, function (value) { setLink(value); setEditing(false); });
                 if (event.key === "Escape") setEditing(false);
               },
             }),
             actionError ? React.createElement("span", { className: "dshwnw-writebar-error", role: "alert" }, actionError) : null,
             React.createElement("div", { className: "dshwnw-writebar-actions" },
-              React.createElement("button", { type: "button", className: "dshwnw-writebar-action", disabled: pending || !draft.trim(), onClick: function () { run(function () { return props.onEdit(draft.trim(), link.revision); }, function () { setEditing(false); }); } }, props.t("writeSave")),
+              React.createElement("button", { type: "button", className: "dshwnw-writebar-action", disabled: pending || !draft.trim(), onClick: function () { run(function () { return props.onEdit(draft.trim(), link.revision); }, function (value) { setLink(value); setEditing(false); }); } }, props.t("writeSave")),
               React.createElement("button", { type: "button", className: "dshwnw-writebar-action", disabled: pending, onClick: function () { setEditing(false); } }, props.t("writeCancel"))
             )
           )
@@ -228,7 +234,7 @@ window.__ModuleLoader__.load({
             : React.createElement("span", { className: "dshwnw-writebar-objective" }, link.objective),
           React.createElement("div", { className: "dshwnw-writebar-actions" },
             React.createElement("button", { type: "button", className: "dshwnw-writebar-action", disabled: pending, onClick: function () { setDraft(link.objective); setEditing(true); } }, props.t("writeEdit")),
-            React.createElement("button", { type: "button", className: "dshwnw-writebar-action", disabled: pending, onClick: function () { run(function () { return props.onClear(link.revision); }, function () { setCleared(true); }); } }, props.t("writeClear"))
+            React.createElement("button", { type: "button", className: "dshwnw-writebar-action", disabled: pending, onClick: function () { run(function () { return props.onClear(link.revision); }, function () { setLink(null); }); } }, props.t("writeClear"))
           )
         )
       );
@@ -972,6 +978,7 @@ window.__ModuleLoader__.load({
           exportProject: function (workspaceId) { return unwrap("exportProject", [workspaceId]); },
           importProject: function (workspaceId, input, revision) { return unwrap("importProject", [workspaceId, input, revision]); },
           resetProject: function (workspaceId, revision) { return unwrap("resetProject", [workspaceId, revision]); },
+          getLink: function (sessionId) { return unwrap("getLink", [sessionId]); },
           editLink: function (sessionId, objective, revision) { return unwrap("editLink", [sessionId, objective, revision]); },
           clearLink: function (sessionId, revision) { return unwrap("clearLink", [sessionId, revision]); },
         } };
@@ -985,11 +992,12 @@ window.__ModuleLoader__.load({
           name: "conversation.input.dock", id: "noval-write", order: 15, locale: NS,
           inject: function (sessionId) {
             return {
+              loadLink: function () { return unwrap("getLink", [sessionId]); },
               onEdit: function (objective, revision) { return unwrap("editLink", [sessionId, objective, revision]); },
               onClear: function (revision) { return unwrap("clearLink", [sessionId, revision]); },
             };
           },
-        }, function (props) { return React.createElement(WriteDock, { useProjection: props.useProjection, onEdit: props.onEdit, onClear: props.onClear, t: t }); });
+        }, function (props) { return React.createElement(WriteDock, { loadLink: props.loadLink, onEdit: props.onEdit, onClear: props.onClear, t: t }); });
       });
       ctx.slots.inject("right-sidebar.rail", function () {
         return ctx.slots.register({ name: "right-sidebar.rail", id: "noval-write", order: 110, label: function () { return t("title"); }, locale: NS }, SidebarRail);

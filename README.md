@@ -10,7 +10,7 @@
 | --- | ---: | --- | --- |
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.2` | 自定义插件管理、启停和拖拽安装；隐藏 preset 内部实现模块；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.2.tgz?raw=1) |
 | [`dsh-w-right-sidebar`](./dsh-w-right-sidebar) | `0.7.1` | W 系列共用的右侧 Sidebar 宿主：工具栏、工具页返回、收缩栏直达工具，并真实挤压中间对话区域, 已完美兼容**dsh-better-sidebar**; **建议第二个安装** | [下载 `.tgz`](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.7.1.tgz?raw=1) |
-| [`dsh-w-noval-write`](./dsh-w-noval-write) | `0.7.1` | 工作区共享的小说数据层：Goal 风格持久 `/write`、AI 自由读写、响应式结构化工作台，以及框架导入/导出/清除 | [下载 `.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.7.1.tgz?raw=1) |
+| [`dsh-w-noval-write`](./dsh-w-noval-write) | `0.7.2` | 工作区共享的小说数据层：Goal 风格持久 `/write`、AI 自由读写、响应式结构化工作台，以及框架导入/导出/清除 | [下载 `.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.7.2.tgz?raw=1) |
 | [`dsh-w-whale-tail`](./dsh-w-whale-tail) | `0.5.0` | 右侧 Sidebar 中的鲸鱼娘工具：透明主立绘、眨眼与状态动作、流动液体爱心淫乱值和对话记忆窗口 | [下载 `.tgz`](./dsh-w-whale-tail/dsh-w-whale-tail-0.5.0.tgz?raw=1) |
 | [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.1.2` | 在设置中管理已归档对话，支持还原、永久删除、一键清理和真实的 30 天自动清理 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1) |
 | [`dsh-w-assistant-refresh`](./dsh-w-assistant-refresh) | `0.2.2` | 在同一会话内重生成指定 AI 回复，不创建新对话并隐藏被替换的旧回复 | [下载 `.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1) |
@@ -63,7 +63,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 11. [`dsh-w-archive-manager-0.1.2.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1)
 12. [`dsh-w-assistant-refresh-0.2.2.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1)
 13. [`dsh-w-knowledge-base-0.4.3.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1)
-14. [`dsh-w-noval-write-0.7.1.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.7.1.tgz?raw=1)
+14. [`dsh-w-noval-write-0.7.2.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.7.2.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 
