@@ -1,0 +1,4 @@
+# Keep this row after dsh-w-knowledge-base when ordering profile overrides.
+- insert:
+    - id: dsh-w-noval-write
+      name: dsh-w-noval-write

@@ -1,0 +1,58 @@
+{
+  "name": "dsh-w-knowledge-base",
+  "version": "0.4.3",
+  "description": "A durable cross-session Markdown knowledge base for DeepSeek Harness agents with two switchable modes: an assistant memory (kb_save/kb_search/kb_read/kb_list/kb_delete/kb_import), and a writing mode that turns the same store into a human-prose style corpus (feed reference novels, retrieve passages for texture) with an anti-AI-flavour prompt and an editable banned-cliché list. Encoding-aware import splits Markdown on headings and Chinese novel .txt on chapters; a browser panel drives both modes.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./kb-store": "./kb-store.js",
+    "./kb-tools": "./kb-tools.js",
+    "./kb-ingest": "./kb-ingest.js",
+    "./kb-encoding": "./kb-encoding.js",
+    "./kb-writing": "./kb-writing.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "kb-format.js",
+    "kb-search.js",
+    "kb-store.js",
+    "kb-tools.js",
+    "kb-ingest.js",
+    "kb-encoding.js",
+    "kb-writing.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "iconv-lite": "^0.6.3",
+    "jschardet": "^3.1.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-home-paths": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-typert-protocol": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  }
+}

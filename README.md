@@ -1,6 +1,6 @@
 # dsh-w-plugin-ecosystem
 
-`wzxaaaa` 的 DeepSeek Harness W 系列插件合集。这里集中维护 11 个可直接安装的插件源码和当前版本 `.tgz` 包。
+`wzxaaaa` 的 DeepSeek Harness W 系列插件合集。这里集中维护 W 系列可直接安装的插件源码和当前版本 `.tgz` 包。
 
 > 这些插件面向 Windows 桌面版 / Web profile。插件拥有本机代码执行权限，请只安装你信任的版本。
 
@@ -9,11 +9,15 @@
 | 插件 | 当前版本 | 作用 | 安装包 |
 | --- | ---: | --- | --- |
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.2` | 自定义插件管理、启停和拖拽安装；隐藏 preset 内部实现模块；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.2.tgz?raw=1) |
+| [`dsh-w-right-sidebar`](./dsh-w-right-sidebar) | `0.7.1` | W 系列共用的右侧 Sidebar 宿主：工具栏、工具页返回、收缩栏直达工具，并真实挤压中间对话区域 | [下载 `.tgz`](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.7.1.tgz?raw=1) |
+| [`dsh-w-noval-write`](./dsh-w-noval-write) | `0.7.1` | 工作区共享的小说数据层：Goal 风格持久 `/write`、AI 自由读写、响应式结构化工作台，以及框架导入/导出/清除 | [下载 `.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.7.1.tgz?raw=1) |
+| [`dsh-w-whale-tail`](./dsh-w-whale-tail) | `0.5.0` | 右侧 Sidebar 中的鲸鱼娘工具：透明主立绘、眨眼与状态动作、流动液体爱心淫乱值和对话记忆窗口 | [下载 `.tgz`](./dsh-w-whale-tail/dsh-w-whale-tail-0.5.0.tgz?raw=1) |
 | [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.1.2` | 在设置中管理已归档对话，支持还原、永久删除、一键清理和真实的 30 天自动清理 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1) |
 | [`dsh-w-assistant-refresh`](./dsh-w-assistant-refresh) | `0.2.2` | 在同一会话内重生成指定 AI 回复，不创建新对话并隐藏被替换的旧回复 | [下载 `.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1) |
 | [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.1` | 消除超长流式思维链的重复扫描；屏外延迟渲染改为可选，避免长消息向上滚动回弹 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1) |
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
+| [`dsh-w-knowledge-base`](./dsh-w-knowledge-base) | `0.4.3` | 双模式跨会话 Markdown 知识库：assistant 笔记与独立 writing 文风语料库、`kb_*` 工具、千万字符整本投喂，以及响应式侧栏界面 | [下载 `.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1) |
 | [`dsh-w-persona`](./dsh-w-persona) | `0.2.1` | 在设置中编辑 Persona，并可配置隐藏的两轮 user/assistant 对话预设 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.2.1.tgz?raw=1) |
 | [`dsh-w-vision`](./dsh-w-vision) | `0.3.2` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1) |
 | [`dsh-w-route-primer`](./dsh-w-route-primer) | `0.3.0` | 路由预热、任务分类与模式工具；感谢风神开源 `routing-suite` 和社区开源贡献 | [下载 `.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1) |
@@ -24,7 +28,7 @@
 
 ### 第一步：先安装 `dsh-w-custom-plugins`
 
-建议先安装 [`dsh-w-custom-plugins`](https://github.com/wzxaaaa/dsh-w-plugin-ecosystem/blob/main/dsh-w-custom-plugins)。它是本插件生态的图形化管理入口，安装以后，其余十个插件都可以直接把 `.tgz` 安装包拖入页面完成安装。
+建议先安装 [`dsh-w-custom-plugins`](https://github.com/wzxaaaa/dsh-w-plugin-ecosystem/blob/main/dsh-w-custom-plugins)。它是本插件生态的图形化管理入口，安装以后，其余 W 系列插件都可以直接把 `.tgz` 安装包拖入页面完成安装。
 
 首次安装管理器时还没有拖拽入口，因此需要使用一次 DeepSeek Harness 官方 CLI：
 
@@ -44,23 +48,30 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 
 ### 第二步：先安装视觉依赖，再拖入其他插件
 
-下载并依次拖入下面十个当前版本的 `.tgz` 文件：
+下载并依次拖入下面当前版本的 `.tgz` 文件：
 
-1. [`dsh-w-vision-0.3.2.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1)
-2. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
-3. [`dsh-w-chatflow-0.3.1.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1)
-4. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
-5. [`dsh-w-persona-0.2.1.tgz`](./dsh-w-persona/dsh-w-persona-0.2.1.tgz?raw=1)
-6. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
-7. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
-8. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)
-9. [`dsh-w-archive-manager-0.1.2.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1)
-10. [`dsh-w-assistant-refresh-0.2.2.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1)
+1. [`dsh-w-right-sidebar-0.7.1.tgz`](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.7.1.tgz?raw=1)
+2. [`dsh-w-whale-tail-0.5.0.tgz`](./dsh-w-whale-tail/dsh-w-whale-tail-0.5.0.tgz?raw=1)
+3. [`dsh-w-vision-0.3.2.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1)
+4. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
+5. [`dsh-w-chatflow-0.3.1.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.1.tgz?raw=1)
+6. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
+7. [`dsh-w-persona-0.2.1.tgz`](./dsh-w-persona/dsh-w-persona-0.2.1.tgz?raw=1)
+8. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
+9. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
+10. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)
+11. [`dsh-w-archive-manager-0.1.2.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1)
+12. [`dsh-w-assistant-refresh-0.2.2.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1)
+13. [`dsh-w-knowledge-base-0.4.3.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1)
+14. [`dsh-w-noval-write-0.7.1.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.7.1.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 
 > [!IMPORTANT]
 > 请拖入插件目录中的 **`.tgz` 安装包**，不要拖源码文件夹，也不要下载并拖入整个仓库的 GitHub ZIP。整个仓库包含多个插件，会被安装器的“单插件包”安全校验拒绝。
+
+> [!NOTE]
+> `dsh-w-whale-tail` 依赖 `dsh-w-right-sidebar`，必须先安装右侧 Sidebar 宿主，再安装鲸鱼娘功能页。
 
 > [!NOTE]
 > `dsh-w-easy-upload` 依赖 `dsh-w-vision >= 0.2.2`，所以必须先安装并配置视觉插件。`dsh-w-vision 0.3.2` 还会在每个 agent 会话中用 scoped `read_image` 覆盖内置工具，把本地图片和落盘截图统一发送到配置的视觉中转模型，因此主模型不需要声明图片输入能力；同时修复约 4 MB 以上上传图片可能触发的 `Maximum call stack size exceeded`。`0.2.0` 会在聊天记录中保留原图缩略图和用户原文字，同时用只对模型可见的 Surface replacement 把视觉/OCR结果交给当前主模型；因此不是简单隐藏“当前模型不支持图片”的提示，也不会把内部视觉上下文显示成用户气泡。每条图片消息会产生一次视觉模型调用和一次主模型调用。
@@ -105,6 +116,12 @@ cd ..\dsh-w-archive-manager
 npm test
 
 cd ..\dsh-w-assistant-refresh
+npm test
+
+cd ..\dsh-w-knowledge-base
+npm test
+
+cd ..\dsh-w-noval-write
 npm test
 ```
 

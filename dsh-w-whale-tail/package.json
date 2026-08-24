@@ -1,0 +1,43 @@
+{
+  "name": "dsh-w-whale-tail",
+  "version": "0.5.0",
+  "description": "A whale-girl feature page mounted in dsh-w-right-sidebar for DeepSeek Harness: a supplied transparent whale-girl illustration with expressive idle motion, a pixel heart filled with flowing red liquid measuring this conversation's lewdness, and a per-conversation memory window.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./whale-tail-core": "./whale-tail-core.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "whale-tail-core.js",
+    "cordis.patch.yml",
+    "assets/whale-girl.webp"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "dsh-w-right-sidebar": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-typert-protocol": "*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  }
+}

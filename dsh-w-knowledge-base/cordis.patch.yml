@@ -1,0 +1,10 @@
+# dsh-w-knowledge-base bundle layer: one loader row contributes the Host
+# knowledge base tools, the prompt index, the Typert Remote service, and the
+# browser panel. Override the row config in a profile cordis.patch.yml, e.g.
+#   - id: dsh-w-knowledge-base
+#     config:
+#       root: 'D:/notes/harness-kb'
+#       promptIndexNotes: 40
+- insert:
+    - id: dsh-w-knowledge-base
+      name: dsh-w-knowledge-base
