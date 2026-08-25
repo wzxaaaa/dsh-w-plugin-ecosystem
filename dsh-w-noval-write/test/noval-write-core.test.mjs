@@ -10,13 +10,19 @@ import {
   normalizeProject,
   normalizeState,
   normalizeWriteLinkStore,
+  patchCharacterById,
+  patchRelationshipById,
   parseWriteCommand,
   projectShapeIssues,
   projectToolSchema,
   projectPrompt,
   projectExportDocument,
   projectFromImportDocument,
+  removeChapter,
+  reorderChapter,
   updateWriteLinkStore,
+  upsertChapter,
+  upsertVolume,
   writeLinkForSession,
 } from '../noval-write-core.js'
 
@@ -44,6 +50,8 @@ test('default project contains every editor section', () => {
   const project = defaultProject()
   assert.deepEqual(project.characters, [])
   assert.deepEqual(project.relationships, [])
+  assert.deepEqual(project.volumes, [])
+  assert.deepEqual(project.genreProfile, { type: '', customFields: {} })
   assert.deepEqual(Object.keys(project.world), ['era', 'chronology', 'geography', 'environment', 'locations', 'rules', 'factions', 'politics', 'society', 'culture', 'economy', 'beliefs', 'technology', 'conflicts', 'lore'])
   assert.deepEqual(Object.keys(project.plot), ['themes', 'storyQuestion', 'coreConflict', 'protagonistGoal', 'stakes', 'antagonisticForce', 'opening', 'midpoint', 'climax', 'ending', 'subplots', 'foreshadowing', 'reveals', 'pacing', 'chapterPlan', 'outline'])
   assert.equal(project.scene.povCharacterId, '')
@@ -106,6 +114,50 @@ test('state normalization keeps revision without a mode switch', () => {
   assert.equal(Object.hasOwn(defaultState(0), 'enabled'), false)
 })
 
+test('schema v3 projects migrate in memory to v4 without losing legacy canon', () => {
+  const legacy = defaultProject()
+  delete legacy.genreProfile
+  delete legacy.volumes
+  legacy.title = '旧项目'
+  legacy.characters = [{ id: 'hero', name: '林岚', role: '主角' }]
+  const state = normalizeState({ schemaVersion: 3, revision: 9, project: legacy })
+  assert.equal(state.schemaVersion, 4)
+  assert.equal(state.revision, 9)
+  assert.equal(state.project.characters[0].role, '主角')
+  assert.deepEqual(state.project.characters[0].customFields, {})
+  assert.deepEqual(state.project.genreProfile, { type: '', customFields: {} })
+  assert.deepEqual(state.project.volumes, [])
+})
+
+test('structured outline supports targeted volume and chapter updates', () => {
+  let project = upsertVolume(defaultProject(), 'volume-1', { title: '第一卷', customFields: { 路线: '主线' } })
+  project = upsertChapter(project, 'volume-1', 'chapter-1', {
+    number: '1', title: '开局', targetWords: '3500', events: ['抵达城市', '获得线索'], customFields: { 内容类型: '关系推进' },
+  })
+  project = upsertChapter(project, 'volume-1', 'chapter-2', { number: '2', title: '试探' })
+  assert.equal(project.volumes[0].chapters[0].events[1], '获得线索')
+  assert.equal(project.volumes[0].chapters[0].customFields.内容类型, '关系推进')
+  project = reorderChapter(project, 'volume-1', 'chapter-2', 0)
+  assert.equal(project.volumes[0].chapters[0].id, 'chapter-2')
+  project = removeChapter(project, 'volume-1', 'chapter-1')
+  assert.deepEqual(project.volumes[0].chapters.map(chapter => chapter.id), ['chapter-2'])
+})
+
+test('targeted entity patches preserve arrays and reject ambiguous relationships', () => {
+  let project = normalizeProject({
+    ...defaultProject(),
+    characters: [{ id: 'a', name: '同名' }, { id: 'b', name: '同名' }],
+    relationships: [{ id: 'r', fromId: 'a', toId: 'b' }],
+  })
+  project = patchCharacterById(project, 'a', { customFields: { 角色阶段: '接触' } })
+  assert.equal(project.characters[0].customFields.角色阶段, '接触')
+  assert.equal(project.characters[1].id, 'b')
+  project = patchRelationshipById(project, 'r', { customFields: { 路线: '缓慢推进' } })
+  assert.equal(project.relationships[0].customFields.路线, '缓慢推进')
+  assert.throws(() => patchRelationshipById(project, 'r', { toId: 'a' }), /distinct characters/)
+  assert.match(projectShapeIssues({ ...project, relationships: [{ id: 'x', fromId: '同名', toId: 'b' }] })[0], /unique character/)
+})
+
 test('partial model patches merge structured sections and preserve omitted canon', () => {
   const merged = mergeProject({
     title: '潮汐碑',
@@ -131,7 +183,10 @@ test('model tool schema exposes the complete canonical object structure', () => 
   assert.equal(schema.properties.world.properties.rules.type, 'string')
   assert.equal(schema.properties.scene.properties.povCharacterId.type, 'string')
   assert.equal(schema.properties.progress.items.properties.canonChanges.type, 'string')
-  assert.equal(schema.properties.title.required, true)
+  assert.equal(schema.properties.characters.required, true)
+  assert.equal(schema.properties.characters.items.properties.id.required, true)
+  assert.equal(schema.properties.characters.items.properties.age.required, undefined)
+  assert.equal(schema.properties.volumes.type, 'array')
 
   const patch = projectToolSchema({ partial: true })
   assert.equal(Object.hasOwn(patch.properties.title, 'required'), false)
@@ -141,7 +196,7 @@ test('model tool schema exposes the complete canonical object structure', () => 
 test('destructive writes reject strings, wrappers, incomplete projects, and unknown fields', () => {
   assert.match(projectShapeIssues(JSON.stringify({ project: defaultProject() }))[0], /must be an object/)
   assert.match(projectShapeIssues({ project: defaultProject() })[0], /project\.project is not part/)
-  assert.match(projectShapeIssues({ title: 'only one field' })[0], /project\.genre is required/)
+  assert.match(projectShapeIssues({ title: 'only one field' })[0], /project\.characters is required/)
   assert.throws(
     () => assertProjectShape(JSON.stringify({ expected_revision: 1, project: defaultProject() })),
     error => error.code === 'INVALID_NOVEL_ARGUMENTS' && error.retryable === true,
@@ -158,7 +213,8 @@ test('partial patches accept canonical fields and reject empty or schema-driftin
 
 test('schema discovery contract includes an example and automatic retry protocol', () => {
   const contract = novelToolContract()
-  assert.equal(contract.schemaVersion, 3)
+  assert.equal(contract.schemaVersion, 4)
+  assert.equal(contract.chapterSchema.properties.events.type, 'array')
   assert.deepEqual(contract.emptyProjectExample, defaultProject())
   assert.ok(contract.retryProtocol.some(line => /novel_schema/.test(line)))
   assert.ok(contract.retryProtocol.some(line => /never JSON strings/.test(line)))
@@ -242,7 +298,7 @@ test('prompt renders canon, relationships, current scene, and KB boundary', () =
   assert.match(prompt, /岚左手受伤/)
   assert.match(prompt, /kb_search\/kb_read/)
   assert.match(prompt, /never copy distinctive wording/)
-  assert.match(prompt, /novel_read, novel_patch, novel_write, or novel_advance/)
+  assert.match(prompt, /outline\/character\/relationship tools/)
   assert.match(prompt, /novel_schema/)
   assert.match(prompt, /Success requires ok: true/i)
 })

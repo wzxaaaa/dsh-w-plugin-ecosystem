@@ -19,6 +19,8 @@ import { dshHomePath, expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
   advanceProject,
   assertProjectShape,
+  chapterPatchToolSchema,
+  characterPatchToolSchema,
   defaultProject,
   defaultState,
   mergeProject,
@@ -27,13 +29,21 @@ import {
   normalizeState,
   normalizeWriteLink,
   normalizeWriteLinkStore,
+  patchCharacterById,
+  patchRelationshipById,
   parseWriteCommand,
   projectToolSchema,
   projectPrompt,
+  relationshipPatchToolSchema,
+  removeChapter,
+  reorderChapter,
   projectExportDocument,
   projectFromImportDocument,
   scenePatchToolSchema,
   updateWriteLinkStore,
+  upsertChapter,
+  upsertVolume,
+  volumePatchToolSchema,
   writeLinkForSession,
 } from './noval-write-core.js'
 import { NovelMutationRoundGuard } from './noval-mutation-guard.js'
@@ -471,7 +481,7 @@ let NovalWriterService = (() => {
         state = readStateSync(this.statePath(key))
       } catch (error) {
         this.report(`workspace '${key}' state read failed`, error)
-        state = defaultState()
+        throw new Error(`novel project '${key}' could not be read; the original file was preserved and writes are blocked until it is repaired or explicitly reset`, { cause: error })
       }
       this.states.set(key, state)
       return state
@@ -579,7 +589,7 @@ let NovalWriterService = (() => {
         name: 'novel_read',
         description: '读取当前 Harness 工作区共享的小说项目设定，同时返回权威结构和重试协议。任何写入前必须先读取 revision；不要猜测项目结构。',
         parameters: {
-          section: { type: 'string', enum: ['all', 'project', 'characters', 'relationships', 'world', 'plot', 'scene', 'progress'], description: '要读取的部分；默认 all。' },
+          section: { type: 'string', enum: ['all', 'project', 'genreProfile', 'characters', 'relationships', 'volumes', 'world', 'plot', 'scene', 'progress'], description: '要读取的部分；默认 all。结构化章节大纲位于 volumes。' },
         },
         output: toolOutput('小说设定已读取', { includeValue: true }),
         async execute(args, exec) {
@@ -588,7 +598,7 @@ let NovalWriterService = (() => {
           const contract = novelToolContract()
           if (section === 'all') return { ...self.view(workspace, state), contract }
           if (section === 'project') {
-            const { characters, relationships, world, plot, scene, progress, ...overview } = state.project
+            const { characters, relationships, volumes, world, plot, scene, progress, ...overview } = state.project
             return { workspace: { id: String(workspace.id), title: workspace.title }, revision: state.revision, project: overview, contract }
           }
           return { workspace: { id: String(workspace.id), title: workspace.title }, revision: state.revision, [section]: state.project[section], contract }
@@ -633,7 +643,170 @@ let NovalWriterService = (() => {
           const { workspace } = await self.modelState(exec)
           assertProjectShape(args?.patch, { partial: true })
           const expectedRevision = assertExpectedRevision(args?.expected_revision)
-          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({ ...current, project: mergeProject(current.project, args?.patch) }))
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => {
+            const project = mergeProject(current.project, args?.patch)
+            assertProjectShape(project, { partial: false })
+            return { ...current, project }
+          })
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_character_patch',
+        description: '按稳定角色 ID 局部更新一张角色卡；不需要重发 characters 数组。类型专用内容写入 patch.customFields。先 novel_read characters 并复制 revision。',
+        parameters: {
+          character_id: { type: 'string', required: true, description: '已有角色的稳定 id，不要使用姓名猜测。' },
+          patch: characterPatchToolSchema(),
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('角色卡已修改'),
+        finalizeContent: mutationFailureContent('character patch'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: patchCharacterById(current.project, args?.character_id, args?.patch),
+          }))
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_relationship_patch',
+        description: '按稳定关系 ID 局部更新一条关系线；端点必须指向两个不同且明确的角色 ID。先 novel_read relationships 并复制 revision。',
+        parameters: {
+          relationship_id: { type: 'string', required: true },
+          patch: relationshipPatchToolSchema(),
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('关系线已修改'),
+        finalizeContent: mutationFailureContent('relationship patch'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: patchRelationshipById(current.project, args?.relationship_id, args?.patch),
+          }))
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_outline_read',
+        description: '按卷或章节读取结构化大纲，避免把几十章塞进一个长字符串。默认返回所有卷的概要和每卷前 50 章。',
+        parameters: {
+          volume_id: { type: 'string', description: '可选；只读取这个卷。' },
+          chapter_id: { type: 'string', description: '可选；只读取这个章节，必须同时提供 volume_id。' },
+          offset: { type: 'integer', description: '章节起始下标，默认 0。' },
+          limit: { type: 'integer', description: '返回章数，默认 50，最大 100。' },
+        },
+        output: toolOutput('结构化大纲已读取', { includeValue: true }),
+        async execute(args, exec) {
+          const { workspace, state } = await self.modelState(exec)
+          const volumeId = typeof args?.volume_id === 'string' ? args.volume_id.trim() : ''
+          const chapterId = typeof args?.chapter_id === 'string' ? args.chapter_id.trim() : ''
+          if (chapterId && !volumeId) throw new Error('chapter_id requires volume_id')
+          const volumes = volumeId ? state.project.volumes.filter(volume => volume.id === volumeId) : state.project.volumes
+          if (volumeId && volumes.length === 0) throw new Error(`unknown volume '${volumeId}'`)
+          const offset = Number.isSafeInteger(args?.offset) ? Math.max(0, args.offset) : 0
+          const limit = Number.isSafeInteger(args?.limit) ? Math.max(1, Math.min(100, args.limit)) : 50
+          const value = volumes.map(volume => {
+            if (chapterId) {
+              const chapter = volume.chapters.find(item => item.id === chapterId)
+              if (!chapter) throw new Error(`unknown chapter '${chapterId}'`)
+              return { ...volume, chapters: [chapter], totalChapters: volume.chapters.length }
+            }
+            return { ...volume, chapters: volume.chapters.slice(offset, offset + limit), totalChapters: volume.chapters.length }
+          })
+          return { workspace: { id: String(workspace.id), title: workspace.title }, revision: state.revision, volumes: value }
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_volume_upsert',
+        description: '创建或局部更新一个卷。volume_id 是稳定 ID；不存在则创建，存在则只更新 patch 中提供的字段。',
+        parameters: {
+          volume_id: { type: 'string', required: true },
+          patch: volumePatchToolSchema(),
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('卷已保存'),
+        finalizeContent: mutationFailureContent('volume patch'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: upsertVolume(current.project, args?.volume_id, args?.patch),
+          }))
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_chapter_upsert',
+        description: '在指定卷内创建或局部更新一章。适合逐章写入详细大纲，不需要重发整卷或全部章节。events 是字符串数组，类型专用信息放 customFields。',
+        parameters: {
+          volume_id: { type: 'string', required: true },
+          chapter_id: { type: 'string', required: true },
+          patch: chapterPatchToolSchema(),
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('章节大纲已保存'),
+        finalizeContent: mutationFailureContent('chapter patch'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: upsertChapter(current.project, args?.volume_id, args?.chapter_id, args?.patch),
+          }))
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_chapter_remove',
+        description: '删除结构化大纲中的指定章节。只在用户明确要求删除时调用。',
+        parameters: {
+          volume_id: { type: 'string', required: true },
+          chapter_id: { type: 'string', required: true },
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('章节已删除'),
+        finalizeContent: mutationFailureContent('chapter remove'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: removeChapter(current.project, args?.volume_id, args?.chapter_id),
+          }))
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_chapter_reorder',
+        description: '把指定章节移动到卷内的新下标。target_index 从 0 开始。',
+        parameters: {
+          volume_id: { type: 'string', required: true },
+          chapter_id: { type: 'string', required: true },
+          target_index: { type: 'integer', required: true },
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('章节顺序已更新'),
+        finalizeContent: mutationFailureContent('chapter reorder'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: reorderChapter(current.project, args?.volume_id, args?.chapter_id, args?.target_index),
+          }))
           return concludeStoppedMutation(result, exec)
         },
       }))

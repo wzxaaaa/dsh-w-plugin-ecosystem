@@ -3,8 +3,12 @@ const MAX_SHORT = 240
 const MAX_CHARACTERS = 80
 const MAX_RELATIONSHIPS = 240
 const MAX_PROGRESS = 500
+const MAX_VOLUMES = 40
+const MAX_CHAPTERS_PER_VOLUME = 500
+const MAX_SCENES_PER_CHAPTER = 100
+const MAX_CUSTOM_FIELDS = 100
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 export const PROJECT_EXPORT_FORMAT = 'dsh-w-noval-write/project'
 export const PROJECT_EXPORT_VERSION = 1
 export const WRITE_LINK_STORE_VERSION = 1
@@ -20,8 +24,10 @@ const PROJECT_KEYS = Object.freeze([
   'contentRating',
   'styleGuide',
   'constraints',
+  'genreProfile',
   'characters',
   'relationships',
+  'volumes',
   'world',
   'plot',
   'scene',
@@ -50,6 +56,17 @@ const SCENE_KEYS = Object.freeze([
   'sensoryAnchor', 'outcome', 'knowledgeChanges', 'propChanges', 'continuity', 'nextHook',
 ])
 const PROGRESS_KEYS = Object.freeze(['id', 'chapter', 'summary', 'canonChanges', 'openThreads', 'at'])
+const GENRE_PROFILE_KEYS = Object.freeze(['type', 'customFields'])
+const OUTLINE_SCENE_KEYS = Object.freeze([
+  'id', 'title', 'time', 'location', 'povCharacterId', 'participants', 'goal', 'conflict', 'beats',
+  'emotionalTurn', 'sensoryAnchor', 'outcome', 'knowledgeChanges', 'propChanges', 'continuity', 'nextHook',
+  'customFields',
+])
+const CHAPTER_KEYS = Object.freeze([
+  'id', 'number', 'title', 'targetWords', 'status', 'summary', 'locations', 'events', 'dialogueNotes',
+  'endingHook', 'scenes', 'customFields',
+])
+const VOLUME_KEYS = Object.freeze(['id', 'title', 'summary', 'status', 'chapters', 'customFields'])
 
 export const NOVEL_TOOL_RETRY_PROTOCOL = Object.freeze([
   'Before every mutation, call novel_read and copy its revision into expected_revision.',
@@ -57,6 +74,8 @@ export const NOVEL_TOOL_RETRY_PROTOCOL = Object.freeze([
   'If a novel tool reports INVALID_NOVEL_ARGUMENTS or schema validation fails, call novel_schema, rebuild the arguments to match it, and retry the failed tool once.',
   'Do not claim that data was saved until the mutation tool returns ok: true with a newer revision.',
   'Prefer novel_patch for focused changes. Use novel_write only when every existing project field will be preserved or intentionally replaced.',
+  'Use novel_character_patch, novel_relationship_patch, novel_volume_upsert, and novel_chapter_upsert for ID-targeted changes; do not resend whole arrays.',
+  'Genre-specific data belongs in customFields as string key/value pairs. Structured long-form outlines belong in volumes[].chapters[], not one long chapterPlan string.',
   'When the user requests a chapter file, call novel_save_chapter with the full prose. Never claim a file exists unless it returns ok: true and verified: true.',
 ])
 
@@ -88,9 +107,99 @@ function arraySchema(properties, required) {
   }
 }
 
+function customFieldsSchema(required = false) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: { type: 'string' },
+    description: 'Genre-specific free-form string fields. Keys are user-defined and preserved.',
+  }
+}
+
+export function characterPatchToolSchema({ required = true } = {}) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: false,
+    properties: {
+      ...schemaProperties(CHARACTER_KEYS.filter(key => key !== 'id'), false),
+      customFields: customFieldsSchema(),
+    },
+  }
+}
+
+export function relationshipPatchToolSchema({ required = true } = {}) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: false,
+    properties: {
+      ...schemaProperties(RELATIONSHIP_KEYS.filter(key => key !== 'id'), false),
+      customFields: customFieldsSchema(),
+    },
+  }
+}
+
+function outlineSceneToolSchema(required = false) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: false,
+    properties: {
+      ...schemaProperties(OUTLINE_SCENE_KEYS.filter(key => key !== 'customFields'), false),
+      id: { type: 'string', required: true },
+      customFields: customFieldsSchema(),
+    },
+  }
+}
+
+export function chapterToolSchema({ required = true, requireId = true } = {}) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: false,
+    properties: {
+      ...schemaProperties(CHAPTER_KEYS.filter(key => !['events', 'scenes', 'customFields'].includes(key)), false),
+      id: { type: 'string', ...(requireId ? { required: true } : {}) },
+      events: { type: 'array', items: { type: 'string' } },
+      scenes: { type: 'array', items: outlineSceneToolSchema() },
+      customFields: customFieldsSchema(),
+    },
+  }
+}
+
+export function chapterPatchToolSchema({ required = true } = {}) {
+  return chapterToolSchema({ required, requireId: false })
+}
+
+export function volumePatchToolSchema({ required = true } = {}) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: false,
+    properties: {
+      ...schemaProperties(['title', 'summary', 'status'], false),
+      customFields: customFieldsSchema(),
+    },
+  }
+}
+
+function volumeToolSchema(required = false) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: false,
+    properties: {
+      ...schemaProperties(['id', 'title', 'summary', 'status'], false),
+      id: { type: 'string', required: true },
+      chapters: { type: 'array', items: chapterToolSchema() },
+      customFields: customFieldsSchema(),
+    },
+  }
+}
+
 /** Build the exact DSH tool parameter schema for a complete project or partial patch. */
 export function projectToolSchema({ partial = false, required = true } = {}) {
-  const leafRequired = !partial
   return {
     type: 'object',
     required,
@@ -99,16 +208,34 @@ export function projectToolSchema({ partial = false, required = true } = {}) {
       ? 'Partial canonical novel project object. Omitted top-level fields are preserved.'
       : 'Complete canonical novel project object. Send this object directly; never stringify or wrap it.',
     properties: {
-      ...schemaProperties(['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints'], leafRequired),
-      characters: arraySchema(schemaProperties(CHARACTER_KEYS, true), leafRequired),
-      relationships: arraySchema(schemaProperties(RELATIONSHIP_KEYS, true), leafRequired),
-      world: recordSchema(WORLD_KEYS, leafRequired),
-      plot: recordSchema(PLOT_KEYS, leafRequired),
-      scene: recordSchema(SCENE_KEYS, leafRequired),
+      ...schemaProperties(['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints'], false),
+      genreProfile: {
+        ...volumeToolSchema(false),
+        properties: { type: { type: 'string' }, customFields: customFieldsSchema() },
+      },
+      characters: arraySchema({
+        ...schemaProperties(CHARACTER_KEYS, false),
+        id: { type: 'string', required: true },
+        name: { type: 'string', required: true },
+        customFields: customFieldsSchema(),
+      }, !partial),
+      relationships: arraySchema({
+        ...schemaProperties(RELATIONSHIP_KEYS, false),
+        id: { type: 'string', required: true },
+        fromId: { type: 'string', required: true },
+        toId: { type: 'string', required: true },
+        customFields: customFieldsSchema(),
+      }, !partial),
+      volumes: { type: 'array', items: volumeToolSchema(), ...(!partial ? { required: true } : {}) },
+      world: recordSchema(WORLD_KEYS, !partial),
+      plot: recordSchema(PLOT_KEYS, !partial),
+      scene: recordSchema(SCENE_KEYS, !partial),
       progress: arraySchema({
-        ...schemaProperties(PROGRESS_KEYS, true),
-      }, leafRequired),
-      notes: { type: 'string', ...(leafRequired ? { required: true } : {}) },
+        ...schemaProperties(PROGRESS_KEYS, false),
+        id: { type: 'string', required: true },
+        summary: { type: 'string', required: true },
+      }, !partial),
+      notes: { type: 'string' },
     },
   }
 }
@@ -128,6 +255,11 @@ export function novelToolContract() {
     projectSchema: projectToolSchema({ partial: false }),
     patchSchema: projectToolSchema({ partial: true }),
     scenePatchSchema: scenePatchToolSchema(),
+    chapterSchema: chapterToolSchema(),
+    characterPatchSchema: characterPatchToolSchema(),
+    relationshipPatchSchema: relationshipPatchToolSchema(),
+    volumePatchSchema: volumePatchToolSchema(),
+    chapterPatchSchema: chapterPatchToolSchema(),
     emptyProjectExample: defaultProject(),
     retryProtocol: [...NOVEL_TOOL_RETRY_PROTOCOL],
     manuscriptFileProtocol: {
@@ -174,6 +306,82 @@ function validateRecords(value, path, keys, complete, issues) {
   value.forEach((item, index) => validateRecord(item, `${path}[${index}]`, keys, complete, issues))
 }
 
+function validateCustomFields(value, path, issues) {
+  if (!isPlainObject(value)) {
+    issues.push(`${path} must be an object; received ${receivedType(value)}`)
+    return
+  }
+  for (const [key, fieldValue] of Object.entries(value)) {
+    if (key.trim() === '') issues.push(`${path} contains an empty key`)
+    if (typeof fieldValue !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(fieldValue)}`)
+  }
+}
+
+function validateFlexibleRecord(value, path, keys, requiredKeys, issues) {
+  if (!isPlainObject(value)) {
+    issues.push(`${path} must be an object; received ${receivedType(value)}`)
+    return
+  }
+  const allowed = new Set(keys)
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) issues.push(`${path}.${key} is not part of the canonical structure`)
+  }
+  for (const key of requiredKeys) {
+    if (!Object.hasOwn(value, key)) issues.push(`${path}.${key} is required`)
+  }
+  for (const key of keys) {
+    if (!Object.hasOwn(value, key)) continue
+    if (key === 'customFields') validateCustomFields(value[key], `${path}.customFields`, issues)
+    else if (typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
+  }
+}
+
+function validateOutlineScene(value, path, issues) {
+  validateFlexibleRecord(value, path, OUTLINE_SCENE_KEYS, ['id'], issues)
+}
+
+function validateChapter(value, path, issues) {
+  if (!isPlainObject(value)) {
+    issues.push(`${path} must be an object; received ${receivedType(value)}`)
+    return
+  }
+  const allowed = new Set(CHAPTER_KEYS)
+  for (const key of Object.keys(value)) if (!allowed.has(key)) issues.push(`${path}.${key} is not part of the canonical structure`)
+  if (!Object.hasOwn(value, 'id')) issues.push(`${path}.id is required`)
+  for (const key of CHAPTER_KEYS.filter(key => !['events', 'scenes', 'customFields'].includes(key))) {
+    if (Object.hasOwn(value, key) && typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
+  }
+  if (Object.hasOwn(value, 'events')) {
+    if (!Array.isArray(value.events)) issues.push(`${path}.events must be an array; received ${receivedType(value.events)}`)
+    else value.events.forEach((event, index) => {
+      if (typeof event !== 'string') issues.push(`${path}.events[${index}] must be a string; received ${receivedType(event)}`)
+    })
+  }
+  if (Object.hasOwn(value, 'scenes')) {
+    if (!Array.isArray(value.scenes)) issues.push(`${path}.scenes must be an array; received ${receivedType(value.scenes)}`)
+    else value.scenes.forEach((scene, index) => validateOutlineScene(scene, `${path}.scenes[${index}]`, issues))
+  }
+  if (Object.hasOwn(value, 'customFields')) validateCustomFields(value.customFields, `${path}.customFields`, issues)
+}
+
+function validateVolume(value, path, issues) {
+  if (!isPlainObject(value)) {
+    issues.push(`${path} must be an object; received ${receivedType(value)}`)
+    return
+  }
+  const allowed = new Set(VOLUME_KEYS)
+  for (const key of Object.keys(value)) if (!allowed.has(key)) issues.push(`${path}.${key} is not part of the canonical structure`)
+  if (!Object.hasOwn(value, 'id')) issues.push(`${path}.id is required`)
+  for (const key of ['id', 'title', 'summary', 'status']) {
+    if (Object.hasOwn(value, key) && typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
+  }
+  if (Object.hasOwn(value, 'chapters')) {
+    if (!Array.isArray(value.chapters)) issues.push(`${path}.chapters must be an array; received ${receivedType(value.chapters)}`)
+    else value.chapters.forEach((chapter, index) => validateChapter(chapter, `${path}.chapters[${index}]`, issues))
+  }
+  if (Object.hasOwn(value, 'customFields')) validateCustomFields(value.customFields, `${path}.customFields`, issues)
+}
+
 /** Validate model-facing project input before any destructive normalization or write. */
 export function projectShapeIssues(value, { partial = false } = {}) {
   const issues = []
@@ -188,7 +396,7 @@ export function projectShapeIssues(value, { partial = false } = {}) {
     if (!allowed.has(key)) issues.push(`project.${key} is not part of the canonical structure`)
   }
   if (partial && Object.keys(value).length === 0) issues.push('project patch must change at least one canonical field')
-  for (const key of PROJECT_KEYS) {
+  for (const key of ['title', 'characters', 'relationships', 'world', 'plot', 'scene', 'progress']) {
     if (!partial && !Object.hasOwn(value, key)) issues.push(`project.${key} is required`)
   }
   for (const key of ['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints', 'notes']) {
@@ -196,12 +404,50 @@ export function projectShapeIssues(value, { partial = false } = {}) {
       issues.push(`project.${key} must be a string; received ${receivedType(value[key])}`)
     }
   }
-  if (Object.hasOwn(value, 'characters')) validateRecords(value.characters, 'project.characters', CHARACTER_KEYS, true, issues)
-  if (Object.hasOwn(value, 'relationships')) validateRecords(value.relationships, 'project.relationships', RELATIONSHIP_KEYS, true, issues)
-  if (Object.hasOwn(value, 'world')) validateRecord(value.world, 'project.world', WORLD_KEYS, !partial, issues)
-  if (Object.hasOwn(value, 'plot')) validateRecord(value.plot, 'project.plot', PLOT_KEYS, !partial, issues)
-  if (Object.hasOwn(value, 'scene')) validateRecord(value.scene, 'project.scene', SCENE_KEYS, !partial, issues)
-  if (Object.hasOwn(value, 'progress')) validateRecords(value.progress, 'project.progress', PROGRESS_KEYS, true, issues)
+  if (Object.hasOwn(value, 'genreProfile')) {
+    if (!isPlainObject(value.genreProfile)) issues.push(`project.genreProfile must be an object; received ${receivedType(value.genreProfile)}`)
+    else {
+      for (const key of Object.keys(value.genreProfile)) if (!GENRE_PROFILE_KEYS.includes(key)) issues.push(`project.genreProfile.${key} is not part of the canonical structure`)
+      if (Object.hasOwn(value.genreProfile, 'type') && typeof value.genreProfile.type !== 'string') issues.push(`project.genreProfile.type must be a string; received ${receivedType(value.genreProfile.type)}`)
+      if (Object.hasOwn(value.genreProfile, 'customFields')) validateCustomFields(value.genreProfile.customFields, 'project.genreProfile.customFields', issues)
+    }
+  }
+  if (Object.hasOwn(value, 'characters')) {
+    if (!Array.isArray(value.characters)) issues.push(`project.characters must be an array; received ${receivedType(value.characters)}`)
+    else value.characters.forEach((item, index) => validateFlexibleRecord(item, `project.characters[${index}]`, [...CHARACTER_KEYS, 'customFields'], ['id', 'name'], issues))
+  }
+  if (Object.hasOwn(value, 'relationships')) {
+    if (!Array.isArray(value.relationships)) issues.push(`project.relationships must be an array; received ${receivedType(value.relationships)}`)
+    else value.relationships.forEach((item, index) => validateFlexibleRecord(item, `project.relationships[${index}]`, [...RELATIONSHIP_KEYS, 'customFields'], ['id', 'fromId', 'toId'], issues))
+    if (Array.isArray(value.characters) && Array.isArray(value.relationships)) {
+      const ids = new Set(value.characters.map(character => isPlainObject(character) ? text(character.id, 100) : '').filter(Boolean))
+      const names = new Map()
+      for (const character of value.characters) {
+        const name = isPlainObject(character) ? text(character.name, MAX_SHORT) : ''
+        if (name) names.set(name, (names.get(name) || 0) + 1)
+      }
+      const resolves = endpoint => ids.has(endpoint) || names.get(endpoint) === 1
+      value.relationships.forEach((relationship, index) => {
+        if (!isPlainObject(relationship)) return
+        const from = text(relationship.fromId, 100)
+        const to = text(relationship.toId, 100)
+        if (from && !resolves(from)) issues.push(`project.relationships[${index}].fromId does not identify a unique character`)
+        if (to && !resolves(to)) issues.push(`project.relationships[${index}].toId does not identify a unique character`)
+        if (from && to && from === to) issues.push(`project.relationships[${index}] must connect two distinct characters`)
+      })
+    }
+  }
+  if (Object.hasOwn(value, 'volumes')) {
+    if (!Array.isArray(value.volumes)) issues.push(`project.volumes must be an array; received ${receivedType(value.volumes)}`)
+    else value.volumes.forEach((volume, index) => validateVolume(volume, `project.volumes[${index}]`, issues))
+  }
+  if (Object.hasOwn(value, 'world')) validateRecord(value.world, 'project.world', WORLD_KEYS, false, issues)
+  if (Object.hasOwn(value, 'plot')) validateRecord(value.plot, 'project.plot', PLOT_KEYS, false, issues)
+  if (Object.hasOwn(value, 'scene')) validateRecord(value.scene, 'project.scene', SCENE_KEYS, false, issues)
+  if (Object.hasOwn(value, 'progress')) {
+    if (!Array.isArray(value.progress)) issues.push(`project.progress must be an array; received ${receivedType(value.progress)}`)
+    else value.progress.forEach((item, index) => validateFlexibleRecord(item, `project.progress[${index}]`, PROGRESS_KEYS, ['id', 'summary'], issues))
+  }
   return issues
 }
 
@@ -244,8 +490,13 @@ export function defaultProject() {
     contentRating: '',
     styleGuide: '',
     constraints: '',
+    genreProfile: {
+      type: '',
+      customFields: {},
+    },
     characters: [],
     relationships: [],
+    volumes: [],
     world: {
       era: '',
       chronology: '',
@@ -328,6 +579,7 @@ function normalizeCharacter(value, index) {
     voice: text(item.voice),
     habits: text(item.habits),
     arc: text(item.arc),
+    customFields: normalizeCustomFields(item.customFields),
   }
 }
 
@@ -352,6 +604,7 @@ function normalizeRelationship(value, index, characterIds, characterReferences) 
     tension: text(item.tension),
     turningPoints: text(item.turningPoints),
     futureDirection: text(item.futureDirection),
+    customFields: normalizeCustomFields(item.customFields),
   }
 }
 
@@ -364,6 +617,89 @@ function normalizeProgress(value, index) {
     canonChanges: text(item.canonChanges),
     openThreads: text(item.openThreads),
     at: typeof item.at === 'string' && item.at.trim() !== '' ? item.at : new Date(0).toISOString(),
+  }
+}
+
+function normalizeCustomFields(value) {
+  if (!isPlainObject(value)) return {}
+  const fields = {}
+  for (const [rawKey, rawValue] of Object.entries(value).slice(0, MAX_CUSTOM_FIELDS)) {
+    const key = text(rawKey, MAX_SHORT)
+    if (key && typeof rawValue === 'string') fields[key] = text(rawValue)
+  }
+  return fields
+}
+
+export function defaultOutlineScene() {
+  return {
+    id: '', title: '', time: '', location: '', povCharacterId: '', participants: '', goal: '', conflict: '',
+    beats: '', emotionalTurn: '', sensoryAnchor: '', outcome: '', knowledgeChanges: '', propChanges: '',
+    continuity: '', nextHook: '', customFields: {},
+  }
+}
+
+export function defaultChapter() {
+  return {
+    id: '', number: '', title: '', targetWords: '', status: 'planned', summary: '', locations: '', events: [],
+    dialogueNotes: '', endingHook: '', scenes: [], customFields: {},
+  }
+}
+
+export function defaultVolume() {
+  return { id: '', title: '', summary: '', status: 'planned', chapters: [], customFields: {} }
+}
+
+function normalizeOutlineScene(value, index, characterReferences) {
+  const item = isPlainObject(value) ? value : {}
+  const base = defaultOutlineScene()
+  return {
+    ...base,
+    ...Object.fromEntries(OUTLINE_SCENE_KEYS.filter(key => !['id', 'povCharacterId', 'customFields'].includes(key)).map(key => [key, text(item[key])])),
+    id: id(item.id, 'scene', index),
+    povCharacterId: characterReferences.get(text(item.povCharacterId, 100)) || '',
+    customFields: normalizeCustomFields(item.customFields),
+  }
+}
+
+function normalizeChapter(value, index, characterReferences) {
+  const item = isPlainObject(value) ? value : {}
+  return {
+    id: id(item.id, 'chapter', index),
+    number: text(item.number, MAX_SHORT),
+    title: text(item.title, MAX_SHORT),
+    targetWords: text(item.targetWords, MAX_SHORT),
+    status: text(item.status, MAX_SHORT) || 'planned',
+    summary: text(item.summary),
+    locations: text(item.locations),
+    events: Array.isArray(item.events) ? item.events.slice(0, 200).map(event => text(event)).filter(Boolean) : [],
+    dialogueNotes: text(item.dialogueNotes),
+    endingHook: text(item.endingHook),
+    scenes: Array.isArray(item.scenes)
+      ? item.scenes.slice(0, MAX_SCENES_PER_CHAPTER).map((scene, sceneIndex) => normalizeOutlineScene(scene, sceneIndex, characterReferences))
+      : [],
+    customFields: normalizeCustomFields(item.customFields),
+  }
+}
+
+function normalizeVolume(value, index, characterReferences) {
+  const item = isPlainObject(value) ? value : {}
+  const chapters = Array.isArray(item.chapters)
+    ? item.chapters.slice(0, MAX_CHAPTERS_PER_VOLUME).map((chapter, chapterIndex) => normalizeChapter(chapter, chapterIndex, characterReferences))
+    : []
+  const used = new Set()
+  for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+    let candidate = chapters[chapterIndex].id
+    while (used.has(candidate)) candidate = `${candidate}-${chapterIndex + 1}`
+    chapters[chapterIndex].id = candidate
+    used.add(candidate)
+  }
+  return {
+    id: id(item.id, 'volume', index),
+    title: text(item.title, MAX_SHORT),
+    summary: text(item.summary),
+    status: text(item.status, MAX_SHORT) || 'planned',
+    chapters,
+    customFields: normalizeCustomFields(item.customFields),
   }
 }
 
@@ -381,13 +717,18 @@ export function normalizeProject(value) {
     used.add(candidate)
   }
   const characterReferences = new Map()
+  const characterNameCounts = new Map()
+  for (const source of Array.isArray(input.characters) ? input.characters : []) {
+    const rawName = isPlainObject(source) ? text(source.name, MAX_SHORT) : ''
+    if (rawName) characterNameCounts.set(rawName, (characterNameCounts.get(rawName) || 0) + 1)
+  }
   for (let index = 0; index < characters.length; index += 1) {
     const source = input.characters[index]
     const rawId = source && typeof source === 'object' ? text(source.id, 100) : ''
     const rawName = source && typeof source === 'object' ? text(source.name, MAX_SHORT) : ''
     characterReferences.set(characters[index].id, characters[index].id)
     if (rawId && !characterReferences.has(rawId)) characterReferences.set(rawId, characters[index].id)
-    if (rawName && !characterReferences.has(rawName)) characterReferences.set(rawName, characters[index].id)
+    if (rawName && characterNameCounts.get(rawName) === 1) characterReferences.set(rawName, characters[index].id)
   }
   const relationships = Array.isArray(input.relationships)
     ? input.relationships.slice(0, MAX_RELATIONSHIPS).map((item, index) => normalizeRelationship(item, index, used, characterReferences))
@@ -410,8 +751,15 @@ export function normalizeProject(value) {
     contentRating: text(input.contentRating, MAX_SHORT),
     styleGuide: text(input.styleGuide),
     constraints: text(input.constraints),
+    genreProfile: {
+      type: text(isPlainObject(input.genreProfile) ? input.genreProfile.type : '', MAX_SHORT),
+      customFields: normalizeCustomFields(isPlainObject(input.genreProfile) ? input.genreProfile.customFields : null),
+    },
     characters,
     relationships,
+    volumes: Array.isArray(input.volumes)
+      ? input.volumes.slice(0, MAX_VOLUMES).map((volume, index) => normalizeVolume(volume, index, characterReferences))
+      : [],
     world: Object.fromEntries(Object.keys(base.world).map(key => [key, text(world[key])])),
     plot: Object.fromEntries(Object.keys(base.plot).map(key => [key, text(plot[key])])),
     scene: {
@@ -490,8 +838,19 @@ export function mergeProject(currentValue, patchValue) {
   for (const key of ['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints', 'notes']) {
     if (Object.hasOwn(patch, key)) next[key] = patch[key]
   }
+  if (Object.hasOwn(patch, 'genreProfile')) {
+    next.genreProfile = {
+      ...current.genreProfile,
+      ...patch.genreProfile,
+      customFields: {
+        ...current.genreProfile.customFields,
+        ...(isPlainObject(patch.genreProfile?.customFields) ? patch.genreProfile.customFields : {}),
+      },
+    }
+  }
   if (Object.hasOwn(patch, 'characters')) next.characters = patch.characters
   if (Object.hasOwn(patch, 'relationships')) next.relationships = patch.relationships
+  if (Object.hasOwn(patch, 'volumes')) next.volumes = patch.volumes
   if (Object.hasOwn(patch, 'progress')) next.progress = patch.progress
   if (patch.world && typeof patch.world === 'object' && !Array.isArray(patch.world)) {
     next.world = { ...current.world, ...patch.world }
@@ -503,6 +862,132 @@ export function mergeProject(currentValue, patchValue) {
     next.scene = { ...current.scene, ...patch.scene }
   }
   return normalizeProject(next)
+}
+
+function mergeCustomFields(current, patch) {
+  if (!isPlainObject(patch)) return current
+  const next = { ...current }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === '') delete next[key]
+    else next[key] = value
+  }
+  return next
+}
+
+/** Patch one existing character without resending the complete character array. */
+export function patchCharacterById(projectValue, characterId, patchValue) {
+  const project = normalizeProject(projectValue)
+  const key = text(characterId, 100)
+  const index = project.characters.findIndex(character => character.id === key)
+  if (index < 0) throw new Error(`unknown character '${key}'`)
+  const patch = isPlainObject(patchValue) ? patchValue : {}
+  if (Object.keys(patch).length === 0) throw new Error('character patch must not be empty')
+  const characters = [...project.characters]
+  characters[index] = {
+    ...characters[index],
+    ...patch,
+    id: characters[index].id,
+    customFields: mergeCustomFields(characters[index].customFields, patch.customFields),
+  }
+  const candidate = { ...project, characters }
+  assertProjectShape(candidate, { partial: false })
+  return normalizeProject(candidate)
+}
+
+/** Patch one existing relationship without resending the complete relationship array. */
+export function patchRelationshipById(projectValue, relationshipId, patchValue) {
+  const project = normalizeProject(projectValue)
+  const key = text(relationshipId, 100)
+  const index = project.relationships.findIndex(relationship => relationship.id === key)
+  if (index < 0) throw new Error(`unknown relationship '${key}'`)
+  const patch = isPlainObject(patchValue) ? patchValue : {}
+  if (Object.keys(patch).length === 0) throw new Error('relationship patch must not be empty')
+  const relationships = [...project.relationships]
+  relationships[index] = {
+    ...relationships[index],
+    ...patch,
+    id: relationships[index].id,
+    customFields: mergeCustomFields(relationships[index].customFields, patch.customFields),
+  }
+  const candidate = { ...project, relationships }
+  assertProjectShape(candidate, { partial: false })
+  return normalizeProject(candidate)
+}
+
+/** Create or patch a volume by stable id. */
+export function upsertVolume(projectValue, volumeId, patchValue) {
+  const project = normalizeProject(projectValue)
+  const key = id(volumeId, 'volume', project.volumes.length)
+  const patch = isPlainObject(patchValue) ? patchValue : {}
+  if (Object.keys(patch).length === 0) throw new Error('volume patch must not be empty')
+  const volumes = [...project.volumes]
+  const index = volumes.findIndex(volume => volume.id === key)
+  const current = index >= 0 ? volumes[index] : { ...defaultVolume(), id: key }
+  const next = {
+    ...current,
+    ...patch,
+    id: key,
+    chapters: current.chapters,
+    customFields: mergeCustomFields(current.customFields, patch.customFields),
+  }
+  if (index >= 0) volumes[index] = next
+  else volumes.push(next)
+  const candidate = { ...project, volumes }
+  assertProjectShape(candidate, { partial: false })
+  return normalizeProject(candidate)
+}
+
+/** Create or patch a chapter inside one volume by stable id. */
+export function upsertChapter(projectValue, volumeId, chapterId, patchValue) {
+  const project = normalizeProject(projectValue)
+  const volumeKey = text(volumeId, 100)
+  const volumeIndex = project.volumes.findIndex(volume => volume.id === volumeKey)
+  if (volumeIndex < 0) throw new Error(`unknown volume '${volumeKey}'`)
+  const chapterKey = id(chapterId, 'chapter', project.volumes[volumeIndex].chapters.length)
+  const patch = isPlainObject(patchValue) ? patchValue : {}
+  if (Object.keys(patch).length === 0) throw new Error('chapter patch must not be empty')
+  const volumes = [...project.volumes]
+  const chapters = [...volumes[volumeIndex].chapters]
+  const chapterIndex = chapters.findIndex(chapter => chapter.id === chapterKey)
+  const current = chapterIndex >= 0 ? chapters[chapterIndex] : { ...defaultChapter(), id: chapterKey }
+  const next = {
+    ...current,
+    ...patch,
+    id: chapterKey,
+    customFields: mergeCustomFields(current.customFields, patch.customFields),
+  }
+  if (chapterIndex >= 0) chapters[chapterIndex] = next
+  else chapters.push(next)
+  volumes[volumeIndex] = { ...volumes[volumeIndex], chapters }
+  const candidate = { ...project, volumes }
+  assertProjectShape(candidate, { partial: false })
+  return normalizeProject(candidate)
+}
+
+export function removeChapter(projectValue, volumeId, chapterId) {
+  const project = normalizeProject(projectValue)
+  const volumeIndex = project.volumes.findIndex(volume => volume.id === text(volumeId, 100))
+  if (volumeIndex < 0) throw new Error(`unknown volume '${text(volumeId, 100)}'`)
+  const volumes = [...project.volumes]
+  const chapters = volumes[volumeIndex].chapters.filter(chapter => chapter.id !== text(chapterId, 100))
+  if (chapters.length === volumes[volumeIndex].chapters.length) throw new Error(`unknown chapter '${text(chapterId, 100)}'`)
+  volumes[volumeIndex] = { ...volumes[volumeIndex], chapters }
+  return normalizeProject({ ...project, volumes })
+}
+
+export function reorderChapter(projectValue, volumeId, chapterId, targetIndexValue) {
+  const project = normalizeProject(projectValue)
+  const volumeIndex = project.volumes.findIndex(volume => volume.id === text(volumeId, 100))
+  if (volumeIndex < 0) throw new Error(`unknown volume '${text(volumeId, 100)}'`)
+  const volumes = [...project.volumes]
+  const chapters = [...volumes[volumeIndex].chapters]
+  const sourceIndex = chapters.findIndex(chapter => chapter.id === text(chapterId, 100))
+  if (sourceIndex < 0) throw new Error(`unknown chapter '${text(chapterId, 100)}'`)
+  const targetIndex = Math.max(0, Math.min(chapters.length - 1, Number.isSafeInteger(targetIndexValue) ? targetIndexValue : sourceIndex))
+  const [chapter] = chapters.splice(sourceIndex, 1)
+  chapters.splice(targetIndex, 0, chapter)
+  volumes[volumeIndex] = { ...volumes[volumeIndex], chapters }
+  return normalizeProject({ ...project, volumes })
 }
 
 /** Advance the story ledger and optionally move the current-scene cursor. */
@@ -585,7 +1070,8 @@ export function normalizeWriteLinkStore(value) {
 export function writeLinkForSession(store, sessionId) {
   const key = String(sessionId ?? '').trim()
   if (!key) return null
-  return normalizeWriteLinkStore(store).links[key] ?? null
+  if (!store || typeof store !== 'object' || !store.links || typeof store.links !== 'object') return null
+  return normalizeWriteLink(store.links[key])
 }
 
 export function updateWriteLinkStore(store, sessionId, nextValue) {
@@ -612,6 +1098,10 @@ function add(lines, label, value) {
   if (rendered) lines.push(`- ${label}: ${rendered}`)
 }
 
+function addCustomFields(lines, fields) {
+  for (const [key, value] of Object.entries(fields || {})) add(lines, key, value)
+}
+
 export function projectPrompt(projectValue, maxChars = 12_000) {
   const project = normalizeProject(projectValue)
   const lines = ['# Novel writing workspace', '', 'The right-side Novel Writing panel is the source of truth for this book. Preserve its facts and continuity.']
@@ -625,6 +1115,8 @@ export function projectPrompt(projectValue, maxChars = 12_000) {
   add(lines, 'Content boundary / rating', project.contentRating)
   add(lines, 'Style guide', project.styleGuide)
   add(lines, 'Creative constraints', project.constraints)
+  add(lines, 'Genre profile', project.genreProfile.type)
+  addCustomFields(lines, project.genreProfile.customFields)
   if (project.characters.length > 0) {
     lines.push('', '## Characters')
     for (const character of project.characters) {
@@ -649,6 +1141,7 @@ export function projectPrompt(projectValue, maxChars = 12_000) {
       add(details, 'voice', character.voice)
       add(details, 'habits', character.habits)
       add(details, 'arc', character.arc)
+      addCustomFields(details, character.customFields)
       lines.push(`- ${character.name || character.id}${details.length ? ` — ${details.map(item => item.slice(2)).join('; ')}` : ''}`)
     }
   }
@@ -663,7 +1156,8 @@ export function projectPrompt(projectValue, maxChars = 12_000) {
         relation.publicFace, relation.privateTruth, relation.sharedSecret, relation.tension,
         relation.turningPoints, relation.futureDirection,
       ].map(compact).filter(Boolean).join('; ')
-      lines.push(`- ${from} → ${to}${details ? `: ${details}` : ''}`)
+      const custom = Object.entries(relation.customFields || {}).map(([key, value]) => `${key}: ${compact(value)}`).filter(Boolean).join('; ')
+      lines.push(`- ${from} → ${to}${details || custom ? `: ${[details, custom].filter(Boolean).join('; ')}` : ''}`)
     }
   }
   const worldLines = []
@@ -719,6 +1213,24 @@ export function projectPrompt(projectValue, maxChars = 12_000) {
   add(sceneLines, 'Continuity ledger', project.scene.continuity)
   add(sceneLines, 'Next hook', project.scene.nextHook)
   if (sceneLines.length) lines.push('', '## Current scene', ...sceneLines)
+  if (project.volumes.length > 0) {
+    lines.push('', '## Structured outline')
+    let remainingChapters = 80
+    let outlineTruncated = false
+    for (const volume of project.volumes) {
+      lines.push(`- Volume ${volume.title || volume.id}${volume.summary ? `: ${compact(volume.summary)}` : ''}`)
+      for (const chapter of volume.chapters) {
+        if (remainingChapters <= 0) {
+          outlineTruncated = true
+          break
+        }
+        const details = [chapter.status, chapter.targetWords ? `${chapter.targetWords} words` : '', compact(chapter.summary), chapter.endingHook ? `hook: ${compact(chapter.endingHook)}` : ''].filter(Boolean).join('; ')
+        lines.push(`  - ${chapter.number || ''} ${chapter.title || chapter.id}${details ? ` — ${details}` : ''}`)
+        remainingChapters -= 1
+      }
+    }
+    if (outlineTruncated) lines.push('  - [More chapters omitted; use novel_outline_read with volume_id, offset, and limit.]')
+  }
   if (project.progress.length > 0) {
     lines.push('', '## Recent story progress')
     for (const entry of project.progress.slice(-12)) {
@@ -735,7 +1247,7 @@ export function projectPrompt(projectValue, maxChars = 12_000) {
     '- Draft requested prose directly; preserve viewpoint, voice, causality, and continuity.',
     '- If the user asks to create/save/export a chapter file, call novel_save_chapter with the complete prose. Project mutations do not create manuscript files.',
     '- Never say a file was created or provide a path unless novel_save_chapter returned ok: true and verified: true. Report its exact returned path, bytes, and sha256.',
-    '- Durable canon and story progress must be written back with novel_read, novel_patch, novel_write, or novel_advance.',
+    '- Durable canon and story progress must be written back with the novel tools. Use outline/character/relationship tools for targeted changes instead of replacing arrays.',
     '- Before every mutation, novel_read; pass its exact revision as expected_revision.',
     '- Object arguments are direct JSON objects, never strings, Markdown, or nested outer arguments.',
     '- Prefer novel_patch. novel_write is complete canon replacement and preserves progress unless replace_progress is true.',

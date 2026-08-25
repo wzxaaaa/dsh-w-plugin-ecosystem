@@ -42,10 +42,19 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 | `novel_read` | 读取完整项目或指定部分 |
 | `novel_save_chapter` | 把完整章节正文原子写入工作区，并回读校验路径、字节数和 SHA-256 |
 | `novel_patch` | 自由局部修改；对象部分深度合并，提供的数组整体替换 |
+| `novel_character_patch` | 按角色 ID 局部更新一张角色卡，不重发角色数组 |
+| `novel_relationship_patch` | 按关系 ID 局部更新关系线，并校验端点 |
+| `novel_outline_read` | 按卷、章节和范围读取结构化大纲 |
+| `novel_volume_upsert` | 按稳定 ID 创建或更新一卷 |
+| `novel_chapter_upsert` | 按稳定 ID 创建或更新一章 |
+| `novel_chapter_remove` | 删除指定章节 |
+| `novel_chapter_reorder` | 调整章节在卷内的顺序 |
 | `novel_write` | 完整重写项目，适合大规模重构 |
 | `novel_advance` | 追加剧情进展、永久设定变化、待续线索，并可更新当前场景 |
 
 `novel_read` 会把当前数据、revision、权威结构和重试协议一并返回给模型。所有写工具的对象参数都使用完整嵌套 JSON Schema；`project`、`patch` 和 `scene` 必须是直接 JSON 对象，不能是 JSON 字符串、Markdown 或再次包裹的整套工具参数。
+
+0.8.0 将项目升级到 schema v4：新增题材配置和各层 `customFields`，加入结构化的卷—章—场景大纲，以及角色、关系、卷和章节的按 ID 局部工具。旧 schema v3 项目读取时会自动补齐新结构，不需要手工迁移；原有 `plot.chapterPlan` 与 `plot.outline` 保留为兼容概览字段。角色和关系不再要求模型为每个非核心字段提交空字符串，重名角色不能再通过姓名被静默绑定到错误关系。右侧工作台新增“大纲”Tab，并按工作区暂存未保存草稿。
 
 0.7.2 将 `/write` 的会话绑定迁移到插件自有的原子持久化文件，避免第三方事件导致旧版 Harness 拒绝加载会话；输入栏状态通过插件远程接口自动同步。工作区共享的小说框架存储方式不变。
 
@@ -54,6 +63,8 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 工作台的数据结构包括：
 
 - 项目页增加目标读者、内容边界、文风指南和创作约束。
+- 项目、角色、关系、卷、章和大纲场景都支持自由命名的 `customFields`，可承载题材专用路线、阶段、线索、境界或其他数据。
+- 大纲页按卷、章和场景保存标题、字数、状态、概要、事件列表、对话备注、收束钩子与场景细纲；长篇大纲不再挤进一个字符串。
 - 角色卡按身份、人物画像、欲望压力、能力信息、表现与弧光分组，覆盖别名、职业社会位置、现状、背景、动机、失败代价、能力弱点、认知、关键物品和行为习惯。
 - 关系页明确 A → B 的方向，增加状态、共同历史、权力交换、公开层、真实层、共同秘密、关系转折和未来方向；角色端点无效或自指时会直接警告。
 - 世界观按时间空间、制度资源、文化认知分组；情节按戏剧核心、主线结构、支线伏笔和节奏分组；场景按坐标、戏剧执行、状态变化分组。
@@ -125,7 +136,7 @@ $DSH_HOME/noval-write/session-links.json
 3. `dsh-w-noval-write`
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-noval-write-0.7.2.tgz
+dsh plugin --profile web add .\dsh-w-noval-write-0.8.0.tgz
 ```
 
 缺少知识库时，项目工作台与 AI 数据工具不受影响，`/write` 会明确报告知识库未挂载。
