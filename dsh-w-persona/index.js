@@ -34,6 +34,14 @@ import {
   dialoguePresetTurns,
   normalizeDialoguePreset,
 } from './dialogue-preset-core.js'
+import {
+  defaultPersonaTemplateLibrary,
+  deletePersonaTemplate,
+  matchingPersonaTemplateId,
+  normalizePersonaTemplateLibrary,
+  savePersonaTemplate,
+} from './persona-template-core.js'
+import { updatePersonaPatch } from './persona-patch-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -74,10 +82,12 @@ var __esDecorate = function (ctor, descriptorIn, decorators, contextIn, initiali
 const PATCH_FILE = 'cordis.patch.yml'
 const DEFAULT_STATE_FILE = '.dsh-w-persona-default.txt'
 const DIALOGUE_STATE_FILE = '.dsh-w-persona-dialogue.json'
+const TEMPLATE_STATE_FILE = '.dsh-w-persona-templates.json'
 const PROMPT_ROW_ID = 'system-prompt'
 const PERSONA_SECTION = 'deployment:persona'
 const MAX_PERSONA_BYTES = 1024 * 1024
 const MAX_DIALOGUE_BYTES = 1024 * 1024
+const MAX_TEMPLATE_LIBRARY_BYTES = 16 * 1024 * 1024
 const PATCH_LOCK_SUFFIX = '.dsh-w.lock'
 const PATCH_LOCK_STALE_MS = 30_000
 const PATCH_LOCK_TIMEOUT_MS = 10_000
@@ -179,44 +189,16 @@ function profileEntryId(entryId) {
   return entryId.startsWith(includePrefix) ? entryId.slice(includePrefix.length) : entryId
 }
 
-function updatePersonaPatch(data, text, defaultText) {
-  const next = []
-  let targetIndex = -1
-  for (const row of data) {
-    if (!row || row.id !== PROMPT_ROW_ID) {
-      next.push(row)
-      continue
-    }
-    const preserved = { ...row }
-    if (preserved.config != null && (typeof preserved.config !== 'object' || Array.isArray(preserved.config))) {
-      throw new Error('system-prompt config must be an object; refusing to overwrite it')
-    }
-    const config = preserved.config ? { ...preserved.config } : {}
-    delete config.persona
-    if (Object.keys(config).length > 0) preserved.config = config
-    else delete preserved.config
-    if (Object.keys(preserved).some(key => key !== 'id')) {
-      targetIndex = next.length
-      next.push(preserved)
-    }
-  }
-  if (text !== defaultText) {
-    if (targetIndex === -1) {
-      next.push({ id: PROMPT_ROW_ID, config: { persona: text } })
-    } else {
-      const target = next[targetIndex]
-      next[targetIndex] = { ...target, config: { ...(target.config || {}), persona: text } }
-    }
-  }
-  return next
-}
-
 let PersonaManagerGateway = (() => {
   let _classSuper = TypertRemoteService
   let _instanceExtraInitializers = []
   let _getState_decorators
   let _save_decorators
   let _saveDialoguePreset_decorators
+  let _saveConfiguration_decorators
+  let _saveTemplate_decorators
+  let _deleteTemplate_decorators
+  let _applyTemplate_decorators
   return class PersonaManagerGateway extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0
@@ -238,6 +220,30 @@ let PersonaManagerGateway = (() => {
         access: { has: (obj) => 'saveDialoguePreset' in obj, get: (obj) => obj.saveDialoguePreset },
         metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _saveConfiguration_decorators = [Remote('saveConfiguration')]
+      __esDecorate(this, null, _saveConfiguration_decorators, {
+        kind: 'method', name: 'saveConfiguration', static: false, private: false,
+        access: { has: (obj) => 'saveConfiguration' in obj, get: (obj) => obj.saveConfiguration },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _saveTemplate_decorators = [Remote('saveTemplate')]
+      __esDecorate(this, null, _saveTemplate_decorators, {
+        kind: 'method', name: 'saveTemplate', static: false, private: false,
+        access: { has: (obj) => 'saveTemplate' in obj, get: (obj) => obj.saveTemplate },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _deleteTemplate_decorators = [Remote('deleteTemplate')]
+      __esDecorate(this, null, _deleteTemplate_decorators, {
+        kind: 'method', name: 'deleteTemplate', static: false, private: false,
+        access: { has: (obj) => 'deleteTemplate' in obj, get: (obj) => obj.deleteTemplate },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _applyTemplate_decorators = [Remote('applyTemplate')]
+      __esDecorate(this, null, _applyTemplate_decorators, {
+        kind: 'method', name: 'applyTemplate', static: false, private: false,
+        access: { has: (obj) => 'applyTemplate' in obj, get: (obj) => obj.applyTemplate },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
@@ -253,6 +259,7 @@ let PersonaManagerGateway = (() => {
       // setting changes therefore affect new conversations without rewriting
       // the context of conversations already in progress.
       this._sessionDialoguePresets = new Map()
+      this._mutationTail = Promise.resolve()
 
       // The `system-prompt` config override alone is NOT enough: every shipped
       // agent preset mounts its own `@deepseek-ai/dsh-persona` row that SHADOWS
@@ -331,6 +338,11 @@ let PersonaManagerGateway = (() => {
       return join(this.profileDir(), DIALOGUE_STATE_FILE)
     }
 
+    /** Path of the profile-local reusable persona template library. */
+    templateStatePath() {
+      return join(this.profileDir(), TEMPLATE_STATE_FILE)
+    }
+
     /** Find the loader entry of the `system-prompt` row (any expanded id form). */
     findPromptEntry() {
       for (const entry of this.ctx.loader.entries()) {
@@ -399,6 +411,24 @@ let PersonaManagerGateway = (() => {
       return normalizeDialoguePreset(JSON.parse(raw))
     }
 
+    async readTemplateLibrary() {
+      let raw
+      try {
+        raw = await readFile(this.templateStatePath(), 'utf8')
+      } catch (error) {
+        if (error && error.code === 'ENOENT') return defaultPersonaTemplateLibrary()
+        throw error
+      }
+      if (raw.trim() === '') return defaultPersonaTemplateLibrary()
+      return normalizePersonaTemplateLibrary(JSON.parse(raw))
+    }
+
+    serializeMutation(callback) {
+      const operation = this._mutationTail.then(callback)
+      this._mutationTail = operation.then(() => {}, () => {})
+      return operation
+    }
+
     async getSessionDialoguePreset(sessionId) {
       const key = String(sessionId ?? '')
       if (this._sessionDialoguePresets.has(key)) return this._sessionDialoguePresets.get(key)
@@ -408,36 +438,124 @@ let PersonaManagerGateway = (() => {
     }
 
     async getState() {
-      const custom = await this.getCustomPersona()
-      const defaultText = await this.readDefaultPersona()
+      const [custom, defaultText, dialoguePreset, library] = await Promise.all([
+        this.getCustomPersona(),
+        this.readDefaultPersona(),
+        this.readDialoguePreset(),
+        this.readTemplateLibrary(),
+      ])
+      const current = custom ?? defaultText
       return {
-        current: custom ?? defaultText,
+        current,
         defaultText,
-        dialoguePreset: await this.readDialoguePreset(),
+        dialoguePreset,
+        templates: library.templates,
+        activeTemplateId: matchingPersonaTemplateId(library, current, dialoguePreset),
       }
     }
 
-    async save(text) {
+    validateConfiguration(text, value) {
       if (typeof text !== 'string') throw new Error('persona text must be a string')
       if (Buffer.byteLength(text, 'utf8') > MAX_PERSONA_BYTES) throw new Error('persona text exceeds the 1 MB limit')
-      const defaultText = await this.readDefaultPersona()
-      await mutatePatchArray(this.patchPath(), data => updatePersonaPatch(data, text, defaultText))
-
-      // Update the in-memory cache so the `system-prompt/assemble` listener
-      // rewrites the persona on the very next model turn — no restart needed.
-      this._customPersona = text !== defaultText ? text : null
-
-      return { saved: true, current: text, defaultText, applied: true }
-    }
-
-    async saveDialoguePreset(value) {
       const preset = normalizeDialoguePreset(value)
       if (Buffer.byteLength(JSON.stringify(preset), 'utf8') > MAX_DIALOGUE_BYTES) {
         throw new Error('dialogue preset exceeds the 1 MB limit')
       }
-      const path = this.dialogueStatePath()
-      await withPatchLock(path, () => writeJsonAtomic(path, preset))
-      return { saved: true, dialoguePreset: preset, applied: true }
+      return preset
+    }
+
+    async writeConfiguration(text, preset) {
+      const defaultText = await this.readDefaultPersona()
+      const patchPath = this.patchPath()
+      const dialoguePath = this.dialogueStatePath()
+      await withPatchLock(patchPath, async () => {
+        const beforePatch = await readPatchArray(patchPath)
+        const nextPatch = updatePersonaPatch(beforePatch, text, defaultText)
+        await writePatchArrayAtomic(patchPath, nextPatch)
+        try {
+          await writeJsonAtomic(dialoguePath, preset)
+        } catch (error) {
+          await writePatchArrayAtomic(patchPath, beforePatch).catch(() => {})
+          throw error
+        }
+      })
+      this._customPersona = text !== defaultText ? text : null
+      return { defaultText }
+    }
+
+    async save(text) {
+      return this.serializeMutation(async () => {
+        if (typeof text !== 'string') throw new Error('persona text must be a string')
+        if (Buffer.byteLength(text, 'utf8') > MAX_PERSONA_BYTES) throw new Error('persona text exceeds the 1 MB limit')
+        const defaultText = await this.readDefaultPersona()
+        await mutatePatchArray(this.patchPath(), data => updatePersonaPatch(data, text, defaultText))
+        this._customPersona = text !== defaultText ? text : null
+        return { saved: true, current: text, defaultText, applied: true }
+      })
+    }
+
+    async saveDialoguePreset(value) {
+      return this.serializeMutation(async () => {
+        const preset = normalizeDialoguePreset(value)
+        if (Buffer.byteLength(JSON.stringify(preset), 'utf8') > MAX_DIALOGUE_BYTES) {
+          throw new Error('dialogue preset exceeds the 1 MB limit')
+        }
+        const path = this.dialogueStatePath()
+        await withPatchLock(path, () => writeJsonAtomic(path, preset))
+        return { saved: true, dialoguePreset: preset, applied: true }
+      })
+    }
+
+    async saveConfiguration(text, value) {
+      return this.serializeMutation(async () => {
+        const preset = this.validateConfiguration(text, value)
+        await this.writeConfiguration(text, preset)
+        return { saved: true, applied: true, ...(await this.getState()) }
+      })
+    }
+
+    async saveTemplate(value) {
+      return this.serializeMutation(async () => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('persona template input must be an object')
+        const preset = this.validateConfiguration(value.persona, value.dialoguePreset)
+        const path = this.templateStatePath()
+        let saved
+        await withPatchLock(path, async () => {
+          const current = await this.readTemplateLibrary()
+          saved = savePersonaTemplate(current, { ...value, dialoguePreset: preset }, {
+            id: randomUUID(),
+            now: new Date().toISOString(),
+          })
+          const serialized = JSON.stringify(saved.library)
+          if (Buffer.byteLength(serialized, 'utf8') > MAX_TEMPLATE_LIBRARY_BYTES) {
+            throw new Error('persona template library exceeds the 16 MB limit')
+          }
+          await writeJsonAtomic(path, saved.library)
+        })
+        const state = await this.getState()
+        return { saved: true, template: saved.template, ...state }
+      })
+    }
+
+    async deleteTemplate(id) {
+      return this.serializeMutation(async () => {
+        const path = this.templateStatePath()
+        await withPatchLock(path, async () => {
+          const current = await this.readTemplateLibrary()
+          await writeJsonAtomic(path, deletePersonaTemplate(current, id))
+        })
+        return { deleted: true, ...(await this.getState()) }
+      })
+    }
+
+    async applyTemplate(id) {
+      return this.serializeMutation(async () => {
+        const library = await this.readTemplateLibrary()
+        const template = library.templates.find(candidate => candidate.id === String(id ?? ''))
+        if (!template) throw new Error(`unknown persona template: ${String(id)}`)
+        await this.writeConfiguration(template.persona, template.dialoguePreset)
+        return { applied: true, appliedTemplateId: template.id, ...(await this.getState()) }
+      })
     }
   }
 })()
