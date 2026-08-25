@@ -111,7 +111,7 @@ function customFieldsSchema(required = false) {
   return {
     type: 'object',
     ...(required ? { required: true } : {}),
-    additionalProperties: { type: 'string' },
+    additionalProperties: true,
     description: 'Genre-specific free-form string fields. Keys are user-defined and preserved.',
   }
 }
@@ -192,7 +192,7 @@ function volumeToolSchema(required = false) {
     properties: {
       ...schemaProperties(['id', 'title', 'summary', 'status'], false),
       id: { type: 'string', required: true },
-      chapters: { type: 'array', items: chapterToolSchema() },
+      chapters: { type: 'array', items: chapterToolSchema({ required: false }) },
       customFields: customFieldsSchema(),
     },
   }

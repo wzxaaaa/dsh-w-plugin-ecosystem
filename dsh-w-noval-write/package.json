@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-noval-write",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Workspace-shared novel canon with schema-v4 genre extensions, structured volume/chapter outlines, targeted AI tools, verified manuscript export, and a persistent /write task.",
   "type": "module",
   "main": "index.js",

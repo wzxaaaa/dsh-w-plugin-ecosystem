@@ -26,6 +26,29 @@ import {
   writeLinkForSession,
 } from '../noval-write-core.js'
 
+function assertHarnessCompatibleValueSchemas(value, path = 'schema', allowRequired = true) {
+  if (!value || typeof value !== 'object') return
+  if (Object.hasOwn(value, 'required')) {
+    assert.equal(allowRequired, true, `${path}.required is only supported on an object property`)
+    assert.equal(value.required, true, `${path}.required must be true when present`)
+  }
+  if (value.type === 'object') {
+    assert.ok(
+      value.additionalProperties === true || value.additionalProperties === false,
+      `${path}.additionalProperties must be explicitly true or false`,
+    )
+  }
+  if (value.properties) {
+    for (const [key, child] of Object.entries(value.properties)) {
+      assertHarnessCompatibleValueSchemas(child, `${path}.properties.${key}`, true)
+    }
+  }
+  if (value.items) assertHarnessCompatibleValueSchemas(value.items, `${path}.items`, false)
+  if (value.oneOf) {
+    value.oneOf.forEach((child, index) => assertHarnessCompatibleValueSchemas(child, `${path}.oneOf[${index}]`, false))
+  }
+}
+
 test('portable framework export round-trips without local workspace binding', () => {
   const state = defaultState(0)
   state.project.title = 'A portable novel'
@@ -191,6 +214,9 @@ test('model tool schema exposes the complete canonical object structure', () => 
   const patch = projectToolSchema({ partial: true })
   assert.equal(Object.hasOwn(patch.properties.title, 'required'), false)
   assert.equal(Object.hasOwn(patch.properties.world.properties.rules, 'required'), false)
+  assert.equal(patch.properties.genreProfile.properties.customFields.additionalProperties, true)
+  assertHarnessCompatibleValueSchemas(schema)
+  assertHarnessCompatibleValueSchemas(patch)
 })
 
 test('destructive writes reject strings, wrappers, incomplete projects, and unknown fields', () => {
