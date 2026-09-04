@@ -54,7 +54,7 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 
 `novel_read` 会把当前数据、revision、权威结构和重试协议一并返回给模型。所有写工具的对象参数都使用完整嵌套 JSON Schema；`project`、`patch` 和 `scene` 必须是直接 JSON 对象，不能是 JSON 字符串、Markdown 或再次包裹的整套工具参数。
 
-0.8.1 修复 `customFields` 工具 Schema 与 Harness 编译器不兼容、导致插件树和桌面后端无法启动的问题；自由字段的数据结构与行为不变。
+0.8.2 将 `/write` 的会话事件注册迁移到 Harness 0.1.2-alpha.4 的 `uiConversation.events` 服务；0.8.1 修复 `customFields` 工具 Schema 与 Harness 编译器不兼容、导致插件树和桌面后端无法启动的问题。自由字段的数据结构与行为不变。
 
 0.8.0 将项目升级到 schema v4：新增题材配置和各层 `customFields`，加入结构化的卷—章—场景大纲，以及角色、关系、卷和章节的按 ID 局部工具。旧 schema v3 项目读取时会自动补齐新结构，不需要手工迁移；原有 `plot.chapterPlan` 与 `plot.outline` 保留为兼容概览字段。角色和关系不再要求模型为每个非核心字段提交空字符串，重名角色不能再通过姓名被静默绑定到错误关系。右侧工作台新增“大纲”Tab，并按工作区暂存未保存草稿。
 
@@ -138,7 +138,7 @@ $DSH_HOME/noval-write/session-links.json
 3. `dsh-w-noval-write`
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-noval-write-0.8.1.tgz
+dsh plugin --profile web add .\dsh-w-noval-write-0.8.2.tgz
 ```
 
 缺少知识库时，项目工作台与 AI 数据工具不受影响，`/write` 会明确报告知识库未挂载。

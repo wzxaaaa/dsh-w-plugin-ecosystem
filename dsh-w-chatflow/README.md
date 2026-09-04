@@ -54,7 +54,7 @@ Harness 的内置 `assistant-step` 在每个 reasoning/text delta 后会检查�
 
 ```sh
 npm pack
-dsh plugin --profile web add ./dsh-w-chatflow-0.3.1.tgz
+dsh plugin --profile web add ./dsh-w-chatflow-0.3.2.tgz
 ```
 
 本插件 Host 端使用 `@deepseek-ai/schemastery`，请安装 tarball，不要把源码目录作为 `link:` 依赖。

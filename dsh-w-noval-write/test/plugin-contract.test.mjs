@@ -18,6 +18,12 @@ test('registers /write through the host command registry', () => {
   assert.doesNotMatch(host, /setEnabled|enabled:/)
 })
 
+test('registers its client event through the alpha.4 uiConversation service', () => {
+  assert.match(client, /var inject = \["slots", "locale", "remote", "uiConversation"\]/)
+  assert.match(client, /ctx\.uiConversation\.events\.register\(writeCommandInputDefinition\)/)
+  assert.doesNotMatch(client, /conversationEvents/)
+})
+
 test('mounts the exact right-sidebar rail, card, and page protocol', () => {
   assert.match(client, /ctx\.slots\.inject\("right-sidebar\.rail"/)
   assert.match(client, /ctx\.slots\.inject\("right-sidebar\.card"/)

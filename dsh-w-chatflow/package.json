@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-chatflow",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "DeepSeek Harness chat-flow performance plugin: optimize very long streamed assistant reasoning with optional off-screen rendering.",
   "type": "module",
   "main": "index.js",

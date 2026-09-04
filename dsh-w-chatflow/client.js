@@ -5,7 +5,7 @@ window.__ModuleLoader__.load({
     const exports = module.exports
 
     const name = 'dsh-w-chatflow'
-    const inject = ['conversationEvents']
+    const inject = ['uiConversation']
     const PATCH = Symbol.for('dsh-w-chatflow.assistant-step.patch')
     const VISIBILITY = Symbol('dsh-w-chatflow.visibility')
 
@@ -230,7 +230,7 @@ window.__ModuleLoader__.load({
         let warned = false
 
         const synchronize = () => {
-          const definition = ctx.conversationEvents.entries()
+          const definition = ctx.uiConversation.events.entries()
             .find(candidate => candidate.kind === 'assistant-step')
           if (definition === activeDefinition) return
           activePatch?.dispose()
@@ -247,7 +247,7 @@ window.__ModuleLoader__.load({
         }
 
         synchronize()
-        const unsubscribe = ctx.conversationEvents.subscribe(synchronize)
+        const unsubscribe = ctx.uiConversation.events.subscribe(synchronize)
         return () => {
           unsubscribe()
           activePatch?.dispose()

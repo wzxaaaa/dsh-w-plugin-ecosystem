@@ -1093,7 +1093,7 @@ window.__ModuleLoader__.load({
     }
 
     var NS = "dshWNovalWrite";
-    var inject = ["slots", "locale", "remote", "conversationEvents"];
+    var inject = ["slots", "locale", "remote", "uiConversation"];
     var zh = {
       title: "小说写作", rail: "打开小说写作工作台", cardDescription: "工作区共享的角色、世界观、情节与连续性数据",
       writeActive: "小说写作", writeEdit: "编辑", writeClear: "解除", writeSave: "保存", writeCancel: "取消", writeObjectiveAria: "小说写作任务", writeCommandInput: "写作命令输入",
@@ -1166,7 +1166,7 @@ window.__ModuleLoader__.load({
           clearLink: function (sessionId, revision) { return unwrap("clearLink", [sessionId, revision]); },
         } };
       }
-      ctx.conversationEvents.register(writeCommandInputDefinition);
+      ctx.uiConversation.events.register(writeCommandInputDefinition);
       ctx.slots.inject("conversation.chat.node", function () {
         return ctx.slots.register({ name: "conversation.chat.node", key: "noval-write-command-input", locale: NS }, WriteCommandInputView);
       });

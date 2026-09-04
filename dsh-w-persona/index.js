@@ -20,9 +20,9 @@
 import {
   createAssistantMessage,
   createUserMessage,
-  deepFreeze,
   isAgentLoopRequest,
 } from '@deepseek-ai/dsh-llm'
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { randomUUID } from 'node:crypto'
 import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'

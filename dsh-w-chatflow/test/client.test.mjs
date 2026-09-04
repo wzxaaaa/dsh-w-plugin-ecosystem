@@ -10,6 +10,10 @@ globalThis.window = {
 await import(`../client.js?test=${Date.now()}`)
 const plugin = captured.factory(() => { throw new Error('unexpected require') })
 
+test('targets the alpha.4 uiConversation service', () => {
+  assert.deepEqual(plugin.inject, ['uiConversation'])
+})
+
 function event(seq, chunk) {
   return { event: { type: 'assistant/chunk', seq, time: seq * 10, data: { turn: 1, step: 1, chunk } } }
 }
@@ -140,9 +144,11 @@ test('applies through the registry service and restores on plugin disposal', () 
   let cleanup
   globalThis.__DSH_W_CHATFLOW__ = { enabled: true, optimizeStreaming: true }
   plugin.apply({
-    conversationEvents: {
-      entries: () => [fixture.value],
-      subscribe: () => () => {},
+    uiConversation: {
+      events: {
+        entries: () => [fixture.value],
+        subscribe: () => () => {},
+      },
     },
     effect(effect) { cleanup = effect() },
   })

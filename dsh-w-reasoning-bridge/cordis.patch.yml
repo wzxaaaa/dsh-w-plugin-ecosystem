@@ -1,0 +1,5 @@
+# One bundle row contributes the Client settings page and a deliberately
+# inert Host half. All writes go through the registered llm-pi-ai namespace.
+- insert:
+    - id: dsh-w-reasoning-bridge
+      name: dsh-w-reasoning-bridge

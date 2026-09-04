@@ -24,10 +24,13 @@ DeepSeek Harness 人设（人格）管理插件：在「设置」左侧 **Agent�
 
 ```powershell
 pnpm pack
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-persona-0.3.0.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-persona-0.3.1.tgz
 ```
 
 重启桌面版（或 `dsh web`）后，设置 → 左侧「人设」即可使用。
+
+`0.3.1` 已迁移到 Harness `0.1.2-alpha.4` 的 `@deepseek-ai/dsh-util-values`，修复旧版
+`@deepseek-ai/dsh-llm` 不再导出 `deepFreeze` 导致的启动失败。
 
 ## 卸载
 

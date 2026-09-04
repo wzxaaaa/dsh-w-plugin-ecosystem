@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-persona",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "DeepSeek Harness persona manager with reusable persona templates and an optional hidden four-message conversation preset.",
   "type": "module",
   "main": "index.js",
@@ -28,7 +28,8 @@
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-llm": "*",
-    "@deepseek-ai/dsh-typert-protocol": "*"
+    "@deepseek-ai/dsh-typert-protocol": "*",
+    "@deepseek-ai/dsh-util-values": "*"
   },
   "dsh": {
     "bundle": {
