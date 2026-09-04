@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-reasoning-bridge",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Connect relay and custom-provider models to DeepSeek Harness's native reasoning-effort selector.",
   "type": "module",
   "main": "index.js",

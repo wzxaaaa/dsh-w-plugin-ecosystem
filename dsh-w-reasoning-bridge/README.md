@@ -20,7 +20,7 @@
 
 ## 协议预设
 
-- OpenAI：顶层 `reasoning_effort`
+- OpenAI Chat Completions：只发送顶层 `reasoning_effort`，不发送 `thinking`
 - DeepSeek：`thinking.type = enabled/disabled`
 - OpenRouter：`reasoning.effort`
 - Qwen：`enable_thinking`
@@ -29,7 +29,9 @@
 - 字符串 thinking：`thinking = "..."`
 - Anthropic 原生推理
 
-预设只是安全起点，不会探测或猜测私有中转协议。中转站若改写字段，以上游文档和实际请求日志为准。
+自动推荐只依据提供方与端点协议，不再根据模型名称猜测。比如经普通 OpenAI Chat Completions
+中转调用名为 DeepSeek、Qwen、GLM 或 Grok 的模型时，默认仍选择 `reasoning_effort`，避免错误发送
+`thinking`。预设只是安全起点，不会探测私有中转协议；中转站若改写字段，以上游文档和实际请求日志为准。
 
 ## 边界
 

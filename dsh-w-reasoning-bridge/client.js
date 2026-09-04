@@ -8,7 +8,7 @@ window.__ModuleLoader__.load({
     var LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
     var MANAGED_COMPAT = ["thinkingFormat", "supportsReasoningEffort", "supportsDeveloperRole"];
     var PRESETS = [
-      { id: "openai", label: "OpenAI reasoning_effort", format: "openai", effortField: true, developerRole: false, efforts: { off: "none", minimal: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" } },
+      { id: "openai", label: "OpenAI reasoning_effort", format: "", effortField: true, developerRole: false, efforts: { off: "none", minimal: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" } },
       { id: "deepseek", label: "DeepSeek thinking", format: "deepseek", effortField: false, developerRole: false, efforts: { off: null, high: "high" } },
       { id: "openrouter", label: "OpenRouter reasoning", format: "openrouter", effortField: false, developerRole: false, efforts: { off: "none", low: "low", medium: "medium", high: "high", xhigh: "xhigh" } },
       { id: "qwen", label: "Qwen enable_thinking", format: "qwen", effortField: false, developerRole: false, efforts: { off: null, high: "high" } },
@@ -116,16 +116,16 @@ window.__ModuleLoader__.load({
         ? [{ op: "unset", path: target }]
         : [{ op: "set", path: target, value: next }];
     }
-    function inferPreset(provider, profile, model) {
-      var route = (provider + " " + (profile.baseURL || "")).toLowerCase();
-      var id = String(model || "").toLowerCase();
+    function inferPreset(provider, profile) {
+      var providerId = String(provider || "").toLowerCase();
+      var baseURL = String(profile.baseURL || "").toLowerCase();
+      var route = providerId + " " + baseURL;
       if (profile.api === "anthropic-messages") return "anthropic";
       if (route.includes("openrouter")) return "openrouter";
       if (route.includes("together")) return "together";
-      if (route.includes("zhipu") || route.includes("bigmodel") || route.includes("z.ai")) return "zai";
-      if (id.includes("qwen") || id.includes("qwq")) return "qwen";
-      if (id.includes("deepseek")) return "deepseek";
-      if (id.includes("glm") || id.includes("zai")) return "zai";
+      if (providerId === "zai" || route.includes("zhipu") || route.includes("bigmodel") || route.includes("z.ai")) return "zai";
+      if (providerId === "qwen" || route.includes("dashscope") || route.includes("aliyuncs")) return "qwen";
+      if (providerId === "deepseek" || baseURL.includes("api.deepseek.com")) return "deepseek";
       return "openai";
     }
     function messageOf(error) {
@@ -211,7 +211,7 @@ window.__ModuleLoader__.load({
         : undefined;
       var nativeReasoning = current.mode === "inherit" && !!(catalogModel && catalogModel.reasoning);
       var active = current.mode === "enabled" || nativeReasoning;
-      var inferred = inferPreset(providerId, profile, model);
+      var inferred = inferPreset(providerId, profile);
 
       React.useEffect(function () {
         if (!model) return;
@@ -526,6 +526,7 @@ window.__ModuleLoader__.load({
     }
 
     exports.apply = apply;
+    exports.inferPreset = inferPreset;
     exports.inject = inject;
     exports.name = "dsh-w-reasoning-bridge";
     return module.exports;

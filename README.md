@@ -19,7 +19,7 @@
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
 | [`dsh-w-knowledge-base`](./dsh-w-knowledge-base) | `0.4.3` | 双模式跨会话 Markdown 知识库：assistant 笔记与独立 writing 文风语料库、`kb_*` 工具、千万字符整本投喂，以及响应式侧栏界面 | [下载 `.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1) |
 | [`dsh-w-persona`](./dsh-w-persona) | `0.3.1` | 在设置中编辑 Persona，保存并一键切换完整人设模板，同时配置隐藏的两轮 user/assistant 对话预设；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.3.1.tgz?raw=1) |
-| [`dsh-w-reasoning-bridge`](./dsh-w-reasoning-bridge) | `0.2.1` | 在官方模型设置中启用中转模型能力，并让对话框直接显示 DSH 原生“推理等级”选择器 | [下载 `.tgz`](./dsh-w-reasoning-bridge/dsh-w-reasoning-bridge-0.2.1.tgz?raw=1) |
+| [`dsh-w-reasoning-bridge`](./dsh-w-reasoning-bridge) | `0.2.2` | 在官方模型设置中启用中转模型能力，并让对话框直接显示 DSH 原生“推理等级”选择器；中转协议按端点而非模型名称判断 | [下载 `.tgz`](./dsh-w-reasoning-bridge/dsh-w-reasoning-bridge-0.2.2.tgz?raw=1) |
 | [`dsh-w-vision`](./dsh-w-vision) | `0.3.2` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1) |
 | [`dsh-w-route-primer`](./dsh-w-route-primer) | `0.3.0` | 路由预热、任务分类与模式工具；感谢风神开源 `routing-suite` 和社区开源贡献 | [下载 `.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1) |
 | [`dsh-w-teacher-help-me`](./dsh-w-teacher-help-me) | `0.2.0` | 主模型受阻时召唤可只读调查工作区的老师模型，获取诊断和解决思路 | [下载 `.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1) |
@@ -58,7 +58,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 5. [`dsh-w-chatflow-0.3.2.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.2.tgz?raw=1)
 6. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
 7. [`dsh-w-persona-0.3.1.tgz`](./dsh-w-persona/dsh-w-persona-0.3.1.tgz?raw=1)
-8. [`dsh-w-reasoning-bridge-0.2.1.tgz`](./dsh-w-reasoning-bridge/dsh-w-reasoning-bridge-0.2.1.tgz?raw=1)
+8. [`dsh-w-reasoning-bridge-0.2.2.tgz`](./dsh-w-reasoning-bridge/dsh-w-reasoning-bridge-0.2.2.tgz?raw=1)
 9. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
 10. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
 11. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)

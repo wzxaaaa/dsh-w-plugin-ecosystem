@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  buildSettingsOps, presetDraft, readModelConfiguration, validateDraft,
+  buildSettingsOps, inferPreset, presetDraft, readModelConfiguration, validateDraft,
 } from '../reasoning-core.js'
 
 test('updates one declared model without dropping unknown fields or sibling models', () => {
@@ -21,11 +21,31 @@ test('updates one declared model without dropping unknown fields or sibling mode
   assert.deepEqual(ops[0].path, ['providers', 'relay', 'models'])
   assert.equal(ops[0].value[0].secret, 'keep')
   assert.equal(ops[0].value[0].compat.supportsStore, false)
-  assert.equal(ops[0].value[0].compat.thinkingFormat, 'openai')
+  assert.equal('thinkingFormat' in ops[0].value[0].compat, false)
+  assert.equal(ops[0].value[0].compat.supportsReasoningEffort, true)
   assert.deepEqual(ops[0].value[1], { id: 'other', name: 'Other' })
   assert.deepEqual(ops[1], {
     op: 'set', path: ['providers', 'relay', 'reasoning'], value: 'high',
   })
+})
+
+test('infers dialect from the endpoint instead of the model brand', () => {
+  assert.equal(inferPreset('amd-dsfv', {
+    api: 'openai-completions',
+    baseURL: 'https://developer.amd.com.cn/radeon/api/v1',
+  }), 'openai')
+  assert.equal(inferPreset('relay', {
+    api: 'openai-completions',
+    baseURL: 'https://relay.example/v1',
+  }), 'openai')
+  assert.equal(inferPreset('deepseek', {
+    api: 'openai-completions',
+    baseURL: 'https://api.deepseek.com/v1',
+  }), 'deepseek')
+  assert.equal(inferPreset('relay', {
+    api: 'anthropic-messages',
+    baseURL: 'https://relay.example/v1',
+  }), 'anthropic')
 })
 
 test('uses modelOverrides for a catalog-backed model', () => {

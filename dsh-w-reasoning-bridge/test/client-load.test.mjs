@@ -17,6 +17,14 @@ test('browser bundle mounts inside the official Models provider card', async () 
       return {}
     })
     assert.equal(plugin.name, 'dsh-w-reasoning-bridge')
+    assert.equal(plugin.inferPreset('amd-dsfv', {
+      api: 'openai-completions',
+      baseURL: 'https://developer.amd.com.cn/radeon/api/v1',
+    }), 'openai')
+    assert.equal(plugin.inferPreset('relay', {
+      api: 'anthropic-messages',
+      baseURL: 'https://relay.example/v1',
+    }), 'anthropic')
     assert.deepEqual(plugin.inject, [
       'slots', 'locale', 'remote', 'remote.settings', 'remote.session',
     ])

@@ -37,7 +37,7 @@ const preset = (
 })
 
 export const PRESETS = Object.freeze([
-  preset('openai', 'OpenAI reasoning_effort', '发送顶层 reasoning_effort，适用于 OpenAI/O 系列兼容中转。', 'openai', true, {
+  preset('openai', 'OpenAI reasoning_effort', '只发送顶层 reasoning_effort，适用于 OpenAI Chat Completions 兼容中转。', '', true, {
     off: 'none', minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max',
   }),
   preset('deepseek', 'DeepSeek thinking', '发送 thinking.type enabled/disabled；强度由模型或中转站决定。', 'deepseek', false, {
@@ -84,6 +84,26 @@ function clone(value) {
 
 export function providerProfile(layer, provider) {
   return record(record(record(layer).providers)[provider])
+}
+
+/**
+ * Infer a wire dialect from the configured API surface, never from the model
+ * brand. A relay can expose DeepSeek, Qwen, GLM, or Grok model ids through an
+ * ordinary OpenAI Chat Completions endpoint whose only reasoning control is
+ * reasoning_effort.
+ */
+export function inferPreset(provider, profile) {
+  const providerId = String(provider ?? '').toLowerCase()
+  const api = String(record(profile).api ?? '').toLowerCase()
+  const baseURL = String(record(profile).baseURL ?? '').toLowerCase()
+  const route = `${providerId} ${baseURL}`
+  if (api === 'anthropic-messages') return 'anthropic'
+  if (route.includes('openrouter')) return 'openrouter'
+  if (route.includes('together')) return 'together'
+  if (providerId === 'zai' || route.includes('zhipu') || route.includes('bigmodel') || route.includes('z.ai')) return 'zai'
+  if (providerId === 'qwen' || route.includes('dashscope') || route.includes('aliyuncs')) return 'qwen'
+  if (providerId === 'deepseek' || baseURL.includes('api.deepseek.com')) return 'deepseek'
+  return 'openai'
 }
 
 function modelEntry(profile, model) {
