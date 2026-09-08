@@ -3,6 +3,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
   collectSessionHideKeys,
   locateRegenerationTarget,
+  sessionEvents,
   PLUGIN_ID,
   TRIGGER_PROMPT,
   TRIGGER_SUMMARY,
@@ -88,7 +89,7 @@ class AssistantRefreshService extends TypertRemoteService {
     if (agent.status !== 'idle') throw new Error('wait for the current request to finish')
     if (this.pending.has(sessionId)) throw new Error('a reply refresh is already pending')
 
-    const target = locateRegenerationTarget(agent.session.events, agent.session.surface.nodes, assistantMessageId)
+    const target = locateRegenerationTarget(sessionEvents(agent.session), agent.session.surface.nodes, assistantMessageId)
     if (!target.ok) throw new Error(`reply cannot be refreshed: ${target.reason}`)
 
     const trigger = createUserMessage({
@@ -127,7 +128,7 @@ class AssistantRefreshService extends TypertRemoteService {
     // the client must hide. The trigger event itself is appended by the loop
     // right after pre-step, so its key is added explicitly.
     const hideKeys = [
-      ...collectSessionHideKeys(agent.session.events),
+      ...collectSessionHideKeys(sessionEvents(agent.session)),
       triggerHideKey(record.triggerId),
     ]
     return { accepted: true, hideKeys: [...new Set(hideKeys)] }
@@ -138,7 +139,7 @@ class AssistantRefreshService extends TypertRemoteService {
     if (typeof sessionId !== 'string' || sessionId.length === 0) throw new Error('sessionId is required')
     const agent = this.ctx.agents.get(sessionId)
     if (agent === undefined) return { keys: [] }
-    return { keys: collectSessionHideKeys(agent.session.events) }
+    return { keys: collectSessionHideKeys(sessionEvents(agent.session)) }
   }
 }
 

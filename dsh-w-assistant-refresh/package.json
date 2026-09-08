@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-assistant-refresh",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "description": "Regenerates an assistant reply inside the current DeepSeek Harness session without creating a new conversation.",
   "type": "module",
   "main": "index.js",

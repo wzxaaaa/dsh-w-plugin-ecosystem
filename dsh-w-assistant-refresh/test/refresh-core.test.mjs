@@ -6,6 +6,7 @@ import {
   locateRegenerationTarget,
   replacementHideKeys,
   triggerHideKey,
+  sessionEvents,
 } from '../refresh-core.js'
 
 const user = (seq, id, text, source = { kind: 'user' }) => ({
@@ -16,6 +17,27 @@ const assistant = (seq, id, text) => ({
     turn: 1, step: 1,
     message: { id, role: 'assistant', content: [{ type: 'text', text }], source: { kind: 'model' } },
   },
+})
+
+test('current Harness snapshots support locating replies and restoring hidden rows', () => {
+  const events = Object.freeze([
+    user(0, 'u1', 'question'), assistant(1, 'a1', 'answer'),
+  ])
+  const session = {
+    snapshotEvents: () => events,
+    get events() { throw new Error('removed API must not be read') },
+  }
+  const target = locateRegenerationTarget(sessionEvents(session), [0, 1], 'a1')
+  assert.equal(target.ok, true)
+  const updated = Object.freeze([...events, ownedReplacement(2, 0, 1, [0, 1])])
+  session.snapshotEvents = () => updated
+  assert.ok(collectSessionHideKeys(sessionEvents(session)).includes('14:assistant-step1:1'))
+})
+
+test('legacy session history remains supported and unavailable history rejects', () => {
+  const events = []
+  assert.equal(sessionEvents({ events }), events)
+  assert.throws(() => sessionEvents({}), /history is unavailable/)
 })
 
 test('replaces the selected prompt through the current visible tail', () => {
@@ -146,7 +168,26 @@ test('collectSessionHideKeys gathers trigger rows, replacement rows and retry no
   ]
   const keys = collectSessionHideKeys(events).sort()
   assert.deepEqual(keys, [
-    '10:turn-error1', '11:model-retryr1', '13:input-messaget1',
+    '10:turn-error1', '11:model-retryr1', '13:input-messaget1', '12:turn-process1',
     '14:assistant-step1:1', '15:turn-max-tokens1', '9:turn-tail1',
   ].sort())
+})
+
+test('hides replaced turn process and prompt rows without hiding the new turn', () => {
+  const events = [
+    { type: 'turn/start', seq: 0, data: { turn: 1 } },
+    evUser(1, 'u1'),
+    { type: 'request/header', seq: 2, data: {} },
+    evAssistant(3, 1, 1, 'a1'),
+    { type: 'turn/end', seq: 4, data: { turn: 1 } },
+    { type: 'turn/start', seq: 5, data: { turn: 2 } },
+    ownedReplacement(6, 1, 3, [1, 3]),
+    { type: 'request/header', seq: 7, data: {} },
+    evAssistant(8, 2, 1, 'a2'),
+  ]
+  const keys = collectSessionHideKeys(events)
+  assert.ok(keys.includes(chatRowKey('turn-process', '1')))
+  assert.ok(keys.includes(chatRowKey('request-prompt', '2')))
+  assert.ok(!keys.includes(chatRowKey('turn-process', '2')))
+  assert.ok(!keys.includes(chatRowKey('request-prompt', '7')))
 })

@@ -20,12 +20,16 @@
 ## 安装
 
 ```powershell
-node C:\Users\25024\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js plugin --profile web add .\dsh-w-assistant-refresh-0.2.2.tgz
+node C:\Users\25024\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js plugin --profile web add .\dsh-w-assistant-refresh-0.2.4.tgz
 ```
 
 安装后重启 Web profile 并刷新页面。
 
 ## 开发验证
+
+0.2.4 补齐新版聊天 UI 的独立“已思考”轮次行与“系统提示词”请求行隐藏规则；刷新回复及重新加载页面时，仅隐藏被替换轮次对应的行。
+
+0.2.3 适配新版 Harness 的 `session.snapshotEvents()` 历史读取接口，同时兼容旧版 `session.events`，修复刷新回复失败及重新打开会话后旧回复未隐藏的问题。
 
 ```powershell
 npm test

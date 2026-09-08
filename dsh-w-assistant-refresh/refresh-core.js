@@ -2,6 +2,15 @@
 
 export const PLUGIN_ID = 'dsh-w-assistant-refresh'
 export const TRIGGER_SUMMARY = 'dsh-w-assistant-refresh/internal-regenerate'
+/** Current Harness exposes immutable snapshots; older releases expose events. */
+export function sessionEvents(session) {
+  const events = typeof session?.snapshotEvents === 'function'
+    ? session.snapshotEvents()
+    : session?.events
+  if (!Array.isArray(events)) throw new Error('session history is unavailable')
+  return events
+}
+
 export const TRIGGER_PROMPT = [
   'Regenerate the answer to the immediately preceding user message.',
   'Solve the request again from the conversation state before the replaced answer.',
@@ -150,5 +159,15 @@ export function collectSessionHideKeys(events) {
       keys.add(chatRowKey('model-retry', event.data.retryId))
     }
   }
+  // Request headers have no turn field; their owning turn comes from log order.
+  let currentTurn
+  for (const event of events) {
+    if (event?.type === 'turn/start') currentTurn = event.data?.turn
+    if (event?.type === 'request/header' && shadowedTurns.has(currentTurn)) {
+      keys.add(chatRowKey('request-prompt', String(event.seq)))
+    }
+    if (event?.type === 'turn/end') currentTurn = undefined
+  }
+  for (const turn of shadowedTurns) keys.add(chatRowKey('turn-process', String(turn)))
   return [...keys]
 }
