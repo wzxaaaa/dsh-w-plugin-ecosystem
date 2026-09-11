@@ -20,12 +20,14 @@
 ## 安装
 
 ```powershell
-node C:\Users\25024\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js plugin --profile web add .\dsh-w-assistant-refresh-0.2.4.tgz
+node C:\Users\25024\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js plugin --profile web add .\dsh-w-assistant-refresh-0.2.5.tgz
 ```
 
 安装后重启 Web profile 并刷新页面。
 
 ## 开发验证
+
+0.2.5 适配新版 Harness 的精确替换字段 `startSeq/endSeq`，修复刷新时报 `invalid replace surfaceOp`；读取旧会话时仍兼容早期的 `start/end` 记录。
 
 0.2.4 补齐新版聊天 UI 的独立“已思考”轮次行与“系统提示词”请求行隐藏规则；刷新回复及重新加载页面时，仅隐藏被替换轮次对应的行。
 

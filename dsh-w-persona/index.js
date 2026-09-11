@@ -6,15 +6,15 @@
  *     HARNESS DEFAULT captured on first use into a state file) plus the
  *     harness default itself.
  *   - save(text): persist a persona override into the profile's
- *     cordis.patch.yml (`- id: system-prompt, config: { persona }`). Saving
+ *     cordis.patch.yml (`- id: system-prompt, config: { personaPrefix }`). Saving
  *     the default text removes the override instead (clean revert).
  *
  * Persistence alone is NOT enough: every agent preset mounts its own
  * `@deepseek-ai/dsh-persona` row that shadows the deployment persona. This
  * plugin therefore also registers a GLOBAL `system-prompt/assemble` listener
- * that rewrites the assembled `deployment:persona` section to the saved
- * override on every model turn, so it applies instantly to new sessions
- * regardless of the active preset.
+ * that rewrites the current `deployment:persona-prefix` section (or the legacy
+ * `deployment:persona` section) to the saved override on every model turn, so
+ * it applies instantly regardless of the active preset.
  */
 
 import {
@@ -41,7 +41,7 @@ import {
   normalizePersonaTemplateLibrary,
   savePersonaTemplate,
 } from './persona-template-core.js'
-import { updatePersonaPatch } from './persona-patch-core.js'
+import { personaFromConfig, rewritePersonaAssembly, updatePersonaPatch } from './persona-patch-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -84,7 +84,6 @@ const DEFAULT_STATE_FILE = '.dsh-w-persona-default.txt'
 const DIALOGUE_STATE_FILE = '.dsh-w-persona-dialogue.json'
 const TEMPLATE_STATE_FILE = '.dsh-w-persona-templates.json'
 const PROMPT_ROW_ID = 'system-prompt'
-const PERSONA_SECTION = 'deployment:persona'
 const MAX_PERSONA_BYTES = 1024 * 1024
 const MAX_DIALOGUE_BYTES = 1024 * 1024
 const MAX_TEMPLATE_LIBRARY_BYTES = 16 * 1024 * 1024
@@ -273,12 +272,7 @@ let PersonaManagerGateway = (() => {
         const assembled = await next()
         const custom = await self.getCustomPersona()
         if (custom === null || !assembled || !Array.isArray(assembled.sections)) return assembled
-        return {
-          ...assembled,
-          sections: assembled.sections.map((section) =>
-            section.name === PERSONA_SECTION ? { ...section, text: custom } : section,
-          ),
-        }
+        return rewritePersonaAssembly(assembled, custom)
       })
 
       // Harness loop requests are immutable and reconstructable from the
@@ -352,10 +346,10 @@ let PersonaManagerGateway = (() => {
       return undefined
     }
 
-    /** Current effective persona template (the `system-prompt` row's config.persona). */
+    /** Current effective persona template from the current or legacy system-prompt config. */
     async readCurrentPersona() {
       const entry = this.findPromptEntry()
-      return entry?.options?.config?.persona ?? ''
+      return personaFromConfig(entry?.options?.config) ?? ''
     }
 
     /** The saved override from the profile patch (null when absent). */
@@ -363,10 +357,9 @@ let PersonaManagerGateway = (() => {
       const data = await readPatchArray(this.patchPath())
       for (let index = data.length - 1; index >= 0; index--) {
         const row = data[index]
-        if (!row || row.id !== PROMPT_ROW_ID || !row.config
-          || !Object.prototype.hasOwnProperty.call(row.config, 'persona')) continue
-        if (typeof row.config.persona !== 'string') throw new Error('system-prompt config.persona must be a string')
-        return row.config.persona
+        if (!row || row.id !== PROMPT_ROW_ID || !row.config) continue
+        const persona = personaFromConfig(row.config)
+        if (persona !== undefined) return persona
       }
       return null
     }

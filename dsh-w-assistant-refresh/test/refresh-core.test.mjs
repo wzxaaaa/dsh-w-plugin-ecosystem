@@ -101,7 +101,7 @@ const evTool = (seq, turn, step, callId) => ({
   },
 })
 const ownedReplacement = (seq, start, end, shadowed, id = 'replay') => ({
-  type: 'user/message', seq, surfaceOp: { op: 'replace', start, end },
+  type: 'user/message', seq, surfaceOp: { op: 'replace', startSeq: start, endSeq: end },
   sourceEventSeqs: shadowed,
   data: { id, role: 'user', content: [{ type: 'text', text: 'q' }], source: { kind: 'user' } },
 })
@@ -148,7 +148,7 @@ test('replacementHideKeys keeps the leading question row and hides the rest', ()
 test('replacementHideKeys ignores non-owned replacements (compaction)', () => {
   const events = [evUser(0, 'u1'), evAssistant(1, 1, 1, 'a1')]
   const compaction = {
-    type: 'user/message', seq: 2, surfaceOp: { op: 'replace', start: 0, end: 1 },
+    type: 'user/message', seq: 2, surfaceOp: { op: 'replace', startSeq: 0, endSeq: 1 },
     sourceEventSeqs: [0, 1],
     data: {
       id: 'cp', role: 'user', content: [],
@@ -156,6 +156,17 @@ test('replacementHideKeys ignores non-owned replacements (compaction)', () => {
     },
   }
   assert.deepEqual(replacementHideKeys(events, compaction), [])
+})
+
+test('legacy replacement metadata still restores the leading question row', () => {
+  const events = [evUser(0, 'u1'), evAssistant(1, 1, 1, 'a1')]
+  const legacy = {
+    ...ownedReplacement(2, 0, 1, [0, 1]),
+    surfaceOp: { op: 'replace', start: 0, end: 1 },
+  }
+  const keys = replacementHideKeys(events, legacy)
+  assert.ok(!keys.includes(chatRowKey('input-message', 'u1')))
+  assert.ok(keys.includes(chatRowKey('assistant-step', '1:1')))
 })
 
 test('collectSessionHideKeys gathers trigger rows, replacement rows and retry notices', () => {

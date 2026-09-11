@@ -66,8 +66,8 @@ class AssistantRefreshService extends TypertRemoteService {
       payload.agent.session.append('user/message', replay, {
         surfaceOp: {
           op: 'replace',
-          start: record.target.startSeq,
-          end: record.target.endSeq,
+          startSeq: record.target.startSeq,
+          endSeq: record.target.endSeq,
         },
         sourceEventSeqs: record.target.sourceEventSeqs,
       })

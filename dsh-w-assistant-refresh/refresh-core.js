@@ -102,13 +102,16 @@ function isOwnedReplacement(event) {
 export function replacementHideKeys(events, replacement) {
   if (!isOwnedReplacement(replacement)) return []
   const op = replacement.surfaceOp
+  // Read both spellings so sessions written by the pre-alpha.4 protocol still
+  // restore their hidden rows, while new events use startSeq/endSeq.
+  const startSeq = op.startSeq ?? op.start
   const shadowed = Array.isArray(replacement.sourceEventSeqs) ? replacement.sourceEventSeqs : []
   const keys = []
   const turns = new Set()
   for (const seq of shadowed) {
     const event = events[seq]
     if (event === undefined) continue
-    if (seq === op.start && isHumanUserEvent(event)) continue
+    if (seq === startSeq && isHumanUserEvent(event)) continue
     if (event.type === 'user/message') {
       keys.push(chatRowKey('input-message', String(event.data?.id)))
     } else if (event.type === 'assistant/message') {
