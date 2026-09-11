@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-right-sidebar",
-  "version": "0.7.1",
+  "version": "0.8.1",
   "description": "A reusable right-side sidebar shell for DeepSeek Harness W-series features.",
   "type": "module",
   "main": "index.js",
@@ -15,6 +15,9 @@
     "cordis.patch.yml",
     "README.md"
   ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
   "license": "MIT",
   "dsh": {
     "bundle": {

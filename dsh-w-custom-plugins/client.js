@@ -28,8 +28,14 @@ window.__ModuleLoader__.load({
       ".dshwcp-name{font-size:14px;font-weight:600;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}",
       ".dshwcp-id{font-size:11px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
       ".dshwcp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-width:0}",
-      ".dshwcp-gear{width:26px;height:26px;flex:none;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border-radius:7px;cursor:pointer;padding:0}",
-      ".dshwcp-gear:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}",
+      ".dshwcp-actions{display:flex;align-items:center;gap:6px;flex:none}",
+      ".dshwcp-icon{width:26px;height:26px;flex:none;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border-radius:7px;cursor:pointer;padding:0}",
+      ".dshwcp-icon:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}",
+      ".dshwcp-icon:disabled{cursor:default;opacity:.55}",
+      ".dshwcp-update[data-busy=true] svg{animation:dshwcp-spin .8s linear infinite}",
+      ".dshwcp-update-message{font-size:11px;line-height:17px;margin:-2px 0 0;color:var(--dsw-alias-label-tertiary)}",
+      ".dshwcp-update-message[data-kind=success]{color:var(--dsw-alias-state-success-primary)}",
+      ".dshwcp-update-message[data-kind=error]{color:var(--dsw-alias-state-danger-primary,#c33)}",
       ".dshwcp-settings-panel{border-top:1px solid var(--dsw-alias-border-l2);padding-top:10px;margin-top:2px}",
       ".dshwcp-row{display:flex;align-items:center;justify-content:space-between;gap:10px}",
       ".dshwcp-status{font-size:12px;color:var(--dsw-alias-label-secondary)}",
@@ -43,6 +49,7 @@ window.__ModuleLoader__.load({
       ".dshwcp-toggle[data-on=true] .dshwcp-knob{transform:translateX(18px)}",
       "@keyframes dshwcp-fadeout{0%{opacity:1}100%{opacity:0}}",
       "@keyframes dshwcp-progress{0%{background-position:100% 0}100%{background-position:-100% 0}}",
+      "@keyframes dshwcp-spin{to{transform:rotate(360deg)}}",
       "@media (max-width:680px){.dshwcp-list{grid-template-columns:minmax(0,1fr)}}",
     ].join("\n");
     var tagId = "dsh-w-custom-plugins/styles";
@@ -75,6 +82,7 @@ window.__ModuleLoader__.load({
       descriptors: [
         descriptor("listCustom"),
         descriptor("setEnabled", [parameter("entryId"), parameter("enabled")]),
+        descriptor("requestUpdate", [parameter("entryId")]),
         descriptor("beginInstall", [parameter("fileName"), parameter("size")]),
         descriptor("appendInstallChunk", [parameter("uploadId"), parameter("index"), parameter("base64")]),
         descriptor("cancelInstall", [parameter("uploadId")]),
@@ -113,10 +121,30 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function UpdateIcon() {
+      return React.createElement(
+        "svg",
+        {
+          viewBox: "0 0 24 24",
+          width: 15,
+          height: 15,
+          fill: "none",
+          stroke: "currentColor",
+          strokeWidth: 2,
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+          "aria-hidden": true,
+        },
+        React.createElement("path", { d: "M20 11a8 8 0 1 0-2.34 5.66" }),
+        React.createElement("path", { d: "M20 4v7h-7" }),
+      );
+    }
+
     // ---- tab component ----
     function CustomPluginsTab(props) {
       var list = props.list;
       var toggle = props.toggle;
+      var requestUpdate = props.requestUpdate;
       var beginInstall = props.beginInstall;
       var appendInstallChunk = props.appendInstallChunk;
       var cancelInstall = props.cancelInstall;
@@ -132,6 +160,9 @@ window.__ModuleLoader__.load({
       var busySlot = React.useState({});
       var busy = busySlot[0];
       var setBusy = busySlot[1];
+      var updateSlot = React.useState({});
+      var updates = updateSlot[0];
+      var setUpdates = updateSlot[1];
       var hintSlot = React.useState(null);
       var hint = hintSlot[0];
       var setHint = hintSlot[1];
@@ -146,6 +177,7 @@ window.__ModuleLoader__.load({
       var mountedRef = React.useRef(true);
       var loadSeq = React.useRef(0);
       var busyEntries = React.useRef({});
+      var updateBusyEntries = React.useRef({});
       var installBusyRef = React.useRef(false);
       var uploadIdRef = React.useRef(null);
       var tickerRef = React.useRef(undefined);
@@ -232,7 +264,7 @@ window.__ModuleLoader__.load({
             setState(function (prev) {
               var entries = prev.entries.map(function (e) {
                 return e.entryId === entry.entryId
-                  ? { entryId: e.entryId, moduleName: e.moduleName, enabled: next }
+                  ? Object.assign({}, e, { enabled: next })
                   : e;
               });
               return { status: prev.status, entries: entries };
@@ -248,6 +280,62 @@ window.__ModuleLoader__.load({
             setHint({ text: t("error"), kind: "error" });
           },
         );
+      }
+
+      function setUpdateEntry(entryId, value) {
+        if (!mountedRef.current) return;
+        setUpdates(function (prev) {
+          var next = {};
+          for (var key in prev) next[key] = prev[key];
+          next[entryId] = value;
+          return next;
+        });
+      }
+
+      async function onUpdate(entry) {
+        if (installBusyRef.current || updateBusyEntries.current[entry.entryId] === true) return;
+        installBusyRef.current = true;
+        updateBusyEntries.current[entry.entryId] = true;
+        setUpdateEntry(entry.entryId, { stage: "checking", kind: "", message: t("updateChecking") });
+        try {
+          var result = await requestUpdate(entry.entryId);
+          if (!mountedRef.current) return;
+          if (result.status === "updated") {
+            var updatedVersion = result.latestVersion || result.version || "";
+            setUpdateEntry(entry.entryId, {
+              stage: "updated",
+              kind: "success",
+              message: t("updateInstalled") + (updatedVersion ? " " + updatedVersion : "") + "。" + t("restartRequired"),
+            });
+            setState(function (prev) {
+              return {
+                status: prev.status,
+                entries: prev.entries.map(function (item) {
+                  return item.entryId === entry.entryId
+                    ? Object.assign({}, item, { version: updatedVersion || item.version })
+                    : item;
+                }),
+              };
+            });
+          } else if (result.status === "up-to-date") {
+            var currentVersion = result.installedVersion || result.latestVersion || entry.version || "";
+            setUpdateEntry(entry.entryId, {
+              stage: "current",
+              kind: "success",
+              message: t("updateCurrent") + (currentVersion ? " " + currentVersion : ""),
+            });
+          } else {
+            setUpdateEntry(entry.entryId, { stage: "unavailable", kind: "", message: t("updateUnavailable") });
+          }
+        } catch (error) {
+          if (!mountedRef.current) return;
+          var message = error && error.message ? error.message : String(error);
+          console.error("dsh-w-custom-plugins: online update failed:", error);
+          setUpdateEntry(entry.entryId, { stage: "error", kind: "error", message: t("updateFailed") + " " + message });
+        } finally {
+          installBusyRef.current = false;
+          updateBusyEntries.current[entry.entryId] = false;
+        }
       }
 
       async function installFile(file) {
@@ -321,7 +409,11 @@ window.__ModuleLoader__.load({
         if (file) void installFile(file);
       }
 
-      var installBusy = install.stage === "uploading" || install.stage === "installing";
+      var onlineUpdateBusy = false;
+      for (var updateKey in updates) {
+        if (updates[updateKey] && updates[updateKey].stage === "checking") onlineUpdateBusy = true;
+      }
+      var installBusy = install.stage === "uploading" || install.stage === "installing" || onlineUpdateBusy;
       var progressVisible = install.stage !== "idle";
 
       return React.createElement(
@@ -416,6 +508,8 @@ window.__ModuleLoader__.load({
                 var on = entry.enabled;
                 var hasSettings = settingsByKey[entry.moduleName] !== undefined;
                 var isOpen = openKey === entry.moduleName;
+                var updateState = updates[entry.entryId];
+                var updateBusy = updateState && updateState.stage === "checking";
                 return React.createElement(
                   "li",
                   { className: "dshwcp-card", key: entry.entryId },
@@ -423,22 +517,51 @@ window.__ModuleLoader__.load({
                     "div",
                     { className: "dshwcp-head" },
                     React.createElement("div", { className: "dshwcp-name", title: entry.moduleName }, entry.moduleName),
-                    hasSettings
-                      ? React.createElement(
-                          "button",
-                          {
-                            type: "button",
-                            className: "dshwcp-gear",
-                            "aria-label": t("settingsAria"),
-                            "aria-expanded": isOpen,
-                            title: t("settingsAria"),
-                            onClick: function () { setOpenKey(isOpen ? null : entry.moduleName); },
-                          },
-                          React.createElement(GearIcon, null),
-                        )
-                      : null,
+                    React.createElement(
+                      "div",
+                      { className: "dshwcp-actions" },
+                      React.createElement(
+                        "button",
+                        {
+                          type: "button",
+                          className: "dshwcp-icon dshwcp-update",
+                          "data-busy": updateBusy ? "true" : "false",
+                          "aria-label": t("updateAria"),
+                          title: t("updateAria"),
+                          disabled: installBusy,
+                          onClick: function () { void onUpdate(entry); },
+                        },
+                        React.createElement(UpdateIcon, null),
+                      ),
+                      hasSettings
+                        ? React.createElement(
+                            "button",
+                            {
+                              type: "button",
+                              className: "dshwcp-icon dshwcp-gear",
+                              "aria-label": t("settingsAria"),
+                              "aria-expanded": isOpen,
+                              title: t("settingsAria"),
+                              onClick: function () { setOpenKey(isOpen ? null : entry.moduleName); },
+                            },
+                            React.createElement(GearIcon, null),
+                          )
+                        : null,
+                    ),
                   ),
-                  React.createElement("div", { className: "dshwcp-id" }, entry.entryId),
+                  React.createElement("div", { className: "dshwcp-id" }, entry.entryId + (entry.version ? " · " + entry.version : "")),
+                  updateState
+                    ? React.createElement(
+                        "p",
+                        {
+                          className: "dshwcp-update-message",
+                          "data-kind": updateState.kind || "",
+                          role: updateState.kind === "error" ? "alert" : undefined,
+                          "aria-live": "polite",
+                        },
+                        updateState.message,
+                      )
+                    : null,
                   React.createElement(
                     "div",
                     { className: "dshwcp-row" },
@@ -450,7 +573,7 @@ window.__ModuleLoader__.load({
                         className: "dshwcp-toggle",
                         "data-on": on ? "true" : "false",
                         "aria-pressed": on,
-                        disabled: busy[entry.entryId] === true,
+                        disabled: busy[entry.entryId] === true || installBusy,
                         "aria-label": on ? t("disableAria") : t("enableAria"),
                         onClick: function () { onToggle(entry); },
                       },
@@ -487,6 +610,12 @@ window.__ModuleLoader__.load({
         disableAria: "\u505c\u7528\u6b64\u63d2\u4ef6",
         enableAria: "\u542f\u7528\u6b64\u63d2\u4ef6",
         settingsAria: "\u8bbe\u7f6e\u6b64\u63d2\u4ef6",
+        updateAria: "\u68c0\u67e5\u5e76\u66f4\u65b0\u6b64\u63d2\u4ef6",
+        updateChecking: "\u6b63\u5728\u68c0\u67e5\u5e76\u4e0b\u8f7d\u6700\u65b0\u5b89\u88c5\u5305...",
+        updateInstalled: "\u5df2\u66f4\u65b0\u5230",
+        updateCurrent: "\u5df2\u662f\u6700\u65b0\u7248\u672c",
+        updateUnavailable: "\u672a\u627e\u5230\u53ef\u7528\u7684\u53ef\u4fe1\u5728\u7ebf\u5b89\u88c5\u5305\u3002",
+        updateFailed: "\u66f4\u65b0\u5931\u8d25\uff1a",
         applied: "\u5df2\u751f\u6548",
         dropTitle: "\u628a\u63d2\u4ef6\u538b\u7f29\u5305\u62d6\u5230\u8fd9\u91cc\uff0c\u6216\u70b9\u51fb\u9009\u62e9",
         dropNote: "\u652f\u6301 .tgz\u3001.tar.gz \u548c .zip\uff1b\u63d2\u4ef6\u5177\u6709\u672c\u673a\u4ee3\u7801\u6267\u884c\u6743\u9650\uff0c\u8bf7\u53ea\u5b89\u88c5\u53ef\u4fe1\u6765\u6e90\u3002",
@@ -508,6 +637,12 @@ window.__ModuleLoader__.load({
         disableAria: "Disable this plugin",
         enableAria: "Enable this plugin",
         settingsAria: "Configure this plugin",
+        updateAria: "Check for and install plugin updates",
+        updateChecking: "Checking and downloading the latest package...",
+        updateInstalled: "Updated to",
+        updateCurrent: "Already on the latest version",
+        updateUnavailable: "No trusted online package source was found.",
+        updateFailed: "Update failed:",
         applied: "Applied",
         dropTitle: "Drop a plugin archive here, or click to choose",
         dropNote: "Supports .tgz, .tar.gz, and .zip. Plugins can execute local code; install trusted sources only.",
@@ -540,6 +675,7 @@ window.__ModuleLoader__.load({
         return {
           list: function () { return unwrap("listCustom", []); },
           toggle: function (entryId, enabled) { return unwrap("setEnabled", [entryId, enabled]); },
+          requestUpdate: function (entryId) { return unwrap("requestUpdate", [entryId]); },
           beginInstall: function (fileName, size) { return unwrap("beginInstall", [fileName, size]); },
           appendInstallChunk: function (uploadId, index, base64) { return unwrap("appendInstallChunk", [uploadId, index, base64]); },
           cancelInstall: function (uploadId) { return unwrap("cancelInstall", [uploadId]); },

@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as yaml from 'js-yaml'
-import { isCustomModule } from './custom-plugin-core.js'
+import { compareSemver, isCustomModule } from './custom-plugin-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -179,6 +179,106 @@ const MAX_COMMAND_OUTPUT_BYTES = 8 * 1024 * 1024
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000
 const UPLOAD_TTL_MS = 30 * 60 * 1000
 const UPLOAD_SWEEP_MS = 5 * 60 * 1000
+const MANIFEST_TIMEOUT_MS = 30 * 1000
+const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000
+const MAX_REMOTE_MANIFEST_BYTES = 1024 * 1024
+const W_ECOSYSTEM_RAW = 'https://raw.githubusercontent.com/wzxaaaa/dsh-w-plugin-ecosystem/main'
+
+function assertTrustedHttpsUrl(value, hosts) {
+  let url
+  try { url = new URL(value) } catch { throw new Error('Update source returned an invalid URL') }
+  if (url.protocol !== 'https:' || !hosts.has(url.hostname)) {
+    throw new Error(`Update source returned an untrusted URL: ${url.origin}`)
+  }
+  return url.href
+}
+
+function isTransientRemoteError(error) {
+  const code = error?.cause?.code ?? error?.code
+  if (['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH'].includes(code)) return true
+  const message = error instanceof Error ? error.message : String(error)
+  if (/timed out|fetch failed/iu.test(message)) return true
+  const status = /HTTP (\d{3})/u.exec(message)
+  return status !== null && (status[1] === '429' || Number(status[1]) >= 500)
+}
+
+async function retryRemote(operation) {
+  let failure
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try { return await operation() } catch (error) {
+      failure = error
+      if (!isTransientRemoteError(error) || attempt === 2) throw error
+      await sleep(250 * (attempt + 1))
+    }
+  }
+  throw failure
+}
+
+async function fetchRemoteJson(url, hosts, missingOk = false) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS)
+  try {
+    const response = await fetch(assertTrustedHttpsUrl(url, hosts), {
+      headers: { accept: 'application/json' },
+      redirect: 'error',
+      signal: controller.signal,
+    })
+    if (missingOk && response.status === 404) return undefined
+    if (!response.ok) throw new Error(`Update server returned HTTP ${String(response.status)}`)
+    assertTrustedHttpsUrl(response.url, hosts)
+    const declared = Number(response.headers.get('content-length'))
+    if (Number.isFinite(declared) && declared > MAX_REMOTE_MANIFEST_BYTES) {
+      throw new Error('Update manifest exceeds the 1 MB safety limit')
+    }
+    const bytes = Buffer.from(await response.arrayBuffer())
+    if (bytes.length > MAX_REMOTE_MANIFEST_BYTES) throw new Error('Update manifest exceeds the 1 MB safety limit')
+    try { return JSON.parse(bytes.toString('utf8')) } catch { throw new Error('Update server returned invalid JSON') }
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('Update request timed out')
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function downloadRemoteArchive(url, destination, hosts) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
+  let handle
+  try {
+    const response = await fetch(assertTrustedHttpsUrl(url, hosts), {
+      headers: { accept: 'application/octet-stream' },
+      redirect: 'error',
+      signal: controller.signal,
+    })
+    if (!response.ok) throw new Error(`Update server returned HTTP ${String(response.status)}`)
+    assertTrustedHttpsUrl(response.url, hosts)
+    const declared = Number(response.headers.get('content-length'))
+    if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES) {
+      throw new Error('Online plugin archive exceeds the 128 MB safety limit')
+    }
+    if (response.body === null) throw new Error('Update server returned an empty response')
+    handle = await open(destination, 'wx')
+    let received = 0
+    for await (const chunk of response.body) {
+      const bytes = Buffer.from(chunk)
+      received += bytes.length
+      if (received > MAX_UPLOAD_BYTES) throw new Error('Online plugin archive exceeds the 128 MB safety limit')
+      await handle.write(bytes)
+    }
+    if (received === 0) throw new Error('Update server returned an empty plugin archive')
+    return received
+  } catch (error) {
+    await handle?.close().catch(() => {})
+    handle = undefined
+    await rm(destination, { force: true }).catch(() => {})
+    if (controller.signal.aborted) throw new Error('Plugin archive download timed out')
+    throw error
+  } finally {
+    clearTimeout(timer)
+    await handle?.close().catch(() => {})
+  }
+}
 
 function archiveKind(fileName) {
   const lower = fileName.toLowerCase()
@@ -375,6 +475,7 @@ let CustomPluginsGateway = (() => {
   let _instanceExtraInitializers = []
   let _listCustom_decorators
   let _setEnabled_decorators
+  let _requestUpdate_decorators
   let _beginInstall_decorators
   let _appendInstallChunk_decorators
   let _cancelInstall_decorators
@@ -392,6 +493,12 @@ let CustomPluginsGateway = (() => {
       __esDecorate(this, null, _setEnabled_decorators, {
         kind: 'method', name: 'setEnabled', static: false, private: false,
         access: { has: (obj) => 'setEnabled' in obj, get: (obj) => obj.setEnabled },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _requestUpdate_decorators = [Remote('requestUpdate')]
+      __esDecorate(this, null, _requestUpdate_decorators, {
+        kind: 'method', name: 'requestUpdate', static: false, private: false,
+        access: { has: (obj) => 'requestUpdate' in obj, get: (obj) => obj.requestUpdate },
         metadata: _metadata,
       }, null, _instanceExtraInitializers)
       _beginInstall_decorators = [Remote('beginInstall')]
@@ -427,6 +534,7 @@ let CustomPluginsGateway = (() => {
       super(ctx, 'customPlugins')
       __runInitializers(this, _instanceExtraInitializers)
       this.uploads = new Map()
+      this.installBusy = false
       const cleanupTimer = setInterval(() => this.cleanupExpiredUploads(), UPLOAD_SWEEP_MS)
       cleanupTimer.unref?.()
       this.ctx.effect(() => () => {
@@ -462,10 +570,12 @@ let CustomPluginsGateway = (() => {
         if (entry.options.name === MANAGER_PACKAGE) continue
         if (!isCustomModule(entry.options.name)) continue
         const persistedId = profileEntryId(entry.id)
+        const manifest = await this.readInstalledManifest(entry.options.name)
         entries.push({
           entryId: entry.id,
           moduleName: entry.options.name,
           enabled: !disabledIds.has(persistedId),
+          version: typeof manifest?.version === 'string' ? manifest.version : '',
         })
       }
       return { entries }
@@ -503,6 +613,177 @@ let CustomPluginsGateway = (() => {
       return dirname(this.patchPath())
     }
 
+    async readInstalledManifest(moduleName) {
+      if (!isValidPackageName(moduleName)) return undefined
+      const packagePath = join(this.profileDir(), 'node_modules', ...moduleName.split('/'), 'package.json')
+      try {
+        const raw = await readFile(packagePath, 'utf8')
+        if (Buffer.byteLength(raw, 'utf8') > MAX_PACKAGE_JSON_BYTES) throw new Error('Installed package.json exceeds the 1 MB safety limit')
+        const manifest = JSON.parse(raw)
+        return manifest?.name === moduleName ? manifest : undefined
+      } catch (error) {
+        if (error && error.code === 'ENOENT') return undefined
+        throw error
+      }
+    }
+
+    async resolveUpdateSource(moduleName) {
+      if (moduleName.startsWith('dsh-w-')) {
+        const segment = encodeURIComponent(moduleName)
+        const hosts = new Set(['raw.githubusercontent.com'])
+        const manifest = await retryRemote(() => fetchRemoteJson(`${W_ECOSYSTEM_RAW}/${segment}/package.json`, hosts, true))
+        if (manifest === undefined) return undefined
+        if (manifest?.name !== moduleName || typeof manifest?.version !== 'string') {
+          throw new Error('W plugin update manifest does not match the installed package')
+        }
+        const version = manifest.version
+        return {
+          version,
+          url: `${W_ECOSYSTEM_RAW}/${segment}/${segment}-${encodeURIComponent(version)}.tgz`,
+          hosts,
+          source: 'w-ecosystem',
+        }
+      }
+
+      const hosts = new Set(['registry.npmjs.org'])
+      const registryUrl = `https://registry.npmjs.org/${encodeURIComponent(moduleName)}/latest`
+      const manifest = await retryRemote(() => fetchRemoteJson(registryUrl, hosts, true))
+      if (manifest === undefined) return undefined
+      if (manifest?.name !== moduleName || typeof manifest?.version !== 'string' || typeof manifest?.dist?.tarball !== 'string') {
+        throw new Error('npm update manifest does not match the installed package')
+      }
+      return {
+        version: manifest.version,
+        url: assertTrustedHttpsUrl(manifest.dist.tarball, hosts),
+        hosts,
+        source: 'npm',
+      }
+    }
+
+    async installArchive(root, archivePath, kind, expected = {}) {
+      const [listing, verboseListing] = await Promise.all([
+        runCommand('tar.exe', ['-tf', archivePath]),
+        runCommand('tar.exe', ['-tvf', archivePath]),
+      ])
+      inspectArchiveListings(listing.stdout, verboseListing.stdout)
+      const extracted = join(root, 'extracted')
+      await mkdir(extracted, { recursive: true })
+      await runCommand('tar.exe', ['--no-same-owner', '--no-same-permissions', '-xf', archivePath, '-C', extracted])
+      const candidate = await inspectExtractedTree(extracted)
+      if (expected.packageName !== undefined && candidate.manifest.name !== expected.packageName) {
+        throw new Error(`Downloaded archive contains ${candidate.manifest.name}, expected ${expected.packageName}`)
+      }
+      if (expected.version !== undefined && candidate.manifest.version !== expected.version) {
+        throw new Error(`Downloaded archive version does not match the update manifest (${String(candidate.manifest.version)} != ${expected.version})`)
+      }
+      let installPath = archivePath
+      if (kind === 'zip') {
+        const packed = join(root, 'packed')
+        await mkdir(packed, { recursive: true })
+        await runCommand(commandName('pnpm'), ['pack', '--config.ignore-scripts=true', '--pack-destination', packed], {
+          cwd: candidate.packageDir,
+          env: { npm_config_ignore_scripts: 'true' },
+          shell: process.platform === 'win32',
+        })
+        const tarballs = (await readdir(packed)).filter(name => name.toLowerCase().endsWith('.tgz'))
+        if (tarballs.length !== 1) throw new Error('Packing the ZIP plugin did not produce exactly one .tgz archive')
+        installPath = join(packed, tarballs[0])
+      }
+      const profileDir = this.profileDir()
+      const profileName = basename(profileDir)
+      const digest = (await sha256File(installPath)).slice(0, 12)
+      const archiveDir = join(profileDir, '.plugin-archives')
+      await mkdir(archiveDir, { recursive: true })
+      const packageDigest = createHash('sha256').update(candidate.manifest.name).digest('hex').slice(0, 8)
+      const safePackage = candidate.manifest.name.replace(/[^A-Za-z0-9._-]/gu, '_').slice(0, 80)
+      const packageKey = `${safePackage}-${packageDigest}`
+      const safeVersion = typeof candidate.manifest.version === 'string'
+        ? candidate.manifest.version.replace(/[^A-Za-z0-9._-]/gu, '_').slice(0, 80)
+        : '0.0.0'
+      const durableArchive = join(archiveDir, `${packageKey}-${safeVersion}-${digest}.tgz`)
+      await copyFile(installPath, durableArchive)
+      const dshEntry = process.argv[1]
+      if (typeof dshEntry !== 'string' || !dshEntry) throw new Error('Unable to locate the running dsh CLI entry')
+      let result
+      try {
+        result = await runCommand(process.execPath, [
+          dshEntry,
+          'plugin',
+          '--profile',
+          profileName,
+          'add',
+          durableArchive,
+        ], { cwd: profileDir })
+      } catch (error) {
+        await rm(durableArchive, { force: true })
+        throw error
+      }
+      for (const oldName of await readdir(archiveDir)) {
+        if (oldName === basename(durableArchive)) continue
+        if (oldName.startsWith(`${packageKey}-`) && oldName.toLowerCase().endsWith('.tgz')) {
+          await rm(join(archiveDir, oldName), { force: true })
+        }
+      }
+      return {
+        packageName: candidate.manifest.name,
+        version: typeof candidate.manifest.version === 'string' ? candidate.manifest.version : '',
+        requiresRestart: true,
+        output: `${result.stdout}\n${result.stderr}`.trim().slice(-4000),
+      }
+    }
+
+    async requestUpdate(entryId) {
+      if (typeof entryId !== 'string' || entryId.length === 0) throw new Error('entryId must be a non-empty string')
+      if (this.installBusy || this.uploads.size > 0) throw new Error('Another plugin installation is already in progress')
+      let target
+      for (const entry of this.ctx.loader.entries()) {
+        if (!entry.options.group && entry.id === entryId) {
+          target = entry
+          break
+        }
+      }
+      if (!target || target.fiber === this.ctx.fiber || target.options.name === MANAGER_PACKAGE
+        || !isCustomModule(target.options.name)) {
+        throw new Error('Custom plugin entry not found: ' + entryId)
+      }
+      this.installBusy = true
+      let root
+      try {
+        const moduleName = target.options.name
+        const installed = await this.readInstalledManifest(moduleName)
+        const installedVersion = typeof installed?.version === 'string' ? installed.version : ''
+        const source = await this.resolveUpdateSource(moduleName)
+        if (source === undefined) return { status: 'unavailable', packageName: moduleName, installedVersion }
+        if (installedVersion === source.version) {
+          return { status: 'up-to-date', packageName: moduleName, installedVersion, latestVersion: source.version }
+        }
+        if (installedVersion !== '') {
+          const comparison = compareSemver(source.version, installedVersion)
+          if (comparison === undefined) throw new Error(`Cannot safely compare plugin versions ${installedVersion} and ${source.version}`)
+          if (comparison < 0) {
+            return { status: 'up-to-date', packageName: moduleName, installedVersion, latestVersion: source.version }
+          }
+        }
+        root = await mkdtemp(join(tmpdir(), 'dsh-plugin-update-'))
+        const archivePath = join(root, `${moduleName.replace(/[^A-Za-z0-9._-]/gu, '_')}-${source.version.replace(/[^A-Za-z0-9._-]/gu, '_')}.tgz`)
+        await retryRemote(() => downloadRemoteArchive(source.url, archivePath, source.hosts))
+        const result = await this.installArchive(root, archivePath, 'tgz', {
+          packageName: moduleName,
+          version: source.version,
+        })
+        return {
+          status: 'updated',
+          previousVersion: installedVersion,
+          latestVersion: source.version,
+          source: source.source,
+          ...result,
+        }
+      } finally {
+        this.installBusy = false
+        if (root !== undefined) await rm(root, { recursive: true, force: true })
+      }
+    }
+
     cleanupExpiredUploads() {
       const cutoff = Date.now() - UPLOAD_TTL_MS
       for (const [uploadId, upload] of this.uploads) {
@@ -514,7 +795,7 @@ let CustomPluginsGateway = (() => {
 
     async beginInstall(fileName, size) {
       this.cleanupExpiredUploads()
-      if (this.uploads.size >= 1) throw new Error('Another plugin upload is already in progress')
+      if (this.installBusy || this.uploads.size >= 1) throw new Error('Another plugin installation is already in progress')
       if (typeof fileName !== 'string' || archiveKind(fileName) === undefined) {
         throw new Error('Supported plugin archives: .tgz, .tar.gz, and .zip')
       }
@@ -584,77 +865,17 @@ let CustomPluginsGateway = (() => {
       if (typeof uploadId !== 'string') throw new Error('Plugin upload id is invalid')
       const upload = this.uploads.get(uploadId)
       if (upload === undefined) throw new Error('Plugin upload session expired')
-      if (upload.busy) throw new Error('Another operation is already using this upload session')
+      if (upload.busy || this.installBusy) throw new Error('Another operation is already using this upload session')
       upload.busy = true
+      this.installBusy = true
       this.uploads.delete(uploadId)
       try {
         if (upload.received !== upload.size) {
           throw new Error(`Plugin upload is incomplete: ${String(upload.received)}/${String(upload.size)} bytes`)
         }
-        const [listing, verboseListing] = await Promise.all([
-          runCommand('tar.exe', ['-tf', upload.archivePath]),
-          runCommand('tar.exe', ['-tvf', upload.archivePath]),
-        ])
-        inspectArchiveListings(listing.stdout, verboseListing.stdout)
-        const extracted = join(upload.root, 'extracted')
-        await mkdir(extracted, { recursive: true })
-        await runCommand('tar.exe', ['--no-same-owner', '--no-same-permissions', '-xf', upload.archivePath, '-C', extracted])
-        const candidate = await inspectExtractedTree(extracted)
-        let installPath = upload.archivePath
-        if (upload.kind === 'zip') {
-          const packed = join(upload.root, 'packed')
-          await mkdir(packed, { recursive: true })
-          await runCommand(commandName('pnpm'), ['pack', '--config.ignore-scripts=true', '--pack-destination', packed], {
-            cwd: candidate.packageDir,
-            env: { npm_config_ignore_scripts: 'true' },
-            shell: process.platform === 'win32',
-          })
-          const tarballs = (await readdir(packed)).filter(name => name.toLowerCase().endsWith('.tgz'))
-          if (tarballs.length !== 1) throw new Error('Packing the ZIP plugin did not produce exactly one .tgz archive')
-          installPath = join(packed, tarballs[0])
-        }
-        const profileDir = this.profileDir()
-        const profileName = basename(profileDir)
-        const digest = (await sha256File(installPath)).slice(0, 12)
-        const archiveDir = join(profileDir, '.plugin-archives')
-        await mkdir(archiveDir, { recursive: true })
-        const packageDigest = createHash('sha256').update(candidate.manifest.name).digest('hex').slice(0, 8)
-        const safePackage = candidate.manifest.name.replace(/[^A-Za-z0-9._-]/gu, '_').slice(0, 80)
-        const packageKey = `${safePackage}-${packageDigest}`
-        const safeVersion = typeof candidate.manifest.version === 'string'
-          ? candidate.manifest.version.replace(/[^A-Za-z0-9._-]/gu, '_').slice(0, 80)
-          : '0.0.0'
-        const durableArchive = join(archiveDir, `${packageKey}-${safeVersion}-${digest}.tgz`)
-        await copyFile(installPath, durableArchive)
-        const dshEntry = process.argv[1]
-        if (typeof dshEntry !== 'string' || !dshEntry) throw new Error('Unable to locate the running dsh CLI entry')
-        let result
-        try {
-          result = await runCommand(process.execPath, [
-            dshEntry,
-            'plugin',
-            '--profile',
-            profileName,
-            'add',
-            durableArchive,
-          ], { cwd: profileDir })
-        } catch (error) {
-          await rm(durableArchive, { force: true })
-          throw error
-        }
-        for (const oldName of await readdir(archiveDir)) {
-          if (oldName === basename(durableArchive)) continue
-          if (oldName.startsWith(`${packageKey}-`) && oldName.toLowerCase().endsWith('.tgz')) {
-            await rm(join(archiveDir, oldName), { force: true })
-          }
-        }
-        return {
-          packageName: candidate.manifest.name,
-          version: typeof candidate.manifest.version === 'string' ? candidate.manifest.version : '',
-          requiresRestart: true,
-          output: `${result.stdout}\n${result.stderr}`.trim().slice(-4000),
-        }
+        return await this.installArchive(upload.root, upload.archivePath, upload.kind)
       } finally {
+        this.installBusy = false
         await rm(upload.root, { recursive: true, force: true })
       }
     }

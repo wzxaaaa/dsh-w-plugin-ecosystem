@@ -6,6 +6,7 @@ DeepSeek Harness 插件管理器：在「设置 → 插件」页新增「自定�
 
 - 列出所有非 `@deepseek-ai/*` 的已安装包插件，并隐藏 preset 内部的相对路径实现模块；
 - 每个插件一个启/停开关，**切换即时生效**（无需重启）；
+- 每张插件卡片提供“检查并更新”图标：W 系列插件从 `wzxaaaa/dsh-w-plugin-ecosystem` 获取最新版，其他包尝试 npm `latest`；下载后复用安全校验与官方安装流程，成功后提示重启 DSH；
 - **拖拽安装**：把 `.tgz` / `.tar.gz` / `.zip` 插件压缩包拖进标签页（或点选），自动校验并调用官方 `dsh plugin add` 安装；
 - 解压前校验包内**恰好一个**带合法 `dsh.bundle.patch` 的插件，拒绝路径穿越、链接、Windows 非法路径及超限压缩包；
 - 上传失败或离开页面时自动取消并清理临时文件，过期会话也会后台回收。
@@ -16,7 +17,7 @@ DeepSeek Harness 插件管理器：在「设置 → 插件」页新增「自定�
 
 ```powershell
 pnpm pack
-dsh plugin --profile web add ./dsh-w-custom-plugins-0.3.2.tgz
+dsh plugin --profile web add ./dsh-w-custom-plugins-0.4.1.tgz
 ```
 
 安装后重启桌面版（或 `dsh web`）即随 `web` profile 自启。

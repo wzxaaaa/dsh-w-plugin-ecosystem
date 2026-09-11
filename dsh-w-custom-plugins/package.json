@@ -1,7 +1,7 @@
 {
   "name": "dsh-w-custom-plugins",
-  "version": "0.3.2",
-  "description": "DeepSeek Harness plugin manager with enable/disable controls and drag-and-drop archive installation.",
+  "version": "0.4.1",
+  "description": "DeepSeek Harness plugin manager with enable/disable controls, safe archive installation, and online updates.",
   "type": "module",
   "main": "index.js",
   "exports": {

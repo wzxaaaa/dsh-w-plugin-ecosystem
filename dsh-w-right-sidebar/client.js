@@ -29,16 +29,16 @@ window.__ModuleLoader__.load({
       ".dshwrs-toggle{margin-bottom:6px;border-radius:50%}",
       ".dshwrs-feature{width:36px;height:36px;display:flex;align-items:center;justify-content:center}",
       ".dshwrs-empty{padding:28px;color:var(--dsw-alias-label-tertiary,#87909d);font-size:13px;line-height:20px}",
-      "body[data-dshwrs-better-bridge] [data-dsh-better-sidebar] [data-dsh-panel]{right:56px}",
-      "body[data-dshwrs-better-bridge] [data-dsh-better-sidebar] [data-dsh-toggle-cluster]{right:66px}",
-      "body[data-dshwrs-better-bridge]:not([data-dshwrs-better-panel-open]) [data-dsh-better-sidebar] [data-dsh-toggle-cluster]{opacity:0;visibility:hidden;pointer-events:none}",
-      "body[data-dshwrs-better-bridge][data-dshwrs-better-panel-open] [data-dsh-better-sidebar] [data-dsh-toggle-cluster]{opacity:1;visibility:visible;transition:opacity 120ms ease}",
+      "body[data-dshwrs-better-mode=legacy] [data-dsh-better-sidebar] [data-dsh-panel]{right:56px}",
+      "body[data-dshwrs-better-mode=legacy] [data-dsh-better-sidebar] [data-dsh-toggle-cluster]{right:66px}",
+      "body[data-dshwrs-better-mode=legacy]:not([data-dshwrs-better-panel-open]) [data-dsh-better-sidebar] [data-dsh-toggle-cluster]{opacity:0;visibility:hidden;pointer-events:none}",
+      "body[data-dshwrs-better-mode=legacy][data-dshwrs-better-panel-open] [data-dsh-better-sidebar] [data-dsh-toggle-cluster]{opacity:1;visibility:visible;transition:opacity 120ms ease}",
       ".dshwrs-better-mark{position:relative;width:20px;height:18px;display:block}",
       ".dshwrs-better-mark:before,.dshwrs-better-mark:after{content:\"\";position:absolute;top:2px;bottom:2px;border:1.5px solid currentColor;border-radius:3px}",
       ".dshwrs-better-mark:before{left:1px;width:6px}",
       ".dshwrs-better-mark:after{right:1px;width:9px;background:currentColor;opacity:.18}",
       "@media (max-width:720px){.dshwrs-root[data-open]{width:min(356px,calc(100vw - 56px))}}",
-      "@media (max-width:720px){body[data-dshwrs-better-bridge] [data-dsh-better-sidebar] [data-dsh-panel]{width:calc(100vw - 56px) !important}}",
+      "@media (max-width:720px){body[data-dshwrs-better-mode=legacy] [data-dsh-better-sidebar] [data-dsh-panel]{width:calc(100vw - 56px) !important}}",
       "@media (prefers-reduced-motion:reduce){.dshwrs-root,[data-dshwrs-right-sidebar]{transition:none}}",
     ].join("\n");
     var tagId = "dsh-w-right-sidebar/styles";
@@ -83,12 +83,38 @@ window.__ModuleLoader__.load({
         && typeof value.version === "string";
     }
 
-    function readBetterBridge(service) {
+    function nativeSidebarController(ctx) {
+      var value = null;
+      try { value = ctx && typeof ctx.get === "function" ? ctx.get("sidebarRight") : null; } catch (_) {}
+      return value
+        && typeof value.openTab === "function"
+        && typeof value.isExpanded === "function"
+        && typeof value.toggleExpanded === "function"
+        ? value
+        : null;
+    }
+
+    function betterBridgeMode(service, host, ctx) {
+      if (!service || !host) return null;
+      var features = Array.isArray(service.features) ? service.features : [];
+      var nativeHost = host.querySelector("[data-dsh-panel-host]");
+      var bottomPanel = host.querySelector("[data-dsh-bottom-panel]");
+      if (features.indexOf("fileIcons") !== -1 && nativeHost && bottomPanel && nativeSidebarController(ctx)) return "native";
+      if (host.querySelector("[data-dsh-panel]") && host.querySelector("[data-dsh-toggle-cluster]")) return "legacy";
+      return null;
+    }
+
+    function readBetterBridge(service, ctx, mode) {
       var tabs = [];
       var panelOpen = false;
       try { tabs = Array.from(service.getTabs()); } catch (_) {}
-      try { panelOpen = !!(service.getSnapshot().state && service.getSnapshot().state.panelOpen); } catch (_) {}
-      return { service: service, version: service.version, tabs: tabs, panelOpen: panelOpen };
+      if (mode === "native") {
+        var sidebar = nativeSidebarController(ctx);
+        try { panelOpen = !!(sidebar && sidebar.isExpanded()); } catch (_) {}
+      } else {
+        try { panelOpen = !!(service.getSnapshot().state && service.getSnapshot().state.panelOpen); } catch (_) {}
+      }
+      return { service: service, version: service.version, tabs: tabs, panelOpen: panelOpen, mode: mode };
     }
 
     function useBetterSidebarBridge(ctx) {
@@ -98,6 +124,7 @@ window.__ModuleLoader__.load({
       React.useEffect(function () {
         var disposed = false;
         var current = null;
+        var currentMode = null;
         var offRegistry = null;
         var offState = null;
         var timer = null;
@@ -107,10 +134,11 @@ window.__ModuleLoader__.load({
           offRegistry = null;
           offState = null;
           current = null;
+          currentMode = null;
         };
         var publish = function () {
           if (disposed || !current) return;
-          var next = readBetterBridge(current);
+          var next = readBetterBridge(current, ctx, currentMode);
           if (next.panelOpen) document.body.setAttribute("data-dshwrs-better-panel-open", "");
           else document.body.removeAttribute("data-dshwrs-better-panel-open");
           setBridge(next);
@@ -121,20 +149,26 @@ window.__ModuleLoader__.load({
           try { candidate = ctx && typeof ctx.get === "function" ? ctx.get("betterSidebar") : null; } catch (_) {}
           if (!isBetterSidebarService(candidate)) candidate = null;
           var host = candidate && document.querySelector("[data-dsh-better-sidebar]");
-          if (candidate && (!host || !host.querySelector("[data-dsh-panel]") || !host.querySelector("[data-dsh-toggle-cluster]"))) candidate = null;
-          if (candidate !== current) {
+          var mode = candidate ? betterBridgeMode(candidate, host, ctx) : null;
+          if (!mode) candidate = null;
+          if (candidate !== current || mode !== currentMode) {
             detach();
             if (candidate) {
               current = candidate;
+              currentMode = mode;
               document.body.setAttribute("data-dshwrs-better-bridge", candidate.version || "available");
+              document.body.setAttribute("data-dshwrs-better-mode", mode);
               publish();
               try { offRegistry = candidate.subscribe(publish); } catch (_) {}
               try { offState = candidate.subscribeState(publish); } catch (_) {}
             } else {
               document.body.removeAttribute("data-dshwrs-better-bridge");
+              document.body.removeAttribute("data-dshwrs-better-mode");
               document.body.removeAttribute("data-dshwrs-better-panel-open");
               setBridge(null);
             }
+          } else if (currentMode === "native") {
+            publish();
           }
           timer = window.setTimeout(scan, current ? 1500 : 500);
         };
@@ -144,6 +178,7 @@ window.__ModuleLoader__.load({
           if (timer !== null) window.clearTimeout(timer);
           detach();
           document.body.removeAttribute("data-dshwrs-better-bridge");
+          document.body.removeAttribute("data-dshwrs-better-mode");
           document.body.removeAttribute("data-dshwrs-better-panel-open");
         };
       }, [ctx]);
@@ -159,8 +194,17 @@ window.__ModuleLoader__.load({
       return buttons.length ? buttons[buttons.length - 1] : null;
     }
 
-    function requestBetterPanel(service, open, remaining) {
-      if (!isBetterSidebarService(service)) return;
+    function requestBetterPanel(bridge, ctx, open, remaining) {
+      if (!bridge || !isBetterSidebarService(bridge.service)) return;
+      if (bridge.mode === "native") {
+        var sidebar = nativeSidebarController(ctx);
+        if (!sidebar) return;
+        try {
+          if (!!sidebar.isExpanded() !== open) sidebar.toggleExpanded();
+        } catch (_) {}
+        return;
+      }
+      var service = bridge.service;
       var panelOpen = null;
       try {
         var snapshot = service.getSnapshot();
@@ -170,7 +214,7 @@ window.__ModuleLoader__.load({
       var toggle = betterPanelToggle();
       if (toggle) toggle.click();
       if (remaining > 0) {
-        window.setTimeout(function () { requestBetterPanel(service, open, remaining - 1); }, 120);
+        window.setTimeout(function () { requestBetterPanel(bridge, ctx, open, remaining - 1); }, 120);
       }
     }
 
@@ -181,9 +225,33 @@ window.__ModuleLoader__.load({
       return node.children.some(treeHasBetterTabs);
     }
 
-    function openBetterSidebar(service) {
-      if (!isBetterSidebarService(service)) return;
+    function preferredBetterTab(service) {
+      var tabs = Array.from(service.getTabs());
+      return tabs.find(function (tab) {
+        return tab.id === "explorer" && (!service.isTabEnabled || service.isTabEnabled(tab.id));
+      }) || tabs.find(function (tab) {
+        return tab.id === "editor" && (!service.isTabEnabled || service.isTabEnabled(tab.id));
+      }) || tabs.find(function (tab) {
+        return tab.hidden !== true && tab.single === true && (!service.isTabEnabled || service.isTabEnabled(tab.id));
+      }) || tabs.find(function (tab) {
+        return tab.hidden !== true && (!service.isTabEnabled || service.isTabEnabled(tab.id));
+      });
+    }
+
+    function openBetterSidebar(bridge, ctx) {
+      if (!bridge || !isBetterSidebarService(bridge.service)) return;
+      var service = bridge.service;
       try {
+        if (bridge.mode === "native") {
+          var nativeDescriptor = preferredBetterTab(service);
+          if (nativeDescriptor) {
+            var nativeTitle = typeof nativeDescriptor.title === "function" ? nativeDescriptor.title() : nativeDescriptor.title;
+            service.openTab({ type: nativeDescriptor.id, title: nativeTitle });
+          } else {
+            requestBetterPanel(bridge, ctx, true, 0);
+          }
+          return;
+        }
         var snapshot = service.getSnapshot();
         var state = snapshot.state;
         var hasTabs = !!state && (
@@ -192,12 +260,7 @@ window.__ModuleLoader__.load({
           || (Array.isArray(state.floats) && state.floats.length > 0)
         );
         if (!hasTabs) {
-          var tabs = Array.from(service.getTabs());
-          var descriptor = tabs.find(function (tab) {
-            return tab.id === "explorer" && (!service.isTabEnabled || service.isTabEnabled(tab.id));
-          }) || tabs.find(function (tab) {
-            return tab.hidden !== true && tab.single === true && (!service.isTabEnabled || service.isTabEnabled(tab.id));
-          });
+          var descriptor = preferredBetterTab(service);
           if (descriptor) {
             var title = typeof descriptor.title === "function" ? descriptor.title() : descriptor.title;
             service.openTab({ type: descriptor.id, title: title });
@@ -206,7 +269,7 @@ window.__ModuleLoader__.load({
       } catch (error) {
         console.warn("[dsh-w-right-sidebar] Better Sidebar handoff failed:", error);
       }
-      requestBetterPanel(service, true, 8);
+      requestBetterPanel(bridge, ctx, true, 8);
     }
 
     function useFrameReservation(open) {
@@ -249,10 +312,10 @@ window.__ModuleLoader__.load({
       var better = useBetterSidebarBridge(props.ctx);
       useFrameReservation(open);
       React.useEffect(function () {
-        if (open && better && better.panelOpen) requestBetterPanel(better.service, false, 4);
-      }, [open, better && better.panelOpen, better && better.service]);
+        if (open && better && better.panelOpen) requestBetterPanel(better, props.ctx, false, 4);
+      }, [open, better && better.panelOpen, better && better.service, better && better.mode, props.ctx]);
       var showList = function () {
-        if (better) requestBetterPanel(better.service, false, 4);
+        if (better) requestBetterPanel(better, props.ctx, false, 4);
         setOpen(true);
         setMode("list");
         setActiveId(null);
@@ -265,7 +328,7 @@ window.__ModuleLoader__.load({
         setActiveTitle(null);
       };
       var openFromCard = function (id, title) {
-        if (better) requestBetterPanel(better.service, false, 4);
+        if (better) requestBetterPanel(better, props.ctx, false, 4);
         setActiveId(id);
         setActiveTitle(title || null);
         setOrigin("list");
@@ -273,7 +336,7 @@ window.__ModuleLoader__.load({
         setOpen(true);
       };
       var openDirect = function (id, title) {
-        if (better) requestBetterPanel(better.service, false, 4);
+        if (better) requestBetterPanel(better, props.ctx, false, 4);
         setActiveId(id);
         setActiveTitle(title || null);
         setOrigin("direct");
@@ -282,7 +345,12 @@ window.__ModuleLoader__.load({
       };
       var handoffBetter = function () {
         collapse();
-        if (better) openBetterSidebar(better.service);
+        if (!better) return;
+        if (better.mode === "native") {
+          window.requestAnimationFrame(function () { openBetterSidebar(better, props.ctx); });
+        } else {
+          openBetterSidebar(better, props.ctx);
+        }
       };
       var betterCard = better ? React.createElement("button", {
         type: "button",
