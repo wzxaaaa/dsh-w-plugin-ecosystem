@@ -15,6 +15,7 @@
 | [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.1.2` | 在设置中管理已归档对话，支持还原、永久删除、一键清理和真实的 30 天自动清理 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1) |
 | [`dsh-w-assistant-refresh`](./dsh-w-assistant-refresh) | `0.2.2` | 在同一会话内重生成指定 AI 回复，不创建新对话并隐藏被替换的旧回复 | [下载 `.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1) |
 | [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.2` | 消除超长流式思维链的重复扫描；屏外延迟渲染改为可选，避免长消息向上滚动回弹；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.2.tgz?raw=1) |
+| [`dsh-w-camera-watch`](./dsh-w-camera-watch) | `0.1.0` | 将浏览器摄像头截图作为原生图片工具结果交给模型，可在普通对话和 Goal 中随时监督学习或工作状态 | [下载 `.tgz`](./dsh-w-camera-watch/dsh-w-camera-watch-0.1.0.tgz?raw=1) |
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
 | [`dsh-w-knowledge-base`](./dsh-w-knowledge-base) | `0.4.3` | 双模式跨会话 Markdown 知识库：assistant 笔记与独立 writing 文风语料库、`kb_*` 工具、千万字符整本投喂，以及响应式侧栏界面 | [下载 `.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1) |
@@ -56,16 +57,17 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 3. [`dsh-w-vision-0.3.2.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1)
 4. [`dsh-w-easy-upload-0.2.0.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1)
 5. [`dsh-w-chatflow-0.3.2.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.2.tgz?raw=1)
-6. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
-7. [`dsh-w-persona-0.3.1.tgz`](./dsh-w-persona/dsh-w-persona-0.3.1.tgz?raw=1)
-8. [`dsh-w-reasoning-bridge-0.2.2.tgz`](./dsh-w-reasoning-bridge/dsh-w-reasoning-bridge-0.2.2.tgz?raw=1)
-9. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
-10. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
-11. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)
-12. [`dsh-w-archive-manager-0.1.2.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1)
-13. [`dsh-w-assistant-refresh-0.2.2.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1)
-14. [`dsh-w-knowledge-base-0.4.3.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1)
-15. [`dsh-w-noval-write-0.8.2.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.8.2.tgz?raw=1)
+6. [`dsh-w-camera-watch-0.1.0.tgz`](./dsh-w-camera-watch/dsh-w-camera-watch-0.1.0.tgz?raw=1)
+7. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
+8. [`dsh-w-persona-0.3.1.tgz`](./dsh-w-persona/dsh-w-persona-0.3.1.tgz?raw=1)
+9. [`dsh-w-reasoning-bridge-0.2.2.tgz`](./dsh-w-reasoning-bridge/dsh-w-reasoning-bridge-0.2.2.tgz?raw=1)
+10. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
+11. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
+12. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)
+13. [`dsh-w-archive-manager-0.1.2.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1)
+14. [`dsh-w-assistant-refresh-0.2.2.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1)
+15. [`dsh-w-knowledge-base-0.4.3.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1)
+16. [`dsh-w-noval-write-0.8.2.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.8.2.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 
@@ -103,6 +105,9 @@ cd ..\dsh-w-easy-upload
 node --test .\test\client.test.mjs .\test\core.test.mjs
 
 cd ..\dsh-w-chatflow
+npm test
+
+cd ..\dsh-w-camera-watch
 npm test
 
 cd ..\dsh-w-route-primer

@@ -1,0 +1,4 @@
+# One loader row contributes the Host camera tool and the browser camera bridge/settings page.
+- insert:
+    - id: dsh-w-camera-watch
+      name: dsh-w-camera-watch
