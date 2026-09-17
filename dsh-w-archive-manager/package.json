@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-archive-manager",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Archived conversation management for DeepSeek Harness with restore, permanent deletion, bulk cleanup, and 30-day retention.",
   "type": "module",
   "main": "index.js",
@@ -13,6 +13,7 @@
     "index.js",
     "client.js",
     "archive-core.js",
+    "storage-safety.js",
     "cordis.patch.yml",
     "README.md"
   ],

@@ -1,12 +1,14 @@
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { randomUUID } from 'node:crypto'
 import { readFile, rename, rm, rmdir, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute } from 'node:path'
+import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  RETENTION_DAYS, clearTombstones, isDue, markDeleteRequested, markPurged,
+  RETENTION_DAYS, clearTombstones, completeLegacyRecovery, extractSessionHeader,
+  indexSessionHeaders, isDue, legacyRecoveryIds, markDeleteRequested, markPurged,
   normalizeState, publicItems, reconcileEntries,
 } from './archive-core.js'
+import { jsonlSessionDirectory } from './storage-safety.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -132,7 +134,6 @@ let ArchiveManagerService = (() => {
       __runInitializers(this, _instanceExtraInitializers)
       this._statePromise = this.readState()
       this._tail = Promise.resolve()
-      this._started = false
       this.ctx.effect(() => {
         let stopped = false
         const run = () => {
@@ -196,28 +197,74 @@ let ArchiveManagerService = (() => {
       return this.setArchivedIds(current.filter(id => !removed.has(id)))
     }
 
+    async addArchivedIds(ids) {
+      const current = [...this.ctx.workspaceRegistry.archivedSessionIds]
+      const seen = new Set(current)
+      for (const id of ids) {
+        if (!seen.has(id)) {
+          current.push(id)
+          seen.add(id)
+        }
+      }
+      return this.setArchivedIds(current)
+    }
+
+    async listHeaders() {
+      const headers = indexSessionHeaders(await this.ctx.sessionPersistence.list())
+      for (const session of this.ctx.get('sessions')?.list() ?? []) {
+        if (session?.header !== undefined) headers.set(session.id, session.header)
+      }
+      return headers
+    }
+
+    async storedHeader(sessionId, headers) {
+      const indexed = headers.get(sessionId)
+      if (indexed !== undefined) return indexed
+      const persistence = this.ctx.sessionPersistence
+      if (typeof persistence.stat !== 'function') return undefined
+      const snapshot = await persistence.stat(sessionId)
+      return snapshot === undefined ? undefined : extractSessionHeader(snapshot)
+    }
+
+    async persistenceContains(sessionId) {
+      const persistence = this.ctx.sessionPersistence
+      if (typeof persistence.stat === 'function') return (await persistence.stat(sessionId)) !== undefined
+      return indexSessionHeaders(await persistence.list()).has(sessionId)
+    }
+
     persistenceBusy(sessionId) {
       if (this.ctx.get('sessions')?.get(sessionId) !== undefined) return true
       if (this.ctx.get('agents')?.get(sessionId) !== undefined) return true
       const coordinator = this.ctx.sessionPersistence.coordinator
-      if (coordinator === undefined || coordinator === null) return false
-      if (coordinator.states instanceof Map && coordinator.states.has(sessionId)) return true
-      if (coordinator.retirements instanceof Map && coordinator.retirements.has(sessionId)) return true
-      if (coordinator.chains instanceof Map && coordinator.chains.has(sessionId)) return true
-      if (coordinator.preparations && typeof coordinator.preparations.has === 'function'
-        && coordinator.preparations.has(sessionId)) return true
+      if (coordinator !== undefined && coordinator !== null) {
+        if (coordinator.states instanceof Map && coordinator.states.has(sessionId)) return true
+        if (coordinator.retirements instanceof Map && coordinator.retirements.has(sessionId)) return true
+        if (coordinator.chains instanceof Map && coordinator.chains.has(sessionId)) return true
+        if (coordinator.preparations && typeof coordinator.preparations.has === 'function'
+          && coordinator.preparations.has(sessionId)) return true
+      }
+      const tracker = this.ctx.sessionPersistence.tracker
+      if (tracker !== undefined && tracker !== null) {
+        if (tracker.writers instanceof Map && tracker.writers.has(sessionId)) return true
+        if (tracker.pending instanceof Map && tracker.pending.has(sessionId)) return true
+        if (tracker.openHandles instanceof Set
+          && [...tracker.openHandles].some(handle => handle?.id === sessionId)) return true
+      }
+      const migrations = this.ctx.sessionPersistence.migrationPreparations
+      if (migrations instanceof Map && migrations.has(sessionId)) return true
       return false
     }
 
     async deletePersistence(header) {
       const persistence = this.ctx.sessionPersistence
+      if (typeof persistence.locate !== 'function') {
+        throw new Error('this Harness persistence backend does not expose a compatible deletion adapter')
+      }
       const location = persistence.locate(header)
       if (location?.kind === 'jsonl') {
-        if (typeof location.path !== 'string' || !isAbsolute(location.path)) {
-          throw new Error('JSONL persistence returned an unsafe session artifact path')
-        }
-        await rm(location.path, { force: true })
-        await rmdir(dirname(location.path)).catch((error) => {
+        const sessionDirectory = jsonlSessionDirectory(persistence, header, location)
+        await rm(sessionDirectory, { recursive: true, force: true })
+        await rmdir(dirname(sessionDirectory)).catch((error) => {
           if (!error || (error.code !== 'ENOENT' && error.code !== 'ENOTEMPTY')) throw error
         })
         return
@@ -248,31 +295,48 @@ let ArchiveManagerService = (() => {
 
     async purge(state, sessionId, headers, now) {
       if (this.persistenceBusy(sessionId)) return { state, status: 'scheduled' }
-      const header = headers.get(sessionId)
+      const header = await this.storedHeader(sessionId, headers)
       if (header !== undefined) await this.deletePersistence(header)
+      if (await this.persistenceContains(sessionId)) {
+        throw new Error(`session "${sessionId}" still exists after the deletion attempt`)
+      }
       await this.cleanDerivedState(sessionId)
       return { state: markPurged(state, sessionId, now), status: 'deleted' }
     }
 
-    async reconcile(state, now) {
-      if (!this._started) {
-        const tombstoneIds = Object.keys(state.tombstones)
-        if (tombstoneIds.length > 0) {
-          await this.removeArchivedIds(tombstoneIds)
-          state = clearTombstones(state, tombstoneIds)
-        }
-        this._started = true
+    async recoverTombstones(state, headers) {
+      const finalized = []
+      for (const sessionId of Object.keys(state.tombstones)) {
+        if (this.persistenceBusy(sessionId)) continue
+        const header = await this.storedHeader(sessionId, headers)
+        if (header !== undefined) await this.deletePersistence(header)
+        if (await this.persistenceContains(sessionId)) continue
+        await this.cleanDerivedState(sessionId)
+        finalized.push(sessionId)
       }
-      const headers = new Map((await this.ctx.sessionPersistence.list()).map(header => [header.id, header]))
-      for (const session of this.ctx.get('sessions')?.list() ?? []) headers.set(session.id, session.header)
-      const knownIds = [...headers.keys()]
-      const archivedIds = [...this.ctx.workspaceRegistry.archivedSessionIds]
-      const ghostIds = archivedIds.filter(id => !headers.has(id) && state.entries[id] === undefined)
-      if (ghostIds.length > 0) await this.removeArchivedIds(ghostIds)
-      state = reconcileEntries(state, archivedIds.filter(id => !ghostIds.includes(id)), knownIds, now)
+      if (finalized.length > 0) {
+        await this.removeArchivedIds(finalized)
+        state = clearTombstones(state, finalized)
+      }
+      return state
+    }
+
+    async reconcile(state, now) {
+      const headers = await this.listHeaders()
+      let archivedIds = [...this.ctx.workspaceRegistry.archivedSessionIds]
+      const legacyIds = legacyRecoveryIds(state, archivedIds)
+      if (legacyIds.length > 0) archivedIds = await this.addArchivedIds(legacyIds)
+      state = completeLegacyRecovery(state)
+      state = await this.recoverTombstones(state, headers)
+      archivedIds = [...this.ctx.workspaceRegistry.archivedSessionIds]
+      state = reconcileEntries(state, archivedIds, now)
+      const dueIds = Object.entries(state.entries)
+        .filter(([, entry]) => isDue(entry, now))
+        .map(([sessionId]) => sessionId)
+      for (const sessionId of dueIds) state = markDeleteRequested(state, sessionId, now)
+      if (dueIds.length > 0) await this.saveState(state)
       for (const [sessionId, entry] of Object.entries(state.entries)) {
         if (!isDue(entry, now)) continue
-        state = markDeleteRequested(state, sessionId, now)
         const result = await this.purge(state, sessionId, headers, now)
         state = result.state
       }
@@ -317,7 +381,8 @@ let ArchiveManagerService = (() => {
         let state = await this.reconcile(await this._statePromise, now)
         if (state.entries[sessionId] === undefined) throw new Error(`archived session "${sessionId}" was not found`)
         state = markDeleteRequested(state, sessionId, now)
-        const headers = new Map((await this.ctx.sessionPersistence.list()).map(header => [header.id, header]))
+        await this.saveState(state)
+        const headers = await this.listHeaders()
         const result = await this.purge(state, sessionId, headers, now)
         await this.saveState(result.state)
         return { sessionId, status: result.status }
@@ -328,10 +393,12 @@ let ArchiveManagerService = (() => {
       return this.serialize(async () => {
         const now = Date.now()
         let state = await this.reconcile(await this._statePromise, now)
-        const headers = new Map((await this.ctx.sessionPersistence.list()).map(header => [header.id, header]))
+        const headers = await this.listHeaders()
         const results = []
-        for (const sessionId of Object.keys(state.entries)) {
-          state = markDeleteRequested(state, sessionId, now)
+        const sessionIds = Object.keys(state.entries)
+        for (const sessionId of sessionIds) state = markDeleteRequested(state, sessionId, now)
+        if (sessionIds.length > 0) await this.saveState(state)
+        for (const sessionId of sessionIds) {
           const result = await this.purge(state, sessionId, headers, now)
           state = result.state
           results.push({ sessionId, status: result.status })
@@ -347,9 +414,12 @@ let ArchiveManagerService = (() => {
         let state = await this._statePromise
         const finalizable = sessionIds.filter(id => state.tombstones[id] !== undefined)
         if (finalizable.length === 0) return { finalized: [] }
-        const persisted = new Set((await this.ctx.sessionPersistence.list()).map(header => header.id))
-        const safe = finalizable.filter(id => !persisted.has(id) && !this.persistenceBusy(id))
+        const safe = []
+        for (const id of finalizable) {
+          if (!this.persistenceBusy(id) && !await this.persistenceContains(id)) safe.push(id)
+        }
         if (safe.length > 0) {
+          for (const id of safe) await this.cleanDerivedState(id)
           await this.removeArchivedIds(safe)
           state = clearTombstones(state, safe)
           await this.saveState(state)

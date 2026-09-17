@@ -12,7 +12,7 @@
 | [`dsh-w-right-sidebar`](./dsh-w-right-sidebar) | `0.7.1` | W 系列共用的右侧 Sidebar 宿主：工具栏、工具页返回、收缩栏直达工具，并真实挤压中间对话区域, 已完美兼容**dsh-better-sidebar**; **建议第二个安装** | [下载 `.tgz`](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.7.1.tgz?raw=1) |
 | [`dsh-w-noval-write`](./dsh-w-noval-write) | `0.8.2` | 工作区共享的小说数据层：schema v4 自定义字段、卷章场景大纲、按 ID 局部 AI 工具和持久 `/write`；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.8.2.tgz?raw=1) |
 | [`dsh-w-whale-tail`](./dsh-w-whale-tail) | `0.5.0` | 右侧 Sidebar 中的鲸鱼娘工具：透明主立绘、眨眼与状态动作、流动液体爱心淫乱值和对话记忆窗口 | [下载 `.tgz`](./dsh-w-whale-tail/dsh-w-whale-tail-0.5.0.tgz?raw=1) |
-| [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.1.2` | 在设置中管理已归档对话，支持还原、永久删除、一键清理和真实的 30 天自动清理 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1) |
+| [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.2.0` | 在设置中管理已归档对话，兼容新旧 Harness，并自动续跑历史待删除记录 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.2.0.tgz?raw=1) |
 | [`dsh-w-assistant-refresh`](./dsh-w-assistant-refresh) | `0.2.2` | 在同一会话内重生成指定 AI 回复，不创建新对话并隐藏被替换的旧回复 | [下载 `.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1) |
 | [`dsh-w-chatflow`](./dsh-w-chatflow) | `0.3.2` | 消除超长流式思维链的重复扫描；屏外延迟渲染改为可选，避免长消息向上滚动回弹；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.2.tgz?raw=1) |
 | [`dsh-w-camera-watch`](./dsh-w-camera-watch) | `0.1.0` | 将浏览器摄像头截图作为原生图片工具结果交给模型，可在普通对话和 Goal 中随时监督学习或工作状态 | [下载 `.tgz`](./dsh-w-camera-watch/dsh-w-camera-watch-0.1.0.tgz?raw=1) |
@@ -64,7 +64,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 10. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
 11. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
 12. [`dsh-w-wallpaper-0.2.0.tgz`](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.0.tgz?raw=1)
-13. [`dsh-w-archive-manager-0.1.2.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.1.2.tgz?raw=1)
+13. [`dsh-w-archive-manager-0.2.0.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.2.0.tgz?raw=1)
 14. [`dsh-w-assistant-refresh-0.2.2.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1)
 15. [`dsh-w-knowledge-base-0.4.3.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.4.3.tgz?raw=1)
 16. [`dsh-w-noval-write-0.8.2.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.8.2.tgz?raw=1)

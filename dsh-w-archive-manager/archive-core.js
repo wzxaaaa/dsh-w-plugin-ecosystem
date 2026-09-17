@@ -1,6 +1,6 @@
 export const RETENTION_DAYS = 30
 export const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000
-export const STATE_VERSION = 1
+export const STATE_VERSION = 2
 
 function finiteTimestamp(value, fallback) {
   const number = Number(value)
@@ -35,22 +35,66 @@ export function normalizeState(value, now = Date.now()) {
       if (id.length > 0) tombstones[id] = normalizeTombstone(tombstone, now)
     }
   }
-  return { version: STATE_VERSION, entries, tombstones }
+  return {
+    version: STATE_VERSION,
+    entries,
+    tombstones,
+    legacyRecoveryCompleted: source.version === STATE_VERSION
+      ? source.legacyRecoveryCompleted === true
+      : false,
+  }
 }
 
 export function isDue(entry, now = Date.now(), retentionMs = RETENTION_MS) {
   return entry.deleteRequestedAt !== undefined || now - entry.archivedAt >= retentionMs
 }
 
-export function reconcileEntries(state, archivedIds, knownIds, now = Date.now()) {
+export function reconcileEntries(state, archivedIds, now = Date.now()) {
   const archived = new Set(archivedIds)
-  const known = new Set(knownIds)
   const entries = {}
   for (const id of archived) {
-    if (!known.has(id) || state.tombstones[id] !== undefined) continue
+    if (state.tombstones[id] !== undefined) continue
     entries[id] = state.entries[id] ?? { archivedAt: now }
   }
+  for (const [id, entry] of Object.entries(state.entries)) {
+    if (entry.deleteRequestedAt === undefined || state.tombstones[id] !== undefined) continue
+    entries[id] = entry
+  }
   return { ...state, entries }
+}
+
+export function legacyRecoveryIds(state, archivedIds) {
+  if (state.legacyRecoveryCompleted) return []
+  const archived = new Set(archivedIds)
+  return Object.keys(state.entries).filter(id => !archived.has(id))
+}
+
+export function completeLegacyRecovery(state) {
+  return state.legacyRecoveryCompleted ? state : { ...state, legacyRecoveryCompleted: true }
+}
+
+export function extractSessionHeader(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('session persistence returned an invalid list item')
+  }
+  const candidate = value.header !== null && typeof value.header === 'object' && !Array.isArray(value.header)
+    ? value.header
+    : value
+  if (typeof candidate.id !== 'string' || candidate.id.length === 0) {
+    throw new Error('session persistence returned an item without a valid header id')
+  }
+  return candidate
+}
+
+export function indexSessionHeaders(values) {
+  if (!Array.isArray(values)) throw new Error('session persistence list result must be an array')
+  const headers = new Map()
+  for (const value of values) {
+    const header = extractSessionHeader(value)
+    if (headers.has(header.id)) throw new Error(`session persistence returned duplicate id "${header.id}"`)
+    headers.set(header.id, header)
+  }
+  return headers
 }
 
 export function publicItems(state) {
