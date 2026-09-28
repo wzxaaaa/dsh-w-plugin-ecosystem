@@ -11,11 +11,19 @@
 面板顶部有「助手模式 / 写作模式」开关，切换即时生效、无需重启，选择会持久化（存在 `knowledge-base/mode.json`）。
 
 - **助手模式（默认，原有行为一字未改）**：给 AI 自己的跨会话技术记忆，笔记存在 `knowledge-base/notes/`。
-- **写作模式**：把同一套工具变成**文风素材库**——你把别人写的参考小说 txt 喂进来，AI 动笔前用 `kb_search` 拉几段同类的真人文字做语感锚点，用来压掉"AI 腔"。写作库**完全独立**存放在 `knowledge-base/style-corpus/`，和助手笔记互不干扰。写作模式还会：
+- **写作模式**：把同一套工具变成**文风素材库**——你把别人写的参考小说 txt 喂进来，AI 动笔前用 `kb_search` 拉几段同类的真人文字做语感锚点，用来压掉"AI 腔"。写作库**完全独立**于助手笔记，并且可以拆成**多个互相隔离的素材库**（见下节）。写作模式还会：
   - 注入一段**反 AI 腔的写作协议**（用具体动作/感官/潜台词表现情绪、别用四字套话、长短句交错、删解释性过渡、检索真人段落学语感而非抄情节）；
   - 注入一张**禁用套路表**（面板里可编辑，内置一份常见 AI 腔默认表如"五味杂陈""嘴角勾起一抹弧度"），让模型避开这些被写烂的表达；存在 `knowledge-base/style-corpus/banned-phrases.txt`，一行一个、可手改。
 
 > 素材是用来学**怎么写**的，不是用来抄**写了什么**——借语感，别搬情节。
+
+## 多个素材库（0.5.0 起）
+
+写作模式可以有任意多个**互相隔离**的素材库，例如「成人」「都市」「悬疑」。模型每次只看得到一个库：自动注入的素材索引、`kb_search` / `kb_read` / `kb_import` 的检索和投喂、禁用套路表，全部只作用于当前库，别的库的内容不会混进来。
+
+- 原来的 `knowledge-base/style-corpus/` 保留为第一个库（id `default`），内容不动；之后新建的库放在 `knowledge-base/corpora/<id>/`。库的名单和“当前库”记录在 `knowledge-base/corpora.json`。
+- 面板在写作模式下顶部有素材库切换器；「素材库」标签页可以新建、改名、标记 18+、设为当前、删除（整个目录移到 `knowledge-base/.trash-corpora/`，可手动恢复），以及**按来源（一本书或一个标签）把段落整体移到另一个库**。
+- 「当前库」是普通对话在写作模式下的默认库。`dsh-w-noval-write` 0.11+ 可以给每本书绑定一个库（或选择不使用素材库）：用 `/write` 联动这本书的对话会自动使用绑定的库，不再把整个知识库切到写作模式，所以同时写不同类型的书也不会串。
 
 ## 功能
 
@@ -86,7 +94,7 @@ id 用 UTC 时间生成，所以文件名天然按时间排序；标题只用于
 ```powershell
 npm test
 pnpm pack --config.ignore-scripts=true
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.4.4.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.5.0.tgz
 ```
 
 装好以后重启桌面版（或重新启动 `dsh web`）；重装同一个版本号之前记得先 `remove`，否则 pnpm 不会重新解包。
@@ -129,4 +137,4 @@ node --check .\client.js
 npm test
 ```
 
-`kb-format.js`（文件格式）、`kb-search.js`（打分）、`kb-store.js`（落盘）、`kb-ingest.js`（切段/中文章节识别）、`kb-encoding.js`（编码探测）、`kb-writing.js`（写作模式协议/禁用套路表）、`kb-tools.js`（工具定义）都不依赖 Harness 运行时，可以单独跑单元测试；`index.js` 只负责把它们接到 `ctx.tools`、`ctx.systemPrompt` 和 Typert Remote 上（助手/写作双 store + 一个按模式转发的代理）。编码探测依赖 `jschardet` + `iconv-lite` 两个纯 JS 包（已列入 `dependencies`，随 `dsh plugin add` 自动安装）。
+`kb-format.js`（文件格式）、`kb-search.js`（打分）、`kb-store.js`（落盘）、`kb-ingest.js`（切段/中文章节识别）、`kb-encoding.js`（编码探测）、`kb-writing.js`（写作模式协议/禁用套路表）、`kb-corpora.js`（素材库名单）、`kb-tools.js`（工具定义）都不依赖 Harness 运行时，可以单独跑单元测试；`index.js` 只负责把它们接到 `ctx.tools`、`ctx.systemPrompt` 和 Typert Remote 上（助手 store + 每个素材库一个 store，按对话解析该用哪一个）。编码探测依赖 `jschardet` + `iconv-lite` 两个纯 JS 包（已列入 `dependencies`，随 `dsh plugin add` 自动安装）。

@@ -62,8 +62,11 @@ test('declares the knowledge-base integration without embedding its store', () =
   assert.doesNotMatch(host, /KnowledgeStore/)
 })
 
-test('stores one project per Harness workspace and exposes free model data tools', () => {
-  assert.match(host, /join\(this\.root, 'workspaces', String\(workspaceId\), 'project\.json'\)/)
+test('stores each novel in its own workspace folder, binds conversations, and exposes free model data tools', () => {
+  assert.match(host, /join\(this\.workspaceRecord\(String\(handle\)\)\.path, NOVEL_DIR, NOVEL_STATE_FILE\)/)
+  assert.match(host, /join\(this\.root, 'session-novels\.json'\)/)
+  assert.match(host, /code = 'NOVEL_NOT_BOUND'/)
+  for (const method of ['listNovels', 'getBinding', 'bindNovel', 'unbindNovel', 'createNovel']) assert.match(host, new RegExp(`Remote\\('${method}'\\)`))
   for (const name of ['novel_schema', 'novel_read', 'novel_save_chapter', 'novel_patch', 'novel_character_patch', 'novel_relationship_patch', 'novel_outline_read', 'novel_volume_upsert', 'novel_chapter_upsert', 'novel_chapter_remove', 'novel_chapter_reorder', 'novel_threads', 'novel_thread_upsert', 'novel_thread_remove', 'novel_write', 'novel_advance']) {
     assert.match(host, new RegExp(`name: '${name}'`))
   }

@@ -260,6 +260,56 @@ window.__ModuleLoader__.load({
       ".dshwnw-manuscript-stats b{font-size:16px;font-weight:650;color:var(--nw-fg)}",
       ".dshwnw-manuscript-stats span{color:var(--nw-fg3)}",
       ".dshwnw-preview{max-height:260px;overflow:auto;padding:10px 12px;border:1px solid var(--nw-border);border-radius:8px;background:var(--nw-surface);font-size:12.5px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}",
+      ".dshwnw-corpus{display:flex;flex-direction:column;gap:8px}",
+      ".dshwnw-corpus .dshwnw-toolrow .dshwnw-select{flex:1;width:auto;height:34px}",
+      ".dshwnw-corpus-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--nw-border);border-left:3px solid hsl(var(--nw-hue,220) 60% 52%);border-radius:10px;background:var(--nw-fill)}",
+      ".dshwnw-corpus-card[data-none=true]{border-left-color:var(--nw-fg3)}",
+      ".dshwnw-corpus-dot{width:10px;height:10px;flex:none;border-radius:50%;background:hsl(var(--nw-hue,220) 60% 52%);box-shadow:0 0 0 3px hsl(var(--nw-hue,220) 60% 52% / .16)}",
+      ".dshwnw-corpus-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:650}",
+      ".dshwnw-adult{height:17px;padding:0 5px;border-radius:5px;background:color-mix(in srgb,var(--nw-danger) 14%,transparent);color:var(--nw-danger);font-size:10.5px;font-weight:700;line-height:17px}",
+      ".dshwnw-external{flex:none;display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-bottom:1px solid color-mix(in srgb,var(--nw-warn) 35%,var(--nw-border));background:color-mix(in srgb,var(--nw-warn) 11%,var(--nw-surface));font-size:12.5px;line-height:18px;color:var(--nw-fg);z-index:2}",
+      ".dshwnw-history{display:flex;flex-direction:column;gap:6px}",
+      ".dshwnw-history-item{border:1px solid var(--nw-border);border-radius:10px;background:var(--nw-surface)}",
+      ".dshwnw-history-item[data-current=true]{border-color:color-mix(in srgb,var(--nw-accent) 40%,var(--nw-border))}",
+      ".dshwnw-history-row{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}",
+      ".dshwnw-history-row .dshwnw-chevron{flex:none;margin-left:auto}",
+      ".dshwnw-history-row[aria-expanded=true] .dshwnw-chevron{transform:rotate(90deg)}",
+      ".dshwnw-history-rev{flex:none;min-width:34px;height:20px;padding:0 5px;border-radius:6px;background:var(--nw-fill);color:var(--nw-fg2);font:600 11px/20px ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center}",
+      ".dshwnw-history-title{display:flex;align-items:center;gap:6px;min-width:0}",
+      ".dshwnw-history-op{min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".dshwnw-history-body{display:flex;flex-direction:column;gap:8px;padding:4px 10px 10px;border-top:1px solid var(--nw-border)}",
+      ".dshwnw-actor{flex:none;height:18px;padding:0 6px;border-radius:5px;font-size:10.5px;font-weight:700;line-height:18px}",
+      ".dshwnw-actor[data-actor=ai]{background:color-mix(in srgb,#8a5cf6 15%,transparent);color:#7c4ddc}",
+      ".dshwnw-actor[data-actor=user]{background:var(--nw-accent-soft);color:var(--nw-accent)}",
+      ".dshwnw-actor[data-actor=baseline]{background:var(--nw-fill);color:var(--nw-fg2)}",
+      ".dshwnw-diff{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto}",
+      ".dshwnw-diff-section{display:flex;flex-direction:column;gap:3px}",
+      ".dshwnw-diff-title{font-size:12px;font-weight:650;color:var(--nw-fg)}",
+      ".dshwnw-diff-line{font-size:12px;line-height:18px;color:var(--nw-fg2);overflow-wrap:anywhere}",
+      ".dshwnw-diff-line[data-kind=added]{color:var(--nw-ok)}",
+      ".dshwnw-diff-line[data-kind=removed]{color:var(--nw-danger)}",
+      ".dshwnw-diff-value{display:grid;grid-template-columns:minmax(0,1fr);gap:1px;padding:6px 8px;border-radius:7px;background:var(--nw-fill);font-size:12px;line-height:17px}",
+      ".dshwnw-diff-value b{font-weight:600;color:var(--nw-fg)}",
+      ".dshwnw-diff-before{color:var(--nw-danger);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--nw-danger) 45%,transparent);overflow-wrap:anywhere}",
+      ".dshwnw-diff-arrow{display:none}",
+      ".dshwnw-diff-after{color:var(--nw-ok);overflow-wrap:anywhere}",
+      ".dshwnw-library{display:flex;flex-direction:column;gap:10px}",
+      ".dshwnw-library-hero{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px 6px;text-align:center}",
+      ".dshwnw-library-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:var(--nw-accent-soft);color:var(--nw-accent)}",
+      ".dshwnw-library-list{display:flex;flex-direction:column;gap:6px}",
+      ".dshwnw-novel{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--nw-border);border-radius:12px;background:var(--nw-surface)}",
+      ".dshwnw-novel[data-current=true]{border-color:color-mix(in srgb,var(--nw-accent) 45%,var(--nw-border));box-shadow:0 0 0 3px var(--nw-accent-soft)}",
+      ".dshwnw-novel .dshwnw-list-copy{flex:1;gap:1px}",
+      ".dshwnw-novel-cover{width:36px;height:46px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:4px 8px 8px 4px;background:linear-gradient(135deg,hsl(var(--nw-hue,220) 55% 48%),hsl(calc(var(--nw-hue,220) + 30) 55% 38%));box-shadow:inset 3px 0 0 rgba(0,0,0,.18);color:#fff;font-size:16px;font-weight:700}",
+      ".dshwnw-novel-title{font-size:13.5px;font-weight:650;line-height:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".dshwnw-novel-folder{display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--nw-fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".dshwnw-novel-folder svg{flex:none;color:var(--nw-warn)}",
+      ".dshwnw-library-new{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px dashed color-mix(in srgb,var(--nw-accent) 40%,var(--nw-border));border-radius:12px;background:color-mix(in srgb,var(--nw-accent) 3%,var(--nw-surface))}",
+      ".dshwnw-library-preview{display:flex;align-items:flex-start;gap:6px;font-size:11.5px;line-height:17px;color:var(--nw-fg2);overflow-wrap:anywhere}",
+      ".dshwnw-library-preview svg{flex:none;margin-top:2px;color:var(--nw-warn)}",
+      "button.dshwnw-workspace{border:0;font:inherit;font-size:11.5px;cursor:pointer}",
+      "button.dshwnw-workspace:hover{color:var(--nw-accent)}",
+      "button.dshwnw-workspace:before{background:var(--nw-warn)}",
       "@container novel-panel (max-width:430px){.dshwnw-chapter-meta{grid-template-columns:64px minmax(0,1fr)}.dshwnw-chapter-meta>:last-child{grid-column:1 / -1}.dshwnw-custom-row{grid-template-columns:minmax(80px,.7fr) minmax(100px,1.3fr) 28px}.dshwnw-toolbar{padding-inline:12px}.dshwnw-body{padding-inline:10px}.dshwnw-card{padding:11px}.dshwnw-group-body{padding-inline:11px}}",
       "@container novel-panel (max-width:340px){.dshwnw-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dshwnw-grid-3{grid-template-columns:minmax(0,1fr)}.dshwnw-timeline{grid-template-columns:80px minmax(0,1fr)}.dshwnw-grid,.dshwnw-chapter-meta{grid-template-columns:minmax(0,1fr)}.dshwnw-chapter-meta>:last-child{grid-column:auto}.dshwnw-setting-card{grid-template-columns:1fr}.dshwnw-footer{gap:6px}.dshwnw-footer .dshwnw-button,.dshwnw-footer .dshwnw-primary{padding:0 9px}}",
     ].join("\n");
@@ -305,6 +355,16 @@ window.__ModuleLoader__.load({
         descriptor("clearLink", [parameter("sessionId"), parameter("expectedRevision")]),
         descriptor("listManuscripts", [parameter("workspaceId")]),
         descriptor("readManuscript", [parameter("workspaceId"), parameter("filename")]),
+        descriptor("listStyleCorpora", []),
+        descriptor("listNovels", [parameter("workspaceId")]),
+        descriptor("getBinding", [parameter("sessionId"), parameter("workspaceId")]),
+        descriptor("bindNovel", [parameter("sessionId"), parameter("workspaceId"), parameter("novelId")]),
+        descriptor("unbindNovel", [parameter("sessionId")]),
+        descriptor("createNovel", [parameter("sessionId"), parameter("workspaceId"), parameter("input")]),
+        descriptor("getRevision", [parameter("workspaceId")]),
+        descriptor("listHistory", [parameter("workspaceId")]),
+        descriptor("compareSnapshot", [parameter("workspaceId"), parameter("revision")]),
+        descriptor("restoreSnapshot", [parameter("workspaceId"), parameter("revision"), parameter("expectedRevision")]),
       ],
     };
 
@@ -349,6 +409,7 @@ window.__ModuleLoader__.load({
       section_outline: ["M7.5 5.5h8", "M7.5 10h8", "M7.5 14.5h8", "M4.2 5.5h.1", "M4.2 10h.1", "M4.2 14.5h.1"],
       section_scene: ["M3.5 7.5h13v8a1 1 0 01-1 1h-11a1 1 0 01-1-1v-8z", "M3.5 7.5l1.2-3.3h11l-.7 3.3", "M8 4.2l-1 3.3", "M12.3 4.2l-1 3.3"],
       section_threads: ["M5 16.5V4", "M5 4.5h8.5l-1.8 3 1.8 3H5"],
+      folder: ["M3 6.5V15a1 1 0 001 1h12a1 1 0 001-1V7.5a1 1 0 00-1-1h-6.5L8 4.5H4a1 1 0 00-1 1z"],
       section_settings: ["M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z", "M10 3v1.8", "M10 15.2V17", "M3 10h1.8", "M15.2 10H17", "M5 5l1.3 1.3", "M13.7 13.7L15 15", "M5 15l1.3-1.3", "M13.7 6.3L15 5"],
     };
     function NwIcon(props) {
@@ -650,6 +711,65 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Which knowledge-base style corpus this book writes with.
+    function StyleCorpusField(props) {
+      var t = props.t;
+      var slot = React.useState({ status: "loading", available: false, corpora: [], active: "" });
+      var listing = slot[0];
+      var setListing = slot[1];
+      var canList = Boolean(props.writer && typeof props.writer.listStyleCorpora === "function");
+      function refresh() {
+        if (!canList) { setListing({ status: "ready", available: false, corpora: [], active: "" }); return; }
+        setListing(function (current) { return Object.assign({}, current, { status: "loading" }); });
+        props.writer.listStyleCorpora().then(function (value) {
+          setListing({ status: "ready", available: Boolean(value && value.available), corpora: (value && value.corpora) || [], active: (value && value.active) || "" });
+        }).catch(function (error) {
+          setListing(function (current) { return Object.assign({}, current, { status: "error", error: failureText(error) }); });
+        });
+      }
+      React.useEffect(refresh, []);
+      var value = props.value || "";
+      var bound = value && value !== "none" ? listing.corpora.find(function (item) { return item.id === value; }) : null;
+      var fallback = listing.corpora.find(function (item) { return item.id === listing.active; }) || null;
+      var effective = value === "none" ? null : bound || fallback;
+      var missing = listing.status === "ready" && value && value !== "none" && !bound;
+      if (listing.status === "ready" && !listing.available) {
+        return React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("corpusUnavailable"));
+      }
+      return React.createElement("div", { className: "dshwnw-corpus" },
+        React.createElement("div", { className: "dshwnw-toolrow" },
+          React.createElement("select", {
+            className: "dshwnw-select", value: value, "aria-label": t("corpusField"),
+            onChange: function (event) { props.onChange(event.target.value); },
+          },
+            React.createElement("option", { value: "" }, t("corpusFollow") + (fallback ? "（" + fallback.name + "）" : "")),
+            React.createElement("option", { value: "none" }, t("corpusNone")),
+            missing ? React.createElement("option", { value: value }, t("corpusMissingOption")) : null,
+            listing.corpora.map(function (item) {
+              return React.createElement("option", { key: item.id, value: item.id }, item.name + (item.adult ? " · 18+" : "") + " · " + item.notes + " " + t("corpusPassages"));
+            })
+          ),
+          React.createElement(IconButton, { icon: "refresh", label: t("corpusRefresh"), disabled: listing.status === "loading", onClick: refresh })
+        ),
+        missing ? React.createElement("div", { className: "dshwnw-warning" }, t("corpusMissing")) : null,
+        listing.status === "error" ? React.createElement("div", { className: "dshwnw-warning" }, listing.error) : null,
+        effective
+          ? React.createElement("div", { className: "dshwnw-corpus-card", style: { "--nw-hue": effective.adult ? 348 : 140 + (hueOf(effective.id) % 160) } },
+            React.createElement("span", { className: "dshwnw-corpus-dot", "aria-hidden": true }),
+            React.createElement("span", { className: "dshwnw-list-copy" },
+              React.createElement("span", { className: "dshwnw-corpus-title" }, effective.name,
+                effective.adult ? React.createElement("span", { className: "dshwnw-adult" }, "18+") : null,
+                bound ? null : React.createElement("span", { className: "dshwnw-pill" }, t("corpusFollowing"))),
+              React.createElement("span", { className: "dshwnw-list-meta" }, effective.notes + " " + t("corpusPassages") + (effective.description ? " · " + effective.description : ""))
+            )
+          )
+          : value === "none"
+            ? React.createElement("div", { className: "dshwnw-corpus-card", "data-none": "true" }, React.createElement("span", { className: "dshwnw-list-meta" }, t("corpusNoneHint")))
+            : null,
+        React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("corpusHint"))
+      );
+    }
+
     function ProjectTab(props) {
       var p = props.project;
       var set = props.set;
@@ -667,6 +787,9 @@ window.__ModuleLoader__.load({
             React.createElement(InputField, { label: props.t("contentRating"), value: p.contentRating, onChange: function (v) { set("contentRating", v); } })
           ),
           React.createElement(TextField, { label: props.t("premise"), value: p.premise, onChange: function (v) { set("premise", v); } })
+        ),
+        React.createElement(FieldGroup, { title: props.t("corpusField") },
+          React.createElement(StyleCorpusField, { t: props.t, writer: props.writer, value: p.styleCorpusId, onChange: function (v) { set("styleCorpusId", v); } })
         ),
         React.createElement(FieldGroup, { title: props.t("groupWritingContract") },
           React.createElement(TextField, { label: props.t("styleGuide"), value: p.styleGuide, rows: 6, onChange: function (v) { set("styleGuide", v); } }),
@@ -1131,6 +1254,8 @@ window.__ModuleLoader__.load({
         });
       }
       React.useEffect(function () { scan(); setPreviews({}); }, [props.workspaceId]);
+      // A saved chapter changes the revision; recount without closing previews.
+      React.useEffect(function () { if (files.status === "ready") scan(); }, [props.revision]);
       var byName = {};
       files.list.forEach(function (file) { byName[file.filename] = file; });
       var owners = {};
@@ -1643,6 +1768,190 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // ── version history ─────────────────────────────────────────────────
+    var SECTION_ORDER = ["project", "genreProfile", "characters", "relationships", "world", "plot", "volumes", "chapters", "threads", "scene", "progress"];
+    var FIELD_LABEL_KEYS = {
+      project: { title: "bookTitle", styleCorpusId: "corpusField" },
+      scene: { time: "sceneTime", goal: "sceneGoal", conflict: "sceneConflict", outcome: "sceneOutcome", povCharacterId: "scenePov" },
+      plot: { stakes: "plotStakes", conflicts: "worldConflicts" },
+      world: { conflicts: "worldConflicts" },
+    };
+
+    function fieldLabel(section, field, t) {
+      var key = (FIELD_LABEL_KEYS[section] || {})[field] || field;
+      var label = t(key);
+      return label === key ? field : label;
+    }
+
+    // "角色 +1 −1 ~2 · 世界 3 项"
+    function describeChanges(changes, t) {
+      if (!Array.isArray(changes) || changes.length === 0) return "";
+      return changes.slice().sort(function (a, b) { return SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section); }).map(function (change) {
+        var name = t("section_" + change.section);
+        if (change.fields && change.added === undefined) return name + " " + t("fieldsChanged").replace("{n}", change.changed);
+        var parts = [];
+        if (change.added) parts.push("+" + change.added);
+        if (change.removed) parts.push("−" + change.removed);
+        if (change.changed) parts.push("~" + change.changed);
+        if (change.reordered) parts.push(t("reordered"));
+        return name + " " + parts.join(" ");
+      }).join(" · ");
+    }
+
+    function operationLabel(entry, t) {
+      if (!entry) return "";
+      if (entry.operation === "restore") return t("op_restore").replace("{n}", entry.restoredFrom);
+      var key = "op_" + entry.operation;
+      var label = t(key);
+      return label === key ? entry.operation : label;
+    }
+
+    function relativeTime(iso, t) {
+      var time = Date.parse(iso);
+      if (!time) return "";
+      var seconds = Math.round((Date.now() - time) / 1000);
+      if (seconds < 45) return t("justNow");
+      if (seconds < 3600) return t("minutesAgo").replace("{n}", Math.round(seconds / 60));
+      if (seconds < 86400) return t("hoursAgo").replace("{n}", Math.round(seconds / 3600));
+      var date = new Date(time);
+      function pad(value) { return String(value).padStart(2, "0"); }
+      return (date.getMonth() + 1) + "-" + pad(date.getDate()) + " " + pad(date.getHours()) + ":" + pad(date.getMinutes());
+    }
+
+    function ActorPill(props) {
+      var actor = props.actor === "ai" ? "ai" : props.actor === "baseline" ? "baseline" : "user";
+      return React.createElement("span", { className: "dshwnw-actor", "data-actor": actor }, props.t("actor_" + actor));
+    }
+
+    function SnapshotDiff(props) {
+      var t = props.t;
+      if (props.sections.length === 0) return React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("snapshotSame"));
+      return React.createElement("div", { className: "dshwnw-diff" }, props.sections.map(function (change) {
+        var rows = [];
+        (change.values || []).forEach(function (value) {
+          rows.push(React.createElement("div", { className: "dshwnw-diff-value", key: "v" + value.field },
+            React.createElement("b", null, fieldLabel(change.section, value.field, t)),
+            React.createElement("span", { className: "dshwnw-diff-before" }, value.before || t("emptyValue")),
+            React.createElement("span", { className: "dshwnw-diff-arrow", "aria-hidden": true }, "→"),
+            React.createElement("span", { className: "dshwnw-diff-after" }, value.after || t("emptyValue"))
+          ));
+        });
+        if (change.fields && !change.values) rows.push(React.createElement("div", { className: "dshwnw-diff-line", key: "f" }, change.fields.map(function (field) { return fieldLabel(change.section, field, t); }).join("、")));
+        (change.addedItems || []).forEach(function (label, index) { rows.push(React.createElement("div", { className: "dshwnw-diff-line", "data-kind": "added", key: "a" + index }, "+ " + label)); });
+        (change.removedItems || []).forEach(function (label, index) { rows.push(React.createElement("div", { className: "dshwnw-diff-line", "data-kind": "removed", key: "r" + index }, "− " + label)); });
+        (change.changedItems || []).forEach(function (item, index) {
+          rows.push(React.createElement("div", { className: "dshwnw-diff-line", "data-kind": "changed", key: "c" + index }, "~ " + item.label + "：" + item.fields.map(function (field) { return fieldLabel(change.section, field, t); }).join("、")));
+        });
+        if (change.reordered) rows.push(React.createElement("div", { className: "dshwnw-diff-line", key: "o" }, t("reorderedLong")));
+        return React.createElement("div", { className: "dshwnw-diff-section", key: change.section },
+          React.createElement("div", { className: "dshwnw-diff-title" }, t("section_" + change.section)),
+          rows
+        );
+      }));
+    }
+
+    function HistoryPanel(props) {
+      var t = props.t;
+      var writer = props.writer;
+      var listSlot = React.useState({ status: "loading", entries: [], limit: 0 });
+      var list = listSlot[0];
+      var setList = listSlot[1];
+      var openSlot = React.useState(null);
+      var open = openSlot[0];
+      var setOpen = openSlot[1];
+      var compareSlot = React.useState({});
+      var compares = compareSlot[0];
+      var setCompares = compareSlot[1];
+      var armedSlot = React.useState(null);
+      var armed = armedSlot[0];
+      var setArmed = armedSlot[1];
+      var restoringSlot = React.useState(false);
+      var restoring = restoringSlot[0];
+      var setRestoring = restoringSlot[1];
+      var available = Boolean(writer && typeof writer.listHistory === "function");
+      React.useEffect(function () {
+        if (!available) return;
+        var stopped = false;
+        writer.listHistory(props.workspaceId).then(function (value) {
+          if (!stopped) { setList({ status: "ready", entries: value.entries || [], limit: value.limit || 0 }); setCompares({}); }
+        }).catch(function (error) {
+          if (!stopped) setList({ status: "error", entries: [], limit: 0, error: failureText(error) });
+        });
+        return function () { stopped = true; };
+      }, [props.workspaceId, props.revision]);
+      function toggle(revision) {
+        setArmed(null);
+        if (open === revision) { setOpen(null); return; }
+        setOpen(revision);
+        if (revision === props.revision || compares[revision]) return;
+        setCompares(function (all) { var next = Object.assign({}, all); next[revision] = { status: "loading" }; return next; });
+        writer.compareSnapshot(props.workspaceId, revision).then(function (value) {
+          setCompares(function (all) { var next = Object.assign({}, all); next[revision] = { status: "ready", sections: value.sections || [] }; return next; });
+        }).catch(function (error) {
+          setCompares(function (all) { var next = Object.assign({}, all); next[revision] = { status: "error", error: failureText(error) }; return next; });
+        });
+      }
+      function restore(revision) {
+        setRestoring(true);
+        writer.restoreSnapshot(props.workspaceId, revision, props.revision).then(function (next) {
+          setRestoring(false);
+          setArmed(null);
+          setOpen(null);
+          props.onRestored(next, revision);
+        }).catch(function (error) {
+          setRestoring(false);
+          props.onError(t("restoreFailed") + ": " + failureText(error));
+        });
+      }
+      if (!available) return null;
+      return React.createElement("div", { className: "dshwnw-history" },
+        list.status === "loading" ? React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("loading")) : null,
+        list.status === "error" ? React.createElement("div", { className: "dshwnw-warning" }, list.error) : null,
+        list.status === "ready" && list.entries.length === 0 ? React.createElement("div", { className: "dshwnw-empty" }, t("historyEmpty")) : null,
+        list.entries.map(function (entry) {
+          var current = entry.revision === props.revision;
+          var expanded = open === entry.revision;
+          var compare = compares[entry.revision];
+          return React.createElement("div", { className: "dshwnw-history-item", key: entry.revision, "data-open": expanded ? "true" : undefined, "data-current": current ? "true" : undefined },
+            React.createElement("button", { type: "button", className: "dshwnw-history-row", "aria-expanded": expanded, onClick: function () { toggle(entry.revision); } },
+              React.createElement("span", { className: "dshwnw-history-rev" }, "r" + entry.revision),
+              React.createElement("span", { className: "dshwnw-list-copy" },
+                React.createElement("span", { className: "dshwnw-history-title" },
+                  React.createElement(ActorPill, { actor: entry.actor, t: t }),
+                  React.createElement("span", { className: "dshwnw-history-op" }, operationLabel(entry, t)),
+                  current ? React.createElement("span", { className: "dshwnw-pill", "data-tone": "active" }, t("historyCurrent")) : null
+                ),
+                React.createElement("span", { className: "dshwnw-list-meta" }, [relativeTime(entry.at, t), describeChanges(entry.changes, t)].filter(Boolean).join(" · "))
+              ),
+              React.createElement(NwIcon, { name: "chevron", size: 14, className: "dshwnw-chevron" })
+            ),
+            expanded ? React.createElement("div", { className: "dshwnw-history-body" },
+              current
+                ? React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("historyIsCurrent"))
+                : React.createElement(React.Fragment, null,
+                  React.createElement("div", { className: "dshwnw-subtitle" }, t("restoreWould").replace("{n}", entry.revision)),
+                  !compare || compare.status === "loading" ? React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("loading"))
+                    : compare.status === "error" ? React.createElement("div", { className: "dshwnw-warning" }, compare.error)
+                    : React.createElement(SnapshotDiff, { sections: compare.sections, t: t }),
+                  props.locked ? React.createElement("div", { className: "dshwnw-warning" }, t("settingsDirty")) : null,
+                  armed === entry.revision
+                    ? React.createElement("div", { className: "dshwnw-confirm" },
+                      React.createElement("span", null, t("restoreConfirm")),
+                      React.createElement("div", { className: "dshwnw-setting-actions" },
+                        React.createElement("button", { type: "button", className: "dshwnw-button", disabled: restoring, onClick: function () { setArmed(null); } }, t("cancel")),
+                        React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: restoring || props.locked, onClick: function () { restore(entry.revision); } }, restoring ? t("working") : t("restoreAction").replace("{n}", entry.revision))
+                      ))
+                    : React.createElement("div", { className: "dshwnw-setting-actions" },
+                      React.createElement("button", { type: "button", className: "dshwnw-button", disabled: props.locked || !compare || compare.status !== "ready" || compare.sections.length === 0, onClick: function () { setArmed(entry.revision); } },
+                        React.createElement(NwIcon, { name: "undo", size: 14 }), t("restoreAction").replace("{n}", entry.revision)))
+                )
+            ) : null
+          );
+        }),
+        list.limit ? React.createElement("div", { className: "dshwnw-legend" }, t("historyLimitHint").replace("{n}", list.limit)) : null
+      );
+    }
+
     function SettingIcon(props) {
       var content = props.kind === "export"
         ? [
@@ -1661,6 +1970,31 @@ window.__ModuleLoader__.load({
       return React.createElement("svg", { viewBox: "0 0 20 20", "aria-hidden": true }, content);
     }
 
+    function BindingSettings(props) {
+      var t = props.t;
+      var library = props.library;
+      var switchingSlot = React.useState(false);
+      var switching = switchingSlot[0];
+      var setSwitching = switchingSlot[1];
+      var armedSlot = React.useState(false);
+      var armed = armedSlot[0];
+      var setArmed = armedSlot[1];
+      var binding = library.binding;
+      var current = library.novels.find(function (novel) { return binding && novel.handle === binding.handle; }) || (binding ? { id: binding.novelId, handle: binding.handle, title: binding.title, folder: binding.folder } : null);
+      return React.createElement("div", { className: "dshwnw-library" },
+        React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("libBindingHint")),
+        current ? React.createElement(NovelCard, { novel: current, t: t, current: true }) : null,
+        React.createElement("div", { className: "dshwnw-actions" },
+          React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { setSwitching(!switching); setArmed(false); } }, switching ? t("cancel") : t("libSwitch")),
+          armed
+            ? React.createElement("button", { type: "button", className: "dshwnw-danger", disabled: library.busy, onClick: function () { setArmed(false); library.onUnbind(); } }, t("libUnbindConfirm"))
+            : React.createElement("button", { type: "button", className: "dshwnw-button", disabled: library.busy, onClick: function () { setArmed(true); } }, t("libUnbind"))
+        ),
+        armed ? React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("libUnbindHint")) : null,
+        switching ? React.createElement(NovelLibrary, Object.assign({ t: t, mode: "settings", currentHandle: binding ? binding.handle : "" }, library)) : null
+      );
+    }
+
     function SettingsTab(props) {
       var armedSlot = React.useState(false);
       var armed = armedSlot[0];
@@ -1672,6 +2006,16 @@ window.__ModuleLoader__.load({
         React.createElement("div", { className: "dshwnw-section-title" }, props.t("settingsTitle")),
         React.createElement("div", { className: "dshwnw-section-hint" }, props.t("settingsHint")),
         props.dirty ? React.createElement("div", { className: "dshwnw-warning" }, props.t("settingsDirty")) : null,
+        props.library ? React.createElement(FieldGroup, { title: props.t("libThisConversation") },
+          React.createElement(BindingSettings, { t: props.t, library: props.library })
+        ) : null,
+        React.createElement(FieldGroup, { title: props.t("historyTitle") },
+          React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, props.t("historyHint")),
+          React.createElement(HistoryPanel, {
+            t: props.t, writer: props.writer, workspaceId: props.workspaceId, revision: props.revision, locked: locked,
+            onRestored: props.onRestored, onError: props.onError,
+          })
+        ),
         React.createElement("div", { className: "dshwnw-settings" },
           React.createElement("div", { className: "dshwnw-setting-card" },
             React.createElement("div", { className: "dshwnw-setting-icon", "aria-hidden": true }, React.createElement(SettingIcon, { kind: "export" })),
@@ -1809,6 +2153,81 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // ── novel library: which book this conversation writes ─────────────────
+    function folderPreview(title) {
+      var name = String(title || "").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().replace(/^[.\s]+|[.\s]+$/g, "").slice(0, 60).trim();
+      return name || "未命名小说";
+    }
+
+    function NovelCard(props) {
+      var t = props.t;
+      var novel = props.novel;
+      var meta = [
+        novel.chapters ? t("libChapters").replace("{n}", novel.chapters) : "",
+        novel.threads ? t("libThreads").replace("{n}", novel.threads) : "",
+        novel.sessions ? t("libSessions").replace("{n}", novel.sessions) : "",
+        novel.updatedAt ? relativeTime(novel.updatedAt, t) : "",
+      ].filter(Boolean).join(" · ");
+      return React.createElement("div", { className: "dshwnw-novel", "data-current": props.current ? "true" : undefined },
+        React.createElement("span", { className: "dshwnw-novel-cover", style: { "--nw-hue": hueOf(novel.id) }, "aria-hidden": true }, (novel.title || "?").slice(0, 1)),
+        React.createElement("span", { className: "dshwnw-list-copy" },
+          React.createElement("span", { className: "dshwnw-novel-title" }, novel.title || novel.folder),
+          React.createElement("span", { className: "dshwnw-novel-folder" }, React.createElement(NwIcon, { name: "folder", size: 12 }), novel.folder + "/"),
+          meta ? React.createElement("span", { className: "dshwnw-list-meta" }, meta) : null
+        ),
+        props.current
+          ? React.createElement("span", { className: "dshwnw-pill", "data-tone": "active" }, t("libCurrent"))
+          : React.createElement("button", { type: "button", className: "dshwnw-button", disabled: props.disabled, onClick: props.onBind }, t("libBind"))
+      );
+    }
+
+    function NovelLibrary(props) {
+      var t = props.t;
+      var titleSlot = React.useState("");
+      var title = titleSlot[0];
+      var setTitle = titleSlot[1];
+      var creatingSlot = React.useState(props.novels.length === 0);
+      var creating = creatingSlot[0];
+      var setCreating = creatingSlot[1];
+      var canAct = Boolean(props.sessionId) && !props.busy;
+      var others = props.novels.filter(function (novel) { return novel.handle !== props.currentHandle; });
+      return React.createElement("div", { className: "dshwnw-library" },
+        props.mode === "picker" ? React.createElement(React.Fragment, null,
+          React.createElement("div", { className: "dshwnw-library-hero" },
+            React.createElement("span", { className: "dshwnw-library-icon", "aria-hidden": true }, React.createElement(IconQuill, null)),
+            React.createElement("div", { className: "dshwnw-section-title" }, t("libPickTitle")),
+            React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("libPickHint").replace("{workspace}", props.workspaceTitle))
+          )
+        ) : null,
+        props.missing ? React.createElement("div", { className: "dshwnw-warning" }, t("libMissing").replace("{folder}", props.missing.folder || props.missing.novelId)) : null,
+        !props.sessionId ? React.createElement("div", { className: "dshwnw-warning" }, t("libNoSession")) : null,
+        others.length > 0
+          ? React.createElement("div", { className: "dshwnw-library-list" },
+            React.createElement("div", { className: "dshwnw-divider" }, props.mode === "picker" ? t("libExisting").replace("{n}", others.length) : t("libSwitchTo")),
+            others.map(function (novel) {
+              return React.createElement(NovelCard, { key: novel.handle, novel: novel, t: t, disabled: !canAct, onBind: function () { props.onBind(novel.id); } });
+            }))
+          : props.mode === "picker" ? React.createElement("div", { className: "dshwnw-empty" }, t("libEmpty")) : null,
+        creating
+          ? React.createElement("form", {
+            className: "dshwnw-library-new",
+            onSubmit: function (event) { event.preventDefault(); if (title.trim() && canAct) props.onCreate({ title: title.trim() }); },
+          },
+            React.createElement("div", { className: "dshwnw-subtitle" }, t("libNewTitle")),
+            React.createElement("input", { className: "dshwnw-input", value: title, maxLength: 120, autoFocus: props.novels.length > 0, placeholder: t("libNewPlaceholder"), "aria-label": t("bookTitle"), onChange: function (event) { setTitle(event.target.value); } }),
+            React.createElement("div", { className: "dshwnw-library-preview" },
+              React.createElement(NwIcon, { name: "folder", size: 13 }),
+              React.createElement("span", null, t("libFolderPreview").replace("{workspace}", props.workspaceTitle).replace("{folder}", folderPreview(title) + "/"))
+            ),
+            React.createElement("div", { className: "dshwnw-actions" },
+              props.novels.length > 0 ? React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { setCreating(false); setTitle(""); } }, t("cancel")) : null,
+              React.createElement("button", { type: "submit", className: "dshwnw-primary", disabled: !canAct || !title.trim() }, props.busy ? t("working") : t("libCreate"))
+            )
+          )
+          : React.createElement(AddButton, { onClick: function () { setCreating(true); } }, t("libNew"))
+      );
+    }
+
     function NovelWriterPanel(props) {
       var t = typeof props.t === "function" ? props.t : function (key) { return key; };
       var writer = props.writer;
@@ -1823,8 +2242,30 @@ window.__ModuleLoader__.load({
         if (current) return current;
         return value.recentWorkspaceId == null ? null : items.find(function (item) { return String(item.workspaceId) === String(value.recentWorkspaceId); }) || null;
       });
-      var workspaceId = workspace && workspace.workspaceId != null ? String(workspace.workspaceId) : null;
-      var workspaceTitle = workspace ? (workspace.title || workspace.path || workspaceId) : "";
+      var hostWorkspaceId = workspace && workspace.workspaceId != null ? String(workspace.workspaceId) : null;
+      var workspaceTitle = workspace ? (workspace.title || workspace.path || hostWorkspaceId) : "";
+      // Each conversation is bound to one novel folder in the workspace. Hosts
+      // older than 0.13 have no bindings; there the workspace is the novel.
+      var canBind = typeof writer.getBinding === "function";
+      var bindingKey = (sessionId || "") + "|" + (hostWorkspaceId || "");
+      var bindingSlot = React.useState({ status: "idle", key: "", binding: null, novels: [], missing: null });
+      var bindingInfo = bindingSlot[0];
+      var setBindingInfo = bindingSlot[1];
+      var libraryBusySlot = React.useState(false);
+      var libraryBusy = libraryBusySlot[0];
+      var setLibraryBusy = libraryBusySlot[1];
+      var refreshBinding = React.useCallback(function () {
+        if (!canBind || !hostWorkspaceId) return Promise.resolve();
+        var key = bindingKey;
+        return writer.getBinding(sessionId, hostWorkspaceId).then(function (value) {
+          setBindingInfo({ status: "ready", key: key, binding: value.binding || null, novels: value.novels || [], missing: value.missing || null });
+        }).catch(function (error) {
+          setBindingInfo({ status: "error", key: key, binding: null, novels: [], missing: null, error: failureText(error) });
+        });
+      }, [writer, sessionId, hostWorkspaceId]);
+      React.useEffect(function () { if (canBind) refreshBinding(); }, [refreshBinding]);
+      var bindingReady = bindingInfo.key === bindingKey && bindingInfo.status !== "idle";
+      var workspaceId = !canBind ? hostWorkspaceId : bindingReady && bindingInfo.binding ? bindingInfo.binding.handle : null;
       var stateSlot = React.useState(null);
       var state = stateSlot[0];
       var setState = stateSlot[1];
@@ -1849,6 +2290,16 @@ window.__ModuleLoader__.load({
       var requestRef = React.useRef(0);
       var dirtyRef = React.useRef(false);
       var draftCacheRef = React.useRef(new Map());
+      var externalSlot = React.useState(null);
+      var external = externalSlot[0];
+      var setExternal = externalSlot[1];
+      var revisionRef = React.useRef(-1);
+      var busyRef = React.useRef(false);
+      var ignoredRevisionRef = React.useRef(-1);
+      // A message to show once the newly bound novel has loaded.
+      var pendingNoticeRef = React.useRef(null);
+      revisionRef.current = state && String(state.workspace && state.workspace.id) === workspaceId ? state.revision : -1;
+      busyRef.current = busy;
 
       var load = React.useCallback(function (forceRemote) {
         if (forceRemote && dirtyRef.current && typeof window.confirm === "function" && !window.confirm(t("discardConfirm"))) return;
@@ -1879,7 +2330,8 @@ window.__ModuleLoader__.load({
           setDirty(false);
           dirtyRef.current = false;
           draftCacheRef.current.delete(workspaceId);
-          setNotice(null);
+          setNotice(pendingNoticeRef.current ? { kind: "ok", text: pendingNoticeRef.current } : null);
+          pendingNoticeRef.current = null;
         }).catch(function (error) {
           if (requestId === requestRef.current) setNotice({ kind: "error", text: t("loadFailed") + ": " + failureText(error) });
         }).finally(function () { if (requestId === requestRef.current) setBusy(false); });
@@ -1889,6 +2341,60 @@ window.__ModuleLoader__.load({
         load(false);
         return function () { requestRef.current += 1; };
       }, [load]);
+
+      // "AI · 更新线索：线索 +1", or "" when the change is not in the history.
+      function externalSummary(info) {
+        var last = info && info.last;
+        if (!last) return "";
+        var who = last.actor === "ai" ? t("actor_ai") : t("actor_user");
+        return who + " · " + operationLabel(last, t) + "：" + (describeChanges(last.changes, t) || t("externalSomething"));
+      }
+      function externalMessage(info) {
+        var summary = externalSummary(info);
+        return summary ? t("externalApplied").replace("{what}", summary) : t("externalAppliedPlain");
+      }
+
+      // Take the stored project when something outside this panel (the AI,
+      // another tab) saved a newer revision.
+      function pullRemote(info) {
+        var requestId = ++requestRef.current;
+        writer.getState(workspaceId).then(function (next) {
+          if (requestId !== requestRef.current) return;
+          setState(next);
+          setDraft(clone(next.project));
+          setDirty(false);
+          dirtyRef.current = false;
+          draftCacheRef.current.delete(workspaceId);
+          setExternal(null);
+          setNotice({ kind: "ok", text: externalMessage(info) });
+        }).catch(function (error) {
+          if (requestId === requestRef.current) setNotice({ kind: "error", text: t("loadFailed") + ": " + failureText(error) });
+        });
+      }
+
+      React.useEffect(function () {
+        if (!workspaceId || typeof writer.getRevision !== "function") return undefined;
+        var stopped = false;
+        function check() {
+          if (busyRef.current || revisionRef.current < 0) return;
+          if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+          writer.getRevision(workspaceId).then(function (info) {
+            if (stopped || !info || info.revision <= revisionRef.current) return;
+            if (!dirtyRef.current) { pullRemote(info); return; }
+            if (info.revision > ignoredRevisionRef.current) setExternal(info);
+          }).catch(function () {});
+        }
+        // Poll while visible, and check at once when the user comes back.
+        var timer = window.setInterval(check, 3000);
+        document.addEventListener("visibilitychange", check);
+        window.addEventListener("focus", check);
+        return function () {
+          stopped = true;
+          window.clearInterval(timer);
+          document.removeEventListener("visibilitychange", check);
+          window.removeEventListener("focus", check);
+        };
+      }, [workspaceId, writer]);
 
       function updateProject(mutator) {
         if (!workspaceId || !state || String(state.workspace && state.workspace.id) !== workspaceId || busy) return;
@@ -1983,9 +2489,59 @@ window.__ModuleLoader__.load({
         }).finally(function () { if (requestId === requestRef.current) setBusy(false); });
       }
 
-      if (!workspaceId) {
+      function applyBinding(value, message) {
+        setBindingInfo({ status: "ready", key: bindingKey, binding: value.binding || null, novels: value.novels || [], missing: value.missing || null });
+        if (message) {
+          setNotice({ kind: "ok", text: message });
+          pendingNoticeRef.current = value.binding ? message : null;
+        }
+      }
+      function libraryAction(run, message) {
+        if (dirtyRef.current && typeof window.confirm === "function" && !window.confirm(t("discardConfirm"))) return;
+        setLibraryBusy(true);
+        run().then(function (value) {
+          setLibraryBusy(false);
+          if (workspaceId) draftCacheRef.current.delete(workspaceId);
+          setDirty(false);
+          dirtyRef.current = false;
+          applyBinding(value, typeof message === "function" ? message(value) : message);
+        }).catch(function (error) {
+          setLibraryBusy(false);
+          setNotice({ kind: "error", text: failureText(error) });
+        });
+      }
+      var libraryHandlers = {
+        onBind: function (novelId) {
+          libraryAction(function () { return writer.bindNovel(sessionId, hostWorkspaceId, novelId); }, function (value) { return t("libBound").replace("{title}", value.binding ? value.binding.title : ""); });
+        },
+        onCreate: function (input) {
+          libraryAction(function () { return writer.createNovel(sessionId, hostWorkspaceId, input); }, function (value) { return t("libCreated").replace("{title}", value.created.title).replace("{folder}", value.created.folder); });
+        },
+        onUnbind: function () {
+          libraryAction(function () { return writer.unbindNovel(sessionId); }, t("libUnbound"));
+        },
+      };
+
+      if (!hostWorkspaceId) {
         return React.createElement("div", { className: "dshwnw-root" },
           React.createElement("div", { className: "dshwnw-empty", style: { margin: 12 } }, t("noWorkspace"))
+        );
+      }
+      if (canBind && !bindingReady) {
+        return React.createElement("div", { className: "dshwnw-root" },
+          React.createElement("div", { className: "dshwnw-empty", style: { margin: 12 } }, t("loading"))
+        );
+      }
+      if (canBind && !bindingInfo.binding) {
+        return React.createElement("div", { className: "dshwnw-root" },
+          React.createElement("div", { className: "dshwnw-body" },
+            bindingInfo.status === "error" ? React.createElement("div", { className: "dshwnw-warning" }, bindingInfo.error) : null,
+            React.createElement(NovelLibrary, Object.assign({
+              t: t, mode: "picker", novels: bindingInfo.novels, missing: bindingInfo.missing, sessionId: sessionId,
+              workspaceTitle: workspaceTitle, busy: libraryBusy, currentHandle: "",
+            }, libraryHandlers))
+          ),
+          notice ? React.createElement("div", { className: "dshwnw-footer" }, React.createElement("span", { className: "dshwnw-notice", "data-kind": notice.kind }, React.createElement("span", { className: "dshwnw-notice-text" }, notice.text))) : null
         );
       }
 
@@ -2001,7 +2557,7 @@ window.__ModuleLoader__.load({
       var content;
       if (tab === "project") {
         content = React.createElement(ProjectTab, {
-          project: draft, t: t,
+          project: draft, t: t, writer: writer,
           set: function (key, value) { updateProject(function (next) { next[key] = value; }); },
           setGenre: function (key, value) { updateProject(function (next) { next.genreProfile[key] = value; }); },
           setGenreFields: function (value) { updateProject(function (next) { next.genreProfile.customFields = value; }); },
@@ -2077,7 +2633,7 @@ window.__ModuleLoader__.load({
         });
       } else if (tab === "outline") {
         content = React.createElement(OutlineTab, {
-          project: draft, t: t, writer: writer, workspaceId: workspaceId,
+          project: draft, t: t, writer: writer, workspaceId: workspaceId, revision: state.revision,
           // Mirrors linkChapterManuscript(): one file per chapter, and an
           // unstarted chapter becomes a draft once prose is attached.
           onLinkManuscripts: function (links) {
@@ -2132,7 +2688,12 @@ window.__ModuleLoader__.load({
         });
       } else {
         content = React.createElement(SettingsTab, {
-          workspaceId: workspaceId, t: t, busy: busy, dirty: dirty,
+          workspaceId: workspaceId, t: t, busy: busy, dirty: dirty, writer: writer, revision: state.revision,
+          library: canBind ? Object.assign({
+            novels: bindingInfo.novels, binding: bindingInfo.binding, sessionId: sessionId, workspaceTitle: workspaceTitle, busy: libraryBusy,
+          }, libraryHandlers) : null,
+          onRestored: function (next, revision) { replaceWith(next, t("restored").replace("{n}", revision)); },
+          onError: function (text) { setNotice({ kind: "error", text: text }); },
           onExport: exportProject, onImport: importProject, onClear: resetProject,
         });
       }
@@ -2141,10 +2702,20 @@ window.__ModuleLoader__.load({
         React.createElement("div", { className: "dshwnw-toolbar" },
           React.createElement("div", { className: "dshwnw-headline" },
             React.createElement("div", { className: "dshwnw-book", "data-empty": draft.title ? undefined : "true" }, draft.title || t("untitledBook")),
-            React.createElement("div", { className: "dshwnw-workspace", title: t("workspaceLabel") + " · " + workspaceTitle }, workspaceTitle)
+            canBind && state.workspace && state.workspace.folder
+              ? React.createElement("button", { type: "button", className: "dshwnw-workspace", title: t("libChipTitle").replace("{workspace}", workspaceTitle).replace("{folder}", state.workspace.folder), onClick: function () { setTab("settings"); } }, state.workspace.folder + "/")
+              : React.createElement("div", { className: "dshwnw-workspace", title: t("workspaceLabel") + " · " + workspaceTitle }, workspaceTitle)
           ),
           React.createElement(SectionNav, { t: t, tab: tab, tabs: tabs, project: draft, onSelect: setTab })
         ),
+        external && dirty
+          ? React.createElement("div", { className: "dshwnw-external", role: "alert" },
+            React.createElement("span", null, t("externalChanged").replace("{what}", externalSummary(external) || t("externalSomething"))),
+            React.createElement("div", { className: "dshwnw-actions" },
+              React.createElement("button", { type: "button", className: "dshwnw-primary", onClick: function () { pullRemote(external); } }, t("externalLoad")),
+              React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { ignoredRevisionRef.current = external.revision; setExternal(null); } }, t("externalKeep"))
+            ))
+          : null,
         React.createElement("div", { className: "dshwnw-body", key: tab, role: "tabpanel" }, content),
         React.createElement("div", { className: "dshwnw-footer" },
           React.createElement("span", { className: "dshwnw-notice", role: "status", "data-kind": notice ? notice.kind : undefined, "data-dirty": dirty ? "true" : undefined, title: notice ? notice.text : undefined }, React.createElement("span", { className: "dshwnw-notice-text" }, notice ? notice.text : dirty ? t("unsaved") : t("synced"))),
@@ -2186,15 +2757,15 @@ window.__ModuleLoader__.load({
     var NS = "dshWNovalWrite";
     var inject = ["slots", "locale", "remote", "uiConversation"];
     var zh = {
-      title: "小说写作", rail: "打开小说写作工作台", cardDescription: "工作区共享的角色、世界观、情节与连续性数据",
+      title: "小说写作", rail: "打开小说写作工作台", cardDescription: "每本小说独立的角色、世界观、情节与连续性数据",
       writeActive: "小说写作", writeEdit: "编辑", writeClear: "解除", writeSave: "保存", writeCancel: "取消", writeObjectiveAria: "小说写作任务", writeCommandInput: "写作命令输入",
       loading: "正在载入小说项目…", loadFailed: "载入失败", retry: "重试", saveFailed: "保存失败", noWorkspace: "当前没有可用工作区。请先打开或创建一个工作区。", workspaceLabel: "共享工作区",
       saved: "项目设定已保存。", saving: "保存中…", save: "保存", reload: "撤销", unsaved: "有未保存修改", synced: "已与模型上下文同步", draftRestored: "已恢复这个工作区未保存的草稿。",
       tab_project: "项目", tab_characters: "角色", tab_relationships: "关系", tab_world: "世界", tab_plot: "情节", tab_outline: "大纲", tab_scene: "场景", tab_settings: "设置",
-      settingsTitle: "小说框架设置", settingsHint: "导入、导出或重置当前共享工作区的完整小说框架。操作对象不是单个对话。", settingsDirty: "请先保存或撤销当前修改，再执行导入、导出或清除。", working: "处理中…", cancel: "取消",
+      settingsTitle: "小说框架设置", settingsHint: "管理这个对话写的是哪本书，以及这本书的版本、导入、导出与重置。所有绑定这本书的对话都会看到变化。", settingsDirty: "请先保存或撤销当前修改，再执行导入、导出或清除。", working: "处理中…", cancel: "取消",
       exportTitle: "导出当前小说框架", exportHint: "下载一份可移植的 JSON，包含项目、角色、关系、世界观、情节、大纲、线索账本、场景和推进记录。", exportAction: "导出 JSON", exported: "小说框架已导出。", exportFailed: "导出失败",
       importTitle: "导入小说框架", importHint: "导入本插件导出的 JSON 或完整项目 JSON；通过结构校验后原子替换当前框架。", importAction: "选择 JSON 文件", imported: "小说框架已导入。", importFailed: "导入失败", importInvalidJson: "文件不是有效 JSON", importTooLarge: "导入文件超过 5 MB 限制。",
-      clearTitle: "清除当前小说框架", clearHint: "恢复为空白框架。该操作会清除当前工作区共享的全部角色、关系、世界观、情节、大纲、线索、场景与推进记录。", clearAction: "清除框架", clearConfirm: "此操作不可撤销。建议先导出备份；确认后只清空当前工作区的小说框架。", clearConfirmAction: "确认清除", cleared: "当前工作区的小说框架已清空。", clearFailed: "清除失败",
+      clearTitle: "清除当前小说框架", clearHint: "恢复为空白框架。该操作会清除这本小说的全部角色、关系、世界观、情节、大纲、线索、场景与推进记录（正文文件不动）。", clearAction: "清除框架", clearConfirm: "清空后仍可在「版本历史」里恢复。确认后只清空这本小说的框架。", clearConfirmAction: "确认清除", cleared: "当前工作区的小说框架已清空。", clearFailed: "清除失败",
       projectTitle: "项目总览", projectHint: "先定义作品契约，再让角色、世界与情节围绕它保持一致。", groupBasics: "作品定位", groupWritingContract: "写作契约", bookTitle: "书名", genre: "题材 / 类型", tone: "基调与文风", pov: "叙事视角", targetWords: "目标字数", audience: "目标读者", contentRating: "内容分级与边界", premise: "一句话梗概 / 核心命题", styleGuide: "文风指南（句式、节奏、叙述距离、禁用表达）", constraints: "创作约束（必须遵守 / 必须避免）", notes: "总备注",
       genreProfileTitle: "题材扩展配置", genreProfileType: "配置类型", genreProfilePlaceholder: "例如 romance、mystery、xianxia", customFields: "自定义字段", customFieldsHint: "自由定义本题材需要的数据；模型会按原键名读取和维护。", customFieldsEmpty: "还没有自定义字段。", customFieldDefault: "字段", customFieldName: "字段名", customFieldValue: "字段值", addCustomField: "新增自定义字段",
       charactersTitle: "角色卡", add: "新增", delete: "删除", charactersEmpty: "还没有角色。先建立主角和主要对手。", unnamedCharacter: "未命名角色", rolePlaceholder: "尚未填写角色定位",
@@ -2236,18 +2807,44 @@ window.__ModuleLoader__.load({
       fileMissing: "找不到正文文件 {file}，可能被移动或改名；请重新选择。", manuscriptHint: "关联工作区里的 .md / .txt 正文后会统计字数；AI 保存章节时带上 chapter_id 会自动关联。",
       noManuscriptFiles: "工作区根目录还没有 .md / .txt 正文文件。让 AI 用 novel_save_chapter 保存章节时带上 chapter_id，就会自动出现在这里。",
       updatedAt: "更新于", showPreview: "预览正文", hidePreview: "收起预览", loadingPreview: "正在读取…", previewTruncated: "…… 仅显示开头（全文 {n} 字符）",
+      corpusField: "文风素材库", corpusFollow: "跟随知识库当前素材库", corpusNone: "不使用素材库", corpusFollowing: "跟随当前", corpusPassages: "段", corpusRefresh: "刷新素材库列表",
+      corpusMissingOption: "（已删除的素材库）", corpusMissing: "绑定的素材库已被删除，写作时会改用知识库当前素材库。请重新选择。",
+      corpusNoneHint: "这本书写作时不检索任何素材库，也不注入禁用套路表。",
+      corpusHint: "只影响用 /write 联动这本书的对话：模型只会看到这个素材库，别的库的内容不会混进来。其他对话仍使用知识库面板里的当前素材库。",
+      corpusUnavailable: "没有检测到知识库插件（dsh-w-knowledge-base 0.5+），无法选择文风素材库。",
+      historyTitle: "版本历史", historyHint: "每次保存设定（包括 AI 用工具修改）都会自动存一个版本。可以查看改了什么，也可以恢复到任意版本；恢复本身也会存成新版本，随时能撤回。",
+      historyEmpty: "还没有版本记录。下一次修改设定时会开始记录。", historyCurrent: "当前", historyIsCurrent: "这就是当前版本。", historyLimitHint: "保留最近 {n} 个版本，更早的会自动清理。",
+      restoreWould: "恢复到 r{n} 会带来这些变化：", restoreAction: "恢复到 r{n}", restoreConfirm: "当前设定会被这个版本替换（之后仍可在历史里恢复回来）。确认恢复吗？", restoreFailed: "恢复失败", restored: "已恢复到 r{n}。", snapshotSame: "这个版本和当前设定完全相同。",
+      actor_ai: "AI", actor_user: "你", actor_baseline: "初始",
+      op_baseline: "修改前的原始版本", "op_panel-save": "在面板里保存", op_import: "导入框架", op_reset: "清空框架", op_restore: "恢复到 r{n}", op_unknown: "修改",
+      op_novel_patch: "修改设定", op_novel_write: "整体重写设定", op_novel_advance: "推进剧情", op_novel_character_patch: "修改角色", op_novel_relationship_patch: "修改关系", op_novel_volume_upsert: "保存卷", op_novel_chapter_upsert: "保存章节大纲", op_novel_chapter_remove: "删除章节", op_novel_chapter_reorder: "调整章节顺序", op_novel_thread_upsert: "更新线索", op_novel_thread_remove: "删除线索", op_novel_save_chapter: "保存正文并关联章节",
+      section_project: "项目", section_genreProfile: "题材扩展", section_world: "世界", section_plot: "情节", section_scene: "场景", section_characters: "角色", section_relationships: "关系", section_volumes: "卷", section_chapters: "章节", section_threads: "线索", section_progress: "进展",
+      fieldsChanged: "{n} 项", reordered: "顺序变化", reorderedLong: "顺序有调整", emptyValue: "（空）",
+      justNow: "刚刚", minutesAgo: "{n} 分钟前", hoursAgo: "{n} 小时前",
+      externalApplied: "已同步 {what}", externalAppliedPlain: "已同步其他地方保存的设定。", externalSomething: "设定有更新",
+      externalChanged: "设定在别处被修改了（{what}）。你还有未保存的修改：保留的话，保存时会因版本冲突失败。", externalLoad: "载入最新（放弃我的修改）", externalKeep: "先保留我的",
+      libPickTitle: "这个对话要写哪本小说？", libPickHint: "工作区「{workspace}」里可以有多本小说，每本是一个文件夹。一个对话绑定一本；同一本书可以被多个对话绑定，它们共享设定、大纲和线索。",
+      libExisting: "工作区里的小说 · {n}", libSwitchTo: "换成其他小说", libEmpty: "这个工作区还没有小说。新建一本开始吧。",
+      libChapters: "{n} 章", libThreads: "{n} 条线索进行中", libSessions: "{n} 个对话在写", libCurrent: "当前", libBind: "绑定",
+      libNew: "新建一本小说", libNewTitle: "新建小说", libNewPlaceholder: "书名", libCreate: "新建并绑定到这个对话",
+      libFolderPreview: "会在工作区「{workspace}」里新建文件夹 {folder}，正文和设定都放在里面（重名时自动加序号）。",
+      libMissing: "之前绑定的小说（{folder}）找不到了，可能被删除或移出了工作区。请重新选择。", libNoSession: "先在这个对话里发一条消息，才能给它绑定小说。",
+      libBound: "这个对话已绑定《{title}》。", libCreated: "已新建《{title}》，文件夹 {folder}/。", libUnbound: "已解除绑定。小说本身没有删除。",
+      libThisConversation: "本对话的小说", libBindingHint: "这个对话读写的是下面这本书。切换后，AI 工具、/write 和面板都会改用新的书。",
+      libSwitch: "换一本", libUnbind: "解除绑定", libUnbindConfirm: "确认解除绑定", libUnbindHint: "只解除这个对话和小说的关系，小说文件夹和其中的内容都不会删除。",
+      libChipTitle: "小说文件夹：{workspace}/{folder} · 点击管理绑定",
       progressTitle: "写作进展", progressEmpty: "还没有推进记录。AI 可在写作后自动写入。", progressEntry: "进展", canonChanges: "设定变更", openThreads: "待续线索",
     };
     var en = {
-      title: "Novel Writing", rail: "Open Novel Writing", cardDescription: "Workspace-shared characters, world, plot, and continuity data",
+      title: "Novel Writing", rail: "Open Novel Writing", cardDescription: "Characters, world, plot, and continuity for each novel",
       writeActive: "Novel Writing", writeEdit: "Edit", writeClear: "Unlink", writeSave: "Save", writeCancel: "Cancel", writeObjectiveAria: "Novel writing objective", writeCommandInput: "Writing command input",
       loading: "Loading novel project…", loadFailed: "Load failed", retry: "Retry", saveFailed: "Save failed", noWorkspace: "No workspace is available. Open or create a workspace first.", workspaceLabel: "Shared workspace",
       saved: "Project canon saved.", saving: "Saving…", save: "Save", reload: "Revert", unsaved: "Unsaved changes", synced: "Synced to model context", draftRestored: "Restored this workspace's unsaved draft.",
       tab_project: "Project", tab_characters: "Characters", tab_relationships: "Relations", tab_world: "World", tab_plot: "Plot", tab_outline: "Outline", tab_scene: "Scene", tab_settings: "Settings",
-      settingsTitle: "Novel framework settings", settingsHint: "Import, export, or reset the complete framework shared by this workspace, not one conversation.", settingsDirty: "Save or revert current edits before importing, exporting, or clearing.", working: "Working…", cancel: "Cancel",
+      settingsTitle: "Novel framework settings", settingsHint: "Choose which book this conversation writes, and manage that book's versions, import, export, and reset. Every conversation bound to the book sees the changes.", settingsDirty: "Save or revert current edits before importing, exporting, or clearing.", working: "Working…", cancel: "Cancel",
       exportTitle: "Export current framework", exportHint: "Download portable JSON with the project, characters, relationships, world, plot, outline, thread ledger, scene, and progress.", exportAction: "Export JSON", exported: "Novel framework exported.", exportFailed: "Export failed",
       importTitle: "Import a framework", importHint: "Import an exported document or complete project JSON. It is validated before atomically replacing the current framework.", importAction: "Choose JSON file", imported: "Novel framework imported.", importFailed: "Import failed", importInvalidJson: "The file is not valid JSON", importTooLarge: "The import exceeds the 5 MB limit.",
-      clearTitle: "Clear current framework", clearHint: "Restore an empty framework, removing all workspace-shared characters, relationships, world, plot, outline, threads, scene, and progress.", clearAction: "Clear framework", clearConfirm: "This cannot be undone. Export a backup first if needed; confirmation only clears the current workspace framework.", clearConfirmAction: "Confirm clear", cleared: "The current workspace framework was cleared.", clearFailed: "Clear failed",
+      clearTitle: "Clear current framework", clearHint: "Restore an empty framework, removing all characters, relationships, world, plot, outline, threads, scene, and progress of this novel (manuscript files stay).", clearAction: "Clear framework", clearConfirm: "You can still restore it from Version history. Only this novel's framework is cleared.", clearConfirmAction: "Confirm clear", cleared: "The current workspace framework was cleared.", clearFailed: "Clear failed",
       projectTitle: "Project overview", projectHint: "Define the book contract first, then keep characters, world, and plot aligned with it.", groupBasics: "Book positioning", groupWritingContract: "Writing contract", bookTitle: "Title", genre: "Genre", tone: "Tone and style", pov: "Point of view", targetWords: "Target length", audience: "Target audience", contentRating: "Content rating and boundaries", premise: "Premise", styleGuide: "Style guide", constraints: "Creative constraints", notes: "Notes",
       genreProfileTitle: "Genre extension profile", genreProfileType: "Profile type", genreProfilePlaceholder: "For example romance, mystery, xianxia", customFields: "Custom fields", customFieldsHint: "Define genre-specific data while preserving stable keys for the model.", customFieldsEmpty: "No custom fields yet.", customFieldDefault: "Field", customFieldName: "Field name", customFieldValue: "Field value", addCustomField: "Add custom field",
       charactersTitle: "Character cards", add: "Add", delete: "Delete", charactersEmpty: "No characters yet. Start with the protagonist and primary opposition.", unnamedCharacter: "Unnamed character", rolePlaceholder: "No role yet",
@@ -2289,6 +2886,32 @@ window.__ModuleLoader__.load({
       fileMissing: "Manuscript {file} was not found; it may have been moved or renamed. Pick it again.", manuscriptHint: "Link a .md / .txt file from the workspace to count its words; the AI links files automatically when it saves with chapter_id.",
       noManuscriptFiles: "The workspace root has no .md / .txt manuscripts yet. Files the AI saves with chapter_id appear here automatically.",
       updatedAt: "updated", showPreview: "Preview", hidePreview: "Hide preview", loadingPreview: "Reading…", previewTruncated: "… showing the opening only ({n} characters in total)",
+      corpusField: "Style library", corpusFollow: "Follow the knowledge base's current library", corpusNone: "No style library", corpusFollowing: "following current", corpusPassages: "passages", corpusRefresh: "Refresh libraries",
+      corpusMissingOption: "(deleted library)", corpusMissing: "The bound library was deleted; writing falls back to the knowledge base's current library. Pick another one.",
+      corpusNoneHint: "This book searches no style library and injects no banned list.",
+      corpusHint: "Only conversations linked to this book with /write are affected: the model sees just this library, nothing from the others. Other conversations keep the knowledge base's current library.",
+      corpusUnavailable: "The knowledge base plugin (dsh-w-knowledge-base 0.5+) was not found, so no style library can be chosen.",
+      historyTitle: "Version history", historyHint: "Every saved change, including AI tool edits, is kept as a version. Inspect what changed or restore any version; a restore is itself a new version, so it can be undone.",
+      historyEmpty: "No versions yet. Recording starts with the next change.", historyCurrent: "current", historyIsCurrent: "This is the current version.", historyLimitHint: "The latest {n} versions are kept; older ones are pruned automatically.",
+      restoreWould: "Restoring r{n} would change:", restoreAction: "Restore r{n}", restoreConfirm: "The current project will be replaced by this version (you can restore back from history). Restore?", restoreFailed: "Restore failed", restored: "Restored r{n}.", snapshotSame: "This version is identical to the current project.",
+      actor_ai: "AI", actor_user: "You", actor_baseline: "Initial",
+      op_baseline: "Original before the first change", "op_panel-save": "Saved in the panel", op_import: "Imported framework", op_reset: "Cleared framework", op_restore: "Restored r{n}", op_unknown: "Change",
+      op_novel_patch: "Edited canon", op_novel_write: "Rewrote the project", op_novel_advance: "Advanced the story", op_novel_character_patch: "Edited a character", op_novel_relationship_patch: "Edited a relationship", op_novel_volume_upsert: "Saved a volume", op_novel_chapter_upsert: "Saved a chapter outline", op_novel_chapter_remove: "Deleted a chapter", op_novel_chapter_reorder: "Reordered chapters", op_novel_thread_upsert: "Updated a thread", op_novel_thread_remove: "Deleted a thread", op_novel_save_chapter: "Saved and linked prose",
+      section_project: "Project", section_genreProfile: "Genre profile", section_world: "World", section_plot: "Plot", section_scene: "Scene", section_characters: "Characters", section_relationships: "Relations", section_volumes: "Volumes", section_chapters: "Chapters", section_threads: "Threads", section_progress: "Progress",
+      fieldsChanged: "{n} fields", reordered: "reordered", reorderedLong: "Order changed", emptyValue: "(empty)",
+      justNow: "just now", minutesAgo: "{n} min ago", hoursAgo: "{n} h ago",
+      externalApplied: "Synced {what}", externalAppliedPlain: "Synced changes saved elsewhere.", externalSomething: "canon updated",
+      externalChanged: "The project was changed elsewhere ({what}). You have unsaved edits: keeping them means saving will fail with a revision conflict.", externalLoad: "Load latest (discard mine)", externalKeep: "Keep mine for now",
+      libPickTitle: "Which novel does this conversation write?", libPickHint: "Workspace \"{workspace}\" can hold several novels, one folder each. A conversation is bound to one; several conversations can share a book, including its canon, outline, and threads.",
+      libExisting: "Novels in this workspace · {n}", libSwitchTo: "Switch to another novel", libEmpty: "This workspace has no novel yet. Create one to start.",
+      libChapters: "{n} chapters", libThreads: "{n} open threads", libSessions: "{n} conversations", libCurrent: "current", libBind: "Bind",
+      libNew: "New novel", libNewTitle: "New novel", libNewPlaceholder: "Title", libCreate: "Create and bind to this conversation",
+      libFolderPreview: "Creates folder {folder} in workspace \"{workspace}\"; prose and canon live inside it (a number is added if the name is taken).",
+      libMissing: "The novel bound before ({folder}) was not found; it may have been deleted or moved out of the workspace. Choose again.", libNoSession: "Send a message in this conversation first; then a novel can be bound to it.",
+      libBound: "This conversation now writes \"{title}\".", libCreated: "Created \"{title}\" in folder {folder}/.", libUnbound: "Unbound. The novel itself was not deleted.",
+      libThisConversation: "This conversation's novel", libBindingHint: "This conversation reads and writes the book below. After switching, AI tools, /write, and the panel all use the new book.",
+      libSwitch: "Switch", libUnbind: "Unbind", libUnbindConfirm: "Confirm unbind", libUnbindHint: "Only the link between this conversation and the novel is removed; the folder and its contents stay.",
+      libChipTitle: "Novel folder: {workspace}/{folder} · click to manage the binding",
       progressTitle: "Writing progress", progressEmpty: "No progress entries yet. AI can record them after writing.", progressEntry: "Progress", canonChanges: "Canon changes", openThreads: "Open threads",
     };
 
@@ -2319,6 +2942,16 @@ window.__ModuleLoader__.load({
           clearLink: function (sessionId, revision) { return unwrap("clearLink", [sessionId, revision]); },
           listManuscripts: function (workspaceId) { return unwrap("listManuscripts", [workspaceId]); },
           readManuscript: function (workspaceId, filename) { return unwrap("readManuscript", [workspaceId, filename]); },
+          listStyleCorpora: function () { return unwrap("listStyleCorpora", []); },
+          listNovels: function (workspaceId) { return unwrap("listNovels", [workspaceId]); },
+          getBinding: function (sessionId, workspaceId) { return unwrap("getBinding", [sessionId, workspaceId]); },
+          bindNovel: function (sessionId, workspaceId, novelId) { return unwrap("bindNovel", [sessionId, workspaceId, novelId]); },
+          unbindNovel: function (sessionId) { return unwrap("unbindNovel", [sessionId]); },
+          createNovel: function (sessionId, workspaceId, input) { return unwrap("createNovel", [sessionId, workspaceId, input]); },
+          getRevision: function (workspaceId) { return unwrap("getRevision", [workspaceId]); },
+          listHistory: function (workspaceId) { return unwrap("listHistory", [workspaceId]); },
+          compareSnapshot: function (workspaceId, revision) { return unwrap("compareSnapshot", [workspaceId, revision]); },
+          restoreSnapshot: function (workspaceId, revision, expectedRevision) { return unwrap("restoreSnapshot", [workspaceId, revision, expectedRevision]); },
         } };
       }
       ctx.uiConversation.events.register(writeCommandInputDefinition);

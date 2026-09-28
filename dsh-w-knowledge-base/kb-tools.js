@@ -132,7 +132,9 @@ function clampInteger(value, fallback, min, max) {
  * @returns {object[]} specs in `defineTool` option shape, ordered by {@link TOOL_NAMES}.
  */
 export function buildToolSpecs(options) {
-  const store = options.store
+  // `storeFor(exec)` picks the store per call, so each conversation can work
+  // on its own style corpus; a fixed `store` still works for simple callers.
+  const storeFor = typeof options.storeFor === 'function' ? options.storeFor : () => options.store
   const searchLimit = clampInteger(options.searchLimit, DEFAULT_SEARCH_LIMIT, 1, 100)
   const readChars = clampInteger(options.readChars, DEFAULT_READ_CHARS, 500, 200000)
 
@@ -196,6 +198,7 @@ export function buildToolSpecs(options) {
     },
     timeoutMs: TOOL_TIMEOUT_MS,
     async execute(args, exec) {
+      const store = storeFor(exec)
       const provenance = provenanceOf(exec)
       const outcome = await store.save({
         id: args.id,
@@ -283,7 +286,8 @@ export function buildToolSpecs(options) {
     isConcurrencySafe() {
       return true
     },
-    async execute(args) {
+    async execute(args, exec) {
+      const store = storeFor(exec)
       const outcome = await store.search({
         query: args.query,
         tags: args.tags ?? [],
@@ -368,7 +372,8 @@ export function buildToolSpecs(options) {
     isConcurrencySafe() {
       return true
     },
-    async execute(args) {
+    async execute(args, exec) {
+      const store = storeFor(exec)
       const requested = []
       if (typeof args.id === 'string' && args.id.trim() !== '') requested.push(args.id.trim())
       for (const id of args.ids ?? []) {
@@ -456,7 +461,8 @@ export function buildToolSpecs(options) {
     isConcurrencySafe() {
       return true
     },
-    async execute(args) {
+    async execute(args, exec) {
+      const store = storeFor(exec)
       const page = await store.list({
         tag: args.tag,
         limit: clampInteger(args.limit, DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT),
@@ -590,6 +596,7 @@ export function buildToolSpecs(options) {
     },
     timeoutMs: 60000,
     async execute(args, exec) {
+      const store = storeFor(exec)
       const header = exec && exec.agent && exec.agent.session ? exec.agent.session.header : undefined
       const cwd = header && typeof header.cwd === 'string' ? header.cwd : ''
       const requested = String(args.path ?? '').trim()
@@ -660,7 +667,8 @@ export function buildToolSpecs(options) {
       },
     },
     timeoutMs: TOOL_TIMEOUT_MS,
-    async execute(args) {
+    async execute(args, exec) {
+      const store = storeFor(exec)
       const outcome = await store.remove(args.id, { hard: args.hard === true })
       const stats = await store.stats()
       return {

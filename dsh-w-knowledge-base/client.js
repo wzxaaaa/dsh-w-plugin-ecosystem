@@ -116,6 +116,58 @@ window.__ModuleLoader__.load({
       ".dshwkb-import-stale{color:#c77a12}",
       ".dshwkb-import-actions{display:flex;align-items:center;gap:8px}",
       ".dshwkb-banned-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}",
+      ".dshwkb-switcher{position:relative;flex:none}",
+      ".dshwkb-switcher-button{display:flex;align-items:center;gap:7px;width:100%;height:34px;padding:0 10px;border:1px solid var(--kb-border);border-radius:9px;background:var(--kb-surface);color:var(--kb-fg);font-size:12.5px;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s}",
+      ".dshwkb-switcher-button:hover:not(:disabled),.dshwkb-switcher-button[aria-expanded=true]{border-color:color-mix(in srgb,var(--kb-accent) 45%,var(--kb-border))}",
+      ".dshwkb-switcher-button[aria-expanded=true]{box-shadow:0 0 0 3px var(--kb-accent-soft)}",
+      ".dshwkb-switcher-button svg{margin-left:auto;flex:none;color:var(--kb-fg3)}",
+      ".dshwkb-switcher-label{flex:none;color:var(--kb-fg3)}",
+      ".dshwkb-switcher-name{min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".dshwkb-switcher-count{flex:none;color:var(--kb-fg3);font-size:11.5px}",
+      ".dshwkb-switcher-menu{position:absolute;z-index:20;top:calc(100% + 6px);left:0;right:0;display:flex;flex-direction:column;gap:2px;max-height:320px;overflow:auto;padding:6px;border:1px solid var(--kb-border);border-radius:12px;background:var(--kb-surface);box-shadow:0 14px 34px color-mix(in srgb,var(--kb-fg) 16%,transparent);animation:dshwkb-in .16s ease-out}",
+      ".dshwkb-switcher-option{display:flex;align-items:center;gap:9px;width:100%;padding:8px;border:0;border-radius:8px;background:transparent;color:var(--kb-fg);text-align:left;cursor:pointer}",
+      ".dshwkb-switcher-option:hover,.dshwkb-switcher-option:focus-visible{background:var(--kb-hover);outline:none}",
+      ".dshwkb-switcher-option[aria-selected=true]{background:var(--kb-accent-soft)}",
+      ".dshwkb-switcher-option>svg{flex:none;color:var(--kb-accent)}",
+      ".dshwkb-switcher-copy{flex:1;min-width:0;display:flex;flex-direction:column}",
+      ".dshwkb-switcher-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}",
+      ".dshwkb-switcher-meta{font-size:11.5px;color:var(--kb-fg3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".dshwkb-switcher-foot{display:flex;justify-content:space-between;gap:8px;margin-top:4px;padding:8px 6px 2px;border-top:1px solid var(--kb-border)}",
+      ".dshwkb-corpus-dot{width:9px;height:9px;flex:none;border-radius:50%;background:hsl(var(--kb-hue,220) 60% 52%);box-shadow:0 0 0 3px hsl(var(--kb-hue,220) 60% 52% / .16)}",
+      ".dshwkb-adult{flex:none;height:17px;padding:0 5px;border-radius:5px;background:color-mix(in srgb,var(--kb-danger) 14%,transparent);color:var(--kb-danger);font-size:10.5px;font-weight:700;line-height:17px}",
+      ".dshwkb-drop-target{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--kb-fill);font-size:12px;color:var(--kb-fg2)}",
+      ".dshwkb-drop-target b{color:var(--kb-fg);font-weight:600}",
+      ".dshwkb-corpora{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;margin:0 -4px;padding:0 4px 8px}",
+      ".dshwkb-corpus-list{display:flex;flex-direction:column;gap:8px}",
+      ".dshwkb-corpus-card{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--kb-border);border-left:3px solid hsl(var(--kb-hue,220) 60% 52%);border-radius:12px;background:var(--kb-surface)}",
+      ".dshwkb-corpus-card[data-active=true]{box-shadow:0 0 0 3px var(--kb-accent-soft);border-color:color-mix(in srgb,var(--kb-accent) 40%,var(--kb-border))}",
+      ".dshwkb-corpus-card[data-new=true]{border-left-color:var(--kb-accent);border-style:dashed}",
+      ".dshwkb-corpus-head{display:flex;align-items:center;gap:8px;min-width:0}",
+      ".dshwkb-corpus-name{min-width:0;font-size:14px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".dshwkb-corpus-head .dshwkb-badge{background:var(--kb-accent-soft);color:var(--kb-accent)}",
+      ".dshwkb-corpus-desc{font-size:12px;line-height:18px;color:var(--kb-fg2)}",
+      ".dshwkb-corpus-stats{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--kb-fg3)}",
+      ".dshwkb-corpus-stats b{font-size:14px;font-weight:650;color:var(--kb-fg)}",
+      ".dshwkb-corpus-actions{display:flex;flex-wrap:wrap;gap:6px}",
+      ".dshwkb-corpus-actions .dshwkb-primary,.dshwkb-corpus-actions .dshwkb-ghost{height:28px;padding:0 10px}",
+      ".dshwkb-corpus-warn{padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--kb-danger) 9%,transparent);color:var(--kb-danger);font-size:12px;line-height:18px}",
+      ".dshwkb-sources{display:flex;flex-direction:column;gap:2px;padding-top:8px;border-top:1px solid var(--kb-border)}",
+      ".dshwkb-sources-hint{margin-bottom:4px;font-size:11.5px;line-height:17px;color:var(--kb-fg3)}",
+      ".dshwkb-source{display:flex;align-items:center;gap:8px;min-height:32px;padding:2px 4px;border-radius:7px}",
+      ".dshwkb-source:hover{background:var(--kb-hover)}",
+      ".dshwkb-source-name{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".dshwkb-source-count{flex:none;font-size:11.5px;color:var(--kb-fg3)}",
+      ".dshwkb-source-move{flex:none;width:92px;height:26px;padding:0 4px;border:1px solid var(--kb-border);border-radius:7px;background:var(--kb-surface);color:var(--kb-fg2);font:inherit;font-size:11.5px;cursor:pointer}",
+      ".dshwkb-source-confirm{display:flex;align-items:center;gap:2px;flex:none}",
+      ".dshwkb-source-confirm .dshwkb-primary{height:26px;padding:0 8px;font-size:11.5px}",
+      ".dshwkb-add-corpus{display:flex;align-items:center;justify-content:center;gap:6px;flex:none;height:36px;border:1px dashed color-mix(in srgb,var(--kb-fg) 20%,var(--kb-border));border-radius:10px;background:transparent;color:var(--kb-fg2);font-size:12.5px;cursor:pointer}",
+      ".dshwkb-add-corpus:hover{border-color:var(--kb-accent);color:var(--kb-accent);background:var(--kb-accent-soft)}",
+      ".dshwkb-corpus-form{display:flex;flex-direction:column;gap:10px}",
+      ".dshwkb-check{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:18px;color:var(--kb-fg2);cursor:pointer}",
+      ".dshwkb-check input{margin:2px 0 0;accent-color:var(--kb-accent)}",
+      ".dshwkb-check span{display:flex;flex-direction:column}",
+      ".dshwkb-check b{font-weight:600;color:var(--kb-fg)}",
+      ".dshwkb-form-actions{display:flex;justify-content:flex-end;gap:6px}",
       "@keyframes dshwkb-in{from{opacity:0;transform:translateY(4px)}}",
       "@keyframes dshwkb-shimmer{to{background-position:-200% 0}}",
       "@container knowledge-panel (max-width:380px){.dshwkb-tabs{gap:14px}.dshwkb-mode{padding:0 8px}.dshwkb-row{padding:9px 11px}.dshwkb-head-actions>.dshwkb-primary{padding:0 8px 0 6px}.dshwkb-body{padding:12px 13px}}",
@@ -163,6 +215,12 @@ window.__ModuleLoader__.load({
         descriptor("setMode", [parameter("mode")]),
         descriptor("getBanned", []),
         descriptor("setBanned", [parameter("text")]),
+        descriptor("listCorpora", []),
+        descriptor("createCorpus", [parameter("input")]),
+        descriptor("updateCorpus", [parameter("corpusId"), parameter("patch")]),
+        descriptor("deleteCorpus", [parameter("corpusId")]),
+        descriptor("setActiveCorpus", [parameter("corpusId")]),
+        descriptor("moveNotes", [parameter("fromId"), parameter("toId"), parameter("tag")]),
       ],
     };
 
@@ -210,6 +268,8 @@ window.__ModuleLoader__.load({
       info: ["M10 17a7 7 0 100-14 7 7 0 000 14z", "M10 9.2v4.3", "M10 6.6v.1"],
       close: ["M5.5 5.5l9 9", "M14.5 5.5l-9 9"],
       notes: ["M5.5 3h6.5l3.5 3.5V16a1 1 0 01-1 1h-9a1 1 0 01-1-1V4a1 1 0 011-1z", "M11.5 3v4h4", "M7.5 10.5h5", "M7.5 13.5h3.5"],
+      chevron: ["M5.5 8l4.5 4.5L14.5 8"],
+      check: ["M4.5 10.5l3.5 3.5 7.5-8"],
     };
 
     // ── note list ────────────────────────────────────────────────────────
@@ -322,6 +382,219 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // ── style corpora (writing mode) ─────────────────────────────────────
+    function corpusHue(id) {
+      var hash = 0;
+      var source = String(id || "");
+      for (var i = 0; i < source.length; i += 1) hash = (hash * 31 + source.charCodeAt(i)) % 3600;
+      return Math.round(hash * 137.508) % 360;
+    }
+
+    // Adult libraries are always rose; everything else stays in cool hues so
+    // an ordinary library never looks like the adult one at a glance.
+    function corpusTone(corpus) {
+      if (!corpus) return 220;
+      return corpus.adult ? 348 : 140 + (corpusHue(corpus.id) % 160);
+    }
+
+    function CorpusDot(props) {
+      return React.createElement("span", { className: "dshwkb-corpus-dot", style: { "--kb-hue": corpusTone(props.corpus) }, "aria-hidden": true });
+    }
+
+    function AdultBadge(props) {
+      return props.corpus && props.corpus.adult ? React.createElement("span", { className: "dshwkb-adult", title: props.t("adultHint") }, "18+") : null;
+    }
+
+    function formatChars(n, t) {
+      if (!(n > 0)) return "0";
+      var unit = t("tenThousand");
+      if (unit && n >= 10000) return (n / 10000).toFixed(n >= 1000000 ? 0 : 1).replace(/\.0$/, "") + unit;
+      return n.toLocaleString("en-US");
+    }
+
+    // The writing-mode corpus picker under the header.
+    function CorpusSwitcher(props) {
+      var t = props.t;
+      var openSlot = React.useState(false);
+      var open = openSlot[0];
+      var setOpen = openSlot[1];
+      var rootRef = React.useRef(null);
+      var active = props.corpora.find(function (item) { return item.active; }) || null;
+      React.useEffect(function () {
+        if (!open) return undefined;
+        function onPointer(event) { if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false); }
+        function onKey(event) { if (event.key === "Escape") setOpen(false); }
+        document.addEventListener("mousedown", onPointer);
+        document.addEventListener("keydown", onKey);
+        return function () { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
+      }, [open]);
+      return React.createElement("div", { className: "dshwkb-switcher", ref: rootRef },
+        React.createElement("button", {
+          type: "button", className: "dshwkb-switcher-button", "aria-haspopup": "listbox", "aria-expanded": open, disabled: props.busy,
+          onClick: function () { setOpen(!open); },
+        },
+          React.createElement("span", { className: "dshwkb-switcher-label" }, t("corpusLabel")),
+          active ? React.createElement(CorpusDot, { corpus: active }) : null,
+          React.createElement("span", { className: "dshwkb-switcher-name" }, active ? active.name : t("loading")),
+          React.createElement(AdultBadge, { corpus: active, t: t }),
+          active ? React.createElement("span", { className: "dshwkb-switcher-count" }, active.notes + " " + t("corpusNotesUnit")) : null,
+          React.createElement(Icon, { name: "chevron", size: 14 })
+        ),
+        open ? React.createElement("div", { className: "dshwkb-switcher-menu", role: "listbox", "aria-label": t("corpusLabel") },
+          props.corpora.map(function (corpus) {
+            return React.createElement("button", {
+              key: corpus.id, type: "button", role: "option", "aria-selected": corpus.active, className: "dshwkb-switcher-option",
+              onClick: function () { setOpen(false); if (!corpus.active) props.onActivate(corpus.id); },
+            },
+              React.createElement(CorpusDot, { corpus: corpus }),
+              React.createElement("span", { className: "dshwkb-switcher-copy" },
+                React.createElement("span", { className: "dshwkb-switcher-title" }, corpus.name, React.createElement(AdultBadge, { corpus: corpus, t: t })),
+                React.createElement("span", { className: "dshwkb-switcher-meta" }, corpus.notes + " " + t("corpusNotesUnit") + (corpus.description ? " · " + corpus.description : ""))
+              ),
+              corpus.active ? React.createElement(Icon, { name: "check", size: 15 }) : null
+            );
+          }),
+          React.createElement("div", { className: "dshwkb-switcher-foot" },
+            React.createElement("button", { type: "button", className: "dshwkb-link", onClick: function () { setOpen(false); props.onManage(true); } }, "+ " + t("corpusCreate")),
+            React.createElement("button", { type: "button", className: "dshwkb-link", onClick: function () { setOpen(false); props.onManage(false); } }, t("corpusManage") + " →")
+          )
+        ) : null
+      );
+    }
+
+    function CorpusForm(props) {
+      var t = props.t;
+      var initial = props.initial || { name: "", description: "", adult: false };
+      var draftSlot = React.useState({ name: initial.name, description: initial.description, adult: initial.adult, activate: props.mode === "create" });
+      var draft = draftSlot[0];
+      var setDraft = draftSlot[1];
+      function patch(key, value) { setDraft(function (current) { var next = Object.assign({}, current); next[key] = value; return next; }); }
+      return React.createElement("form", {
+        className: "dshwkb-corpus-form",
+        onSubmit: function (event) { event.preventDefault(); if (draft.name.trim()) props.onSubmit(draft); },
+      },
+        React.createElement("div", { className: "dshwkb-field" },
+          React.createElement("label", { className: "dshwkb-label" }, t("corpusName")),
+          React.createElement("input", { className: "dshwkb-input", value: draft.name, maxLength: 24, autoFocus: true, placeholder: t("corpusNamePlaceholder"), onChange: function (event) { patch("name", event.target.value); } })
+        ),
+        React.createElement("div", { className: "dshwkb-field" },
+          React.createElement("label", { className: "dshwkb-label" }, t("corpusDescription")),
+          React.createElement("input", { className: "dshwkb-input", value: draft.description, maxLength: 200, placeholder: t("corpusDescriptionPlaceholder"), onChange: function (event) { patch("description", event.target.value); } })
+        ),
+        React.createElement("label", { className: "dshwkb-check" },
+          React.createElement("input", { type: "checkbox", checked: draft.adult, onChange: function (event) { patch("adult", event.target.checked); } }),
+          React.createElement("span", null, React.createElement("b", null, t("corpusAdult")), React.createElement("span", null, t("corpusAdultHint")))
+        ),
+        props.mode === "create" ? React.createElement("label", { className: "dshwkb-check" },
+          React.createElement("input", { type: "checkbox", checked: draft.activate, onChange: function (event) { patch("activate", event.target.checked); } }),
+          React.createElement("span", null, React.createElement("b", null, t("corpusActivateNow")))
+        ) : null,
+        React.createElement("div", { className: "dshwkb-form-actions" },
+          React.createElement("button", { type: "button", className: "dshwkb-ghost", disabled: props.busy, onClick: props.onCancel }, t("cancel")),
+          React.createElement("button", { type: "submit", className: "dshwkb-primary", disabled: props.busy || !draft.name.trim() }, props.busy ? t("saving") : props.mode === "create" ? t("corpusCreate") : t("save"))
+        )
+      );
+    }
+
+    function CorpusCard(props) {
+      var t = props.t;
+      var corpus = props.corpus;
+      var editingSlot = React.useState(false);
+      var editing = editingSlot[0];
+      var setEditing = editingSlot[1];
+      var confirmSlot = React.useState(false);
+      var confirming = confirmSlot[0];
+      var setConfirming = confirmSlot[1];
+      var sourcesSlot = React.useState(false);
+      var showSources = sourcesSlot[0];
+      var setShowSources = sourcesSlot[1];
+      var moveSlot = React.useState(null);
+      var move = moveSlot[0];
+      var setMove = moveSlot[1];
+      var others = props.corpora.filter(function (item) { return item.id !== corpus.id; });
+      if (editing) {
+        return React.createElement("div", { className: "dshwkb-corpus-card", "data-active": corpus.active ? "true" : undefined },
+          React.createElement(CorpusForm, {
+            t: t, mode: "edit", busy: props.busy, initial: corpus,
+            onCancel: function () { setEditing(false); },
+            onSubmit: function (draft) { props.onUpdate(corpus.id, { name: draft.name, description: draft.description, adult: draft.adult }).then(function (ok) { if (ok) setEditing(false); }); },
+          })
+        );
+      }
+      return React.createElement("div", { className: "dshwkb-corpus-card", "data-active": corpus.active ? "true" : undefined, style: { "--kb-hue": corpusTone(corpus) } },
+        React.createElement("div", { className: "dshwkb-corpus-head" },
+          React.createElement(CorpusDot, { corpus: corpus }),
+          React.createElement("span", { className: "dshwkb-corpus-name" }, corpus.name),
+          React.createElement(AdultBadge, { corpus: corpus, t: t }),
+          corpus.active ? React.createElement("span", { className: "dshwkb-badge" }, t("corpusCurrent")) : null
+        ),
+        corpus.description ? React.createElement("div", { className: "dshwkb-corpus-desc" }, corpus.description) : null,
+        React.createElement("div", { className: "dshwkb-corpus-stats" },
+          React.createElement("span", null, React.createElement("b", null, corpus.notes), " " + t("corpusNotesUnit")),
+          React.createElement("span", null, React.createElement("b", null, formatChars(corpus.chars, t)), " " + t("charsLabel")),
+          React.createElement("span", null, React.createElement("b", null, corpus.sources.length), " " + t("corpusSourcesUnit"))
+        ),
+        React.createElement("div", { className: "dshwkb-corpus-actions" },
+          corpus.active ? null : React.createElement("button", { type: "button", className: "dshwkb-primary", disabled: props.busy, onClick: function () { props.onActivate(corpus.id); } }, t("corpusUse")),
+          React.createElement("button", { type: "button", className: "dshwkb-ghost", disabled: props.busy, onClick: function () { setEditing(true); } }, t("edit")),
+          corpus.sources.length > 0 ? React.createElement("button", { type: "button", className: "dshwkb-ghost", onClick: function () { setShowSources(!showSources); } }, showSources ? t("corpusHideSources") : t("corpusShowSources")) : null,
+          React.createElement("button", {
+            type: "button", className: "dshwkb-ghost", "data-danger": "true", "data-armed": confirming || undefined, style: { marginLeft: "auto" },
+            disabled: props.busy || props.corpora.length <= 1, title: props.corpora.length <= 1 ? t("corpusLastHint") : undefined,
+            onClick: function () {
+              if (!confirming) { setConfirming(true); return; }
+              setConfirming(false);
+              props.onDelete(corpus.id);
+            },
+            onBlur: function () { setConfirming(false); },
+          }, confirming ? t("corpusDeleteConfirm") : t("remove"))
+        ),
+        confirming ? React.createElement("div", { className: "dshwkb-corpus-warn" }, t("corpusDeleteHint")) : null,
+        showSources ? React.createElement("div", { className: "dshwkb-sources" },
+          React.createElement("div", { className: "dshwkb-sources-hint" }, t("corpusSourcesHint")),
+          corpus.sources.map(function (source) {
+            var pending = move && move.tag === source.tag;
+            return React.createElement("div", { className: "dshwkb-source", key: source.tag },
+              React.createElement("span", { className: "dshwkb-source-name", title: source.tag }, source.tag),
+              React.createElement("span", { className: "dshwkb-source-count" }, source.count + " " + t("corpusNotesUnit")),
+              others.length === 0 ? null : pending
+                ? React.createElement("span", { className: "dshwkb-source-confirm" },
+                  React.createElement("button", { type: "button", className: "dshwkb-primary", disabled: props.busy, onClick: function () { props.onMove(corpus.id, move.to, source.tag).then(function () { setMove(null); }); } },
+                    t("corpusMoveConfirm").replace("{name}", (others.find(function (item) { return item.id === move.to; }) || {}).name || "")),
+                  React.createElement("button", { type: "button", className: "dshwkb-icon-btn", "aria-label": t("cancel"), onClick: function () { setMove(null); } }, React.createElement(Icon, { name: "close", size: 13 })))
+                : React.createElement("select", {
+                  className: "dshwkb-source-move", value: "", "aria-label": t("corpusMoveTo"),
+                  onChange: function (event) { if (event.target.value) setMove({ tag: source.tag, to: event.target.value }); },
+                },
+                  React.createElement("option", { value: "" }, t("corpusMoveTo")),
+                  others.map(function (item) { return React.createElement("option", { key: item.id, value: item.id }, item.name + (item.adult ? " · 18+" : "")); })
+                )
+            );
+          })
+        ) : null
+      );
+    }
+
+    function CorporaManager(props) {
+      var t = props.t;
+      return React.createElement("div", { className: "dshwkb-corpora" },
+        React.createElement("div", { className: "dshwkb-callout" }, React.createElement(Icon, { name: "info" }), React.createElement("span", null, t("corporaIntro"))),
+        props.creating
+          ? React.createElement("div", { className: "dshwkb-corpus-card", "data-new": "true" },
+            React.createElement("div", { className: "dshwkb-corpus-head" }, React.createElement("span", { className: "dshwkb-corpus-name" }, t("corpusCreate"))),
+            React.createElement(CorpusForm, { t: t, mode: "create", busy: props.busy, onCancel: function () { props.onCreating(false); }, onSubmit: props.onCreate }))
+          : React.createElement("button", { type: "button", className: "dshwkb-add-corpus", onClick: function () { props.onCreating(true); } }, React.createElement(Icon, { name: "plus", size: 14 }), t("corpusCreate")),
+        props.status === "loading" && props.corpora.length === 0
+          ? React.createElement("div", { className: "dshwkb-skeletons" }, [0, 1].map(function (index) { return React.createElement("div", { className: "dshwkb-skeleton", key: index }); }))
+          : React.createElement("div", { className: "dshwkb-corpus-list" }, props.corpora.map(function (corpus) {
+            return React.createElement(CorpusCard, {
+              key: corpus.id, corpus: corpus, corpora: props.corpora, t: t, busy: props.busy,
+              onActivate: props.onActivate, onUpdate: props.onUpdate, onDelete: props.onDelete, onMove: props.onMove,
+            });
+          }))
+      );
+    }
+
     // ── the panel, mounted in Settings and in the right sidebar ───────────
     function KnowledgeBasePanel(props) {
       var t = typeof props.t === "function" ? props.t : function (key) { return key; };
@@ -381,6 +654,15 @@ window.__ModuleLoader__.load({
       var bannedSavingSlot = React.useState(false);
       var bannedSaving = bannedSavingSlot[0];
       var setBannedSaving = bannedSavingSlot[1];
+      var corporaSlot = React.useState({ status: "idle", list: [] });
+      var corpora = corporaSlot[0];
+      var setCorpora = corporaSlot[1];
+      var corporaBusySlot = React.useState(false);
+      var corporaBusy = corporaBusySlot[0];
+      var setCorporaBusy = corporaBusySlot[1];
+      var creatingSlot = React.useState(false);
+      var creatingCorpus = creatingSlot[0];
+      var setCreatingCorpus = creatingSlot[1];
       var mountedRef = React.useRef(true);
       var requestRef = React.useRef(0);
 
@@ -402,6 +684,21 @@ window.__ModuleLoader__.load({
           if (mountedRef.current && value && value.mode) setWorkMode(value.mode);
         }, function () {});
       }, []);
+
+      var canCorpora = typeof kb.listCorpora === "function";
+      var loadCorpora = React.useCallback(function () {
+        if (!canCorpora) return Promise.resolve();
+        setCorpora(function (current) { return { status: "loading", list: current.list }; });
+        return kb.listCorpora().then(function (value) {
+          if (mountedRef.current) setCorpora({ status: "ready", list: (value && value.corpora) || [] });
+        }, function (error) {
+          if (!mountedRef.current) return;
+          setCorpora(function (current) { return { status: "error", list: current.list }; });
+          setNotice({ kind: "error", text: t("error") + ": " + failureText(error) });
+        });
+      }, [kb, t]);
+
+      React.useEffect(function () { if (workMode === "writing") loadCorpora(); }, [workMode]);
 
       var load = React.useCallback(function (nextQuery, nextTag) {
         var requestId = ++requestRef.current;
@@ -768,6 +1065,9 @@ window.__ModuleLoader__.load({
           },
             React.createElement("span", { className: "dshwkb-drop-icon" }, React.createElement(Icon, { name: "upload", size: 22 })),
             React.createElement("span", { className: "dshwkb-drop-title" }, importing ? t("feeding") : t("dropTitle")),
+            workMode === "writing" && activeCorpus
+              ? React.createElement("span", { className: "dshwkb-drop-target" }, t("feedInto"), React.createElement(CorpusDot, { corpus: activeCorpus }), React.createElement("b", null, activeCorpus.name), React.createElement(AdultBadge, { corpus: activeCorpus, t: t }))
+              : null,
             React.createElement("span", { className: "dshwkb-drop-hint" }, t("dropHint")),
             React.createElement("button", { type: "button", className: "dshwkb-primary", onClick: pickFiles, disabled: importing }, t("dropBrowse")),
             React.createElement("span", { className: "dshwkb-drop-note" }, t("dropNote"))
@@ -801,7 +1101,7 @@ window.__ModuleLoader__.load({
             setSwitching(false);
             var applied = (value && value.mode) || next;
             setWorkMode(applied);
-            setMode("browse"); setSelected(null); setEditing(false);
+            setMode("browse"); setSelected(null); setEditing(false); setCreatingCorpus(false);
             setQuery(""); setActiveTag("");
             setNotice({ kind: "ok", text: applied === "writing" ? t("switchedWriting") : t("switchedAssistant") });
             load("", "");
@@ -847,6 +1147,49 @@ window.__ModuleLoader__.load({
         );
       }
 
+      // Every corpus action ends by refreshing the corpus list and, when the
+      // default corpus may have changed, the notes the panel shows.
+      function corpusAction(run, message, reloadNotes) {
+        setCorporaBusy(true);
+        return run().then(function (value) {
+          if (!mountedRef.current) return false;
+          setCorporaBusy(false);
+          if (message) setNotice({ kind: "ok", text: typeof message === "function" ? message(value) : message });
+          loadCorpora();
+          if (reloadNotes) { setSelected(null); setEditing(false); setQuery(""); setActiveTag(""); load("", ""); }
+          return true;
+        }, function (error) {
+          if (!mountedRef.current) return false;
+          setCorporaBusy(false);
+          setNotice({ kind: "error", text: t("error") + ": " + failureText(error) });
+          return false;
+        });
+      }
+      function nameOf(id) {
+        var match = corpora.list.find(function (item) { return item.id === id; });
+        return match ? match.name : "";
+      }
+      function activateCorpus(id) {
+        return corpusAction(function () { return kb.setActiveCorpus(id); }, t("corpusSwitched").replace("{name}", nameOf(id)), true);
+      }
+      function createCorpus(draft) {
+        return corpusAction(function () { return kb.createCorpus({ name: draft.name, description: draft.description, adult: draft.adult, activate: draft.activate }); },
+          function (value) { return t("corpusCreated").replace("{name}", value && value.corpus ? value.corpus.name : draft.name); }, draft.activate)
+          .then(function (ok) { if (ok) setCreatingCorpus(false); return ok; });
+      }
+      function updateCorpus(id, patch) {
+        return corpusAction(function () { return kb.updateCorpus(id, patch); }, t("saved"), false);
+      }
+      function deleteCorpus(id) {
+        var wasActive = corpora.list.some(function (item) { return item.id === id && item.active; });
+        return corpusAction(function () { return kb.deleteCorpus(id); }, t("corpusDeleted").replace("{name}", nameOf(id)), wasActive);
+      }
+      function moveSource(fromId, toId, tag) {
+        return corpusAction(function () { return kb.moveNotes(fromId, toId, tag); },
+          function (value) { return t("corpusMoved").replace("{n}", value && value.moved || 0).replace("{name}", nameOf(toId)); }, true);
+      }
+      var activeCorpus = corpora.list.find(function (item) { return item.active; }) || null;
+
       function renderBanned() {
         var phraseCount = banned.text.split(/\r?\n/).filter(function (line) {
           var trimmed = line.trim();
@@ -854,7 +1197,7 @@ window.__ModuleLoader__.load({
         }).length;
         return React.createElement("div", { className: "dshwkb-detail" },
           React.createElement("div", { className: "dshwkb-callout" }, React.createElement(Icon, { name: "info" }),
-            React.createElement("span", null, t("bannedHint"), banned.isDefault ? " " + t("bannedDefault") : "")
+            React.createElement("span", null, activeCorpus ? t("bannedScope").replace("{name}", activeCorpus.name) + " " : "", t("bannedHint"), banned.isDefault ? " " + t("bannedDefault") : "")
           ),
           React.createElement("textarea", {
             className: "dshwkb-textarea",
@@ -907,6 +1250,13 @@ window.__ModuleLoader__.load({
               }, t("workWriting"))
             )
           ),
+          workMode === "writing" && canCorpora && corpora.list.length > 0
+            ? React.createElement(CorpusSwitcher, {
+              t: t, corpora: corpora.list, busy: corporaBusy,
+              onActivate: activateCorpus,
+              onManage: function (create) { setMode("corpora"); setSelected(null); setEditing(false); setNotice(null); setCreatingCorpus(create); },
+            })
+            : null,
           React.createElement("div", { className: "dshwkb-head-actions" },
             React.createElement("div", { className: "dshwkb-tabs", role: "tablist" },
               React.createElement("button", {
@@ -934,17 +1284,34 @@ window.__ModuleLoader__.load({
                   "data-active": mode === "banned" || undefined,
                   onClick: openBanned,
                 }, t("modeBanned"))
+                : null,
+              workMode === "writing" && canCorpora
+                ? React.createElement("button", {
+                  type: "button",
+                  className: "dshwkb-tab",
+                  role: "tab",
+                  "aria-selected": mode === "corpora",
+                  "data-active": mode === "corpora" || undefined,
+                  onClick: function () { setMode("corpora"); setSelected(null); setEditing(false); setNotice(null); loadCorpora(); },
+                }, t("modeCorpora"))
                 : null
             ),
-            mode !== "banned" && selected === null
+            mode !== "banned" && mode !== "corpora" && selected === null
               ? React.createElement("button", { type: "button", className: "dshwkb-primary", onClick: startCreate }, React.createElement(Icon, { name: "plus", size: 14 }), t("create"))
               : null
           )
         ),
-        workMode === "writing" && mode !== "banned" && selected === null
-          ? React.createElement("div", { className: "dshwkb-callout" }, React.createElement(Icon, { name: "info" }), React.createElement("span", null, t("workHintWriting")))
+        workMode === "writing" && mode !== "banned" && mode !== "corpora" && selected === null
+          ? React.createElement("div", { className: "dshwkb-callout" }, React.createElement(Icon, { name: "info" }),
+            React.createElement("span", null, activeCorpus ? t("workHintCorpus").replace("{name}", activeCorpus.name) : t("workHintWriting")))
           : null,
-        mode === "banned"
+        mode === "corpora"
+          ? React.createElement(CorporaManager, {
+            t: t, corpora: corpora.list, status: corpora.status, busy: corporaBusy, creating: creatingCorpus,
+            onCreating: setCreatingCorpus, onCreate: createCorpus, onActivate: activateCorpus,
+            onUpdate: updateCorpus, onDelete: deleteCorpus, onMove: moveSource,
+          })
+          : mode === "banned"
           ? renderBanned()
           : mode === "feed"
           ? renderFeed()
@@ -1097,6 +1464,39 @@ window.__ModuleLoader__.load({
         "dismiss": "\u5173\u95ed\u63d0\u793a",
         "importResults": "\u672c\u6b21\u6295\u5582",
         "clearResults": "\u6e05\u7a7a\u8bb0\u5f55",
+        "modeCorpora": "\u7d20\u6750\u5e93",
+        "corpusLabel": "\u7d20\u6750\u5e93",
+        "corpusNotesUnit": "\u6bb5",
+        "corpusSourcesUnit": "\u4e2a\u6765\u6e90",
+        "corpusCreate": "\u65b0\u5efa\u7d20\u6750\u5e93",
+        "corpusManage": "\u7ba1\u7406\u7d20\u6750\u5e93",
+        "corpusCurrent": "\u5f53\u524d",
+        "corpusUse": "\u8bbe\u4e3a\u5f53\u524d",
+        "corpusName": "\u540d\u79f0",
+        "corpusNamePlaceholder": "\u4f8b\u5982 \u90fd\u5e02\u3001\u60ac\u7591\u3001\u6210\u4eba",
+        "corpusDescription": "\u8bf4\u660e\uff08\u53ef\u9009\uff09",
+        "corpusDescriptionPlaceholder": "\u8fd9\u4e2a\u5e93\u653e\u4ec0\u4e48\u7c7b\u578b\u7684\u53c2\u8003\u5c0f\u8bf4",
+        "corpusAdult": "\u6807\u8bb0\u4e3a\u6210\u4eba\u5185\u5bb9\uff0818+\uff09",
+        "corpusAdultHint": "\u53ea\u662f\u4e00\u4e2a\u9192\u76ee\u7684\u6807\u8bb0\uff0c\u65b9\u4fbf\u4f60\u5728\u5207\u6362\u548c\u7ed1\u5b9a\u65f6\u4e00\u773c\u8ba4\u51fa\u6765\u3002",
+        "corpusActivateNow": "\u521b\u5efa\u540e\u7acb\u5373\u8bbe\u4e3a\u5f53\u524d\u7d20\u6750\u5e93",
+        "corpusShowSources": "\u6309\u6765\u6e90\u6574\u7406",
+        "corpusHideSources": "\u6536\u8d77\u6765\u6e90",
+        "corpusSourcesHint": "\u6bcf\u4e2a\u6765\u6e90\u662f\u4e00\u672c\u6295\u5582\u8fdb\u6765\u7684\u4e66\uff08\u6216\u4e00\u4e2a\u6807\u7b7e\uff09\u3002\u628a\u5b83\u79fb\u5230\u5176\u4ed6\u7d20\u6750\u5e93\uff0c\u8fd9\u672c\u4e66\u7684\u6240\u6709\u6bb5\u843d\u4f1a\u6574\u4f53\u642c\u8fc7\u53bb\u3002",
+        "corpusMoveTo": "\u79fb\u5230\u2026",
+        "corpusMoveConfirm": "\u786e\u8ba4\u79fb\u5230\u300c{name}\u300d",
+        "corpusDeleteConfirm": "\u786e\u8ba4\u5220\u9664\uff1f",
+        "corpusDeleteHint": "\u6574\u4e2a\u7d20\u6750\u5e93\u4f1a\u79fb\u5230\u77e5\u8bc6\u5e93\u76ee\u5f55\u4e0b\u7684 .trash-corpora\uff0c\u53ef\u4ee5\u624b\u52a8\u6062\u590d\uff1b\u7ed1\u5b9a\u5b83\u7684\u5c0f\u8bf4\u4f1a\u6539\u7528\u5f53\u524d\u7d20\u6750\u5e93\u3002",
+        "corpusLastHint": "\u81f3\u5c11\u8981\u4fdd\u7559\u4e00\u4e2a\u7d20\u6750\u5e93",
+        "corpusSwitched": "\u5df2\u5207\u6362\u5230\u300c{name}\u300d\u7d20\u6750\u5e93\u3002",
+        "corpusCreated": "\u5df2\u521b\u5efa\u300c{name}\u300d\u7d20\u6750\u5e93\u3002",
+        "corpusDeleted": "\u300c{name}\u300d\u5df2\u79fb\u5165 .trash-corpora\u3002",
+        "corpusMoved": "\u5df2\u628a {n} \u6bb5\u79fb\u5230\u300c{name}\u300d\u3002",
+        "corporaIntro": "\u6bcf\u4e2a\u7d20\u6750\u5e93\u5b8c\u5168\u9694\u79bb\uff1a\u6a21\u578b\u53ea\u770b\u5f97\u5230\u6b63\u5728\u7528\u7684\u90a3\u4e00\u4e2a\uff0c\u7981\u7528\u5957\u8def\u8868\u4e5f\u662f\u6bcf\u4e2a\u5e93\u5404\u81ea\u4e00\u4efd\u3002\u300c\u5f53\u524d\u300d\u662f\u666e\u901a\u5bf9\u8bdd\u7684\u9ed8\u8ba4\u5e93\uff1b\u5728\u5c0f\u8bf4\u5199\u4f5c\u7684\u300c\u9879\u76ee\u300d\u9875\u53ef\u4ee5\u7ed9\u6bcf\u672c\u4e66\u5355\u72ec\u7ed1\u5b9a\u4e00\u4e2a\u5e93\uff0c\u7528 /write \u5199\u8fd9\u672c\u4e66\u65f6\u81ea\u52a8\u4f7f\u7528\u3002",
+        "workHintCorpus": "\u5199\u4f5c\u6a21\u5f0f\u00b7\u6b63\u5728\u4f7f\u7528\u300c{name}\u300d\u7d20\u6750\u5e93\u3002\u6a21\u578b\u53ea\u4f1a\u68c0\u7d22\u8fd9\u4e2a\u5e93\uff1b\u5728\u5c0f\u8bf4\u5199\u4f5c\u91cc\u7ed1\u5b9a\u4e86\u5176\u4ed6\u5e93\u7684\u4e66\u4e0d\u53d7\u5f71\u54cd\u3002",
+        "feedInto": "\u6295\u5582\u5230",
+        "bannedScope": "\u8fd9\u662f\u300c{name}\u300d\u7d20\u6750\u5e93\u7684\u7981\u7528\u5957\u8def\u8868\u3002",
+        "adultHint": "\u6210\u4eba\u5185\u5bb9\u7d20\u6750\u5e93",
+        "tenThousand": "\u4e07",
       },
       en: {
         "nav": "Knowledge base",
@@ -1177,6 +1577,39 @@ window.__ModuleLoader__.load({
         "dismiss": "Dismiss",
         "importResults": "This session's feeds",
         "clearResults": "Clear list",
+        "modeCorpora": "Libraries",
+        "corpusLabel": "Library",
+        "corpusNotesUnit": "passages",
+        "corpusSourcesUnit": "sources",
+        "corpusCreate": "New library",
+        "corpusManage": "Manage libraries",
+        "corpusCurrent": "Current",
+        "corpusUse": "Use this",
+        "corpusName": "Name",
+        "corpusNamePlaceholder": "e.g. Urban, Thriller, Adult",
+        "corpusDescription": "Description (optional)",
+        "corpusDescriptionPlaceholder": "What kind of reference fiction lives here",
+        "corpusAdult": "Mark as adult content (18+)",
+        "corpusAdultHint": "Only a visible label, so you can tell it apart when switching and binding.",
+        "corpusActivateNow": "Make it the current library after creating it",
+        "corpusShowSources": "Sort by source",
+        "corpusHideSources": "Hide sources",
+        "corpusSourcesHint": "Each source is one fed book (or a tag). Moving it carries all of its passages to the other library.",
+        "corpusMoveTo": "Move to…",
+        "corpusMoveConfirm": "Move to \"{name}\"",
+        "corpusDeleteConfirm": "Delete it?",
+        "corpusDeleteHint": "The whole library moves to .trash-corpora under the knowledge base and can be restored by hand; books bound to it fall back to the current library.",
+        "corpusLastHint": "Keep at least one library",
+        "corpusSwitched": "Switched to the \"{name}\" library.",
+        "corpusCreated": "Created the \"{name}\" library.",
+        "corpusDeleted": "\"{name}\" moved to .trash-corpora.",
+        "corpusMoved": "Moved {n} passages to \"{name}\".",
+        "corporaIntro": "Libraries are fully isolated: the model only sees the one in use, and each keeps its own banned list. \"Current\" is the default for ordinary conversations; in Novel Writing \u2192 Project each book can bind its own library, used automatically under /write.",
+        "workHintCorpus": "Writing mode \u00b7 using the \"{name}\" library. The model only searches this one; books bound to another library in Novel Writing are unaffected.",
+        "feedInto": "Feeding into",
+        "bannedScope": "Banned list of the \"{name}\" library.",
+        "adultHint": "Adult-content library",
+        "tenThousand": "",
       },
     };
 
@@ -1222,6 +1655,12 @@ window.__ModuleLoader__.load({
             setMode: function (mode) { return unwrap("setMode", [mode]); },
             getBanned: function () { return unwrap("getBanned", []); },
             setBanned: function (text) { return unwrap("setBanned", [text]); },
+            listCorpora: function () { return unwrap("listCorpora", []); },
+            createCorpus: function (input) { return unwrap("createCorpus", [input]); },
+            updateCorpus: function (id, patch) { return unwrap("updateCorpus", [id, patch]); },
+            deleteCorpus: function (id) { return unwrap("deleteCorpus", [id]); },
+            setActiveCorpus: function (id) { return unwrap("setActiveCorpus", [id]); },
+            moveNotes: function (fromId, toId, tag) { return unwrap("moveNotes", [fromId, toId, tag]); },
           },
         };
       }

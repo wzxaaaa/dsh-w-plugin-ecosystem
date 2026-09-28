@@ -490,6 +490,47 @@ export class KnowledgeStore {
   }
 
   /**
+   * Move every note carrying `tag` into another store's directory (another
+   * style corpus). Files are renamed, never copied, and a name already taken
+   * in the target gets a `-moved` suffix instead of being overwritten.
+   * @param {KnowledgeStore} target - the receiving store.
+   * @param {string} tag - the tag that selects the notes (case-insensitive).
+   * @returns {Promise<{ moved: number, renamed: number }>} what was moved.
+   */
+  async moveTaggedTo(target, tag) {
+    if (!(target instanceof KnowledgeStore) || target.root === this.root) {
+      throw storeError('KB_MOVE_TARGET', 'notes can only move to a different knowledge base directory')
+    }
+    const key = String(tag ?? '').trim().toLowerCase()
+    if (key === '') throw storeError('KB_MOVE_TAG', 'a tag is required to choose which notes move')
+    const outcome = await this._enqueue(async () => {
+      await this.sync({ force: true })
+      const chosen = [...this._notes.values()].filter((note) => note.tags.some((item) => item.toLowerCase() === key))
+      if (chosen.length === 0) return { moved: 0, renamed: 0 }
+      await mkdir(target.notesDir(), { recursive: true })
+      let moved = 0
+      let renamed = 0
+      for (const note of chosen) {
+        let file = note.file
+        let destination = join(target.notesDir(), file)
+        for (let attempt = 1; await stat(destination).then(() => true, () => false); attempt += 1) {
+          const dot = note.file.lastIndexOf('.')
+          file = `${note.file.slice(0, dot)}-moved${attempt > 1 ? attempt : ''}${note.file.slice(dot)}`
+          destination = join(target.notesDir(), file)
+          renamed += attempt === 1 ? 1 : 0
+        }
+        await rename(join(this.notesDir(), note.file), destination)
+        this._notes.delete(note.id)
+        moved += 1
+      }
+      this.revision += 1
+      return { moved, renamed }
+    })
+    await target.sync({ force: true })
+    return outcome
+  }
+
+  /**
    * Render the compact index injected into the model's runtime context.
    * @param {{ maxNotes?: number, maxChars?: number }} [options] - index budgets.
    * @returns {string} the index text, or an empty string when no notes exist and nothing is worth saying.

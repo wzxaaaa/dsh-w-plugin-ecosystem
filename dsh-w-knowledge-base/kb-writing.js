@@ -73,11 +73,12 @@ export const DEFAULT_BANNED_PHRASES = Object.freeze([
  * @param {boolean} [hasBanned] - whether a non-empty banned list is injected too.
  * @returns {string} the section text.
  */
-export function writingGuidanceText(displayRoot, hasBanned = false) {
+export function writingGuidanceText(displayRoot, hasBanned = false, corpusName = '') {
+  const named = corpusName ? '「' + corpusName + '」' : ''
   const lines = [
-    '# 写作模式 · 文风素材库',
+    '# 写作模式 · 文风素材库' + named,
     '',
-    '你现在处于写作模式。' + displayRoot + ' 下是一个**人类作者写的**小说素材库，用 `kb_search` / `kb_read` 检索，用 `kb_import` 喂入新的参考小说。'
+    '你现在处于写作模式。' + displayRoot + ' 下是一个**人类作者写的**小说素材库' + named + '，用 `kb_search` / `kb_read` 检索，用 `kb_import` 喂入新的参考小说。'
       + '它的用途只有一个：在你动笔前，让真人写的文字给你做语感锚点，压掉 AI 腔。',
     '',
     '**动笔前的检索流程**：写每一场戏之前，先用 `kb_search` 描述这场戏——地点、情绪、是对白为主还是白描为主、叙述视角，'
@@ -153,8 +154,8 @@ export function bannedPromptText(phrases) {
  * @param {number} [maxSources] - how many source tags to name.
  * @returns {string} the index text.
  */
-export function styleIndexText(displayRoot, total, sources = [], maxSources = 8) {
-  const header = '文风素材库（写作模式）位于 ' + displayRoot
+export function styleIndexText(displayRoot, total, sources = [], maxSources = 8, corpusName = '') {
+  const header = '文风素材库' + (corpusName ? '「' + corpusName + '」' : '') + '（写作模式）位于 ' + displayRoot
   if (!Number.isFinite(total) || total <= 0) {
     return header + '：还是空的。用 kb_import 喂一本参考小说（支持 GBK/UTF-8 的 .txt，会自动按章切段）后再动笔。'
   }

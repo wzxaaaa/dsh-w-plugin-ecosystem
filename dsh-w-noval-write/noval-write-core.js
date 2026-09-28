@@ -38,6 +38,7 @@ const PROJECT_KEYS = Object.freeze([
   'scene',
   'progress',
   'notes',
+  'styleCorpusId',
 ])
 const CHARACTER_KEYS = Object.freeze([
   'id', 'name', 'aliases', 'age', 'identity', 'role', 'status', 'appearance', 'traits', 'background',
@@ -274,7 +275,7 @@ export function projectToolSchema({ partial = false, required = true } = {}) {
       ? 'Partial canonical novel project object. Omitted top-level fields are preserved.'
       : 'Complete canonical novel project object. Send this object directly; never stringify or wrap it.',
     properties: {
-      ...schemaProperties(['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints'], false),
+      ...schemaProperties(['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints', 'styleCorpusId'], false),
       genreProfile: {
         ...volumeToolSchema(false),
         properties: { type: { type: 'string' }, customFields: customFieldsSchema() },
@@ -514,7 +515,7 @@ export function projectShapeIssues(value, { partial = false } = {}) {
   for (const key of ['title', 'characters', 'relationships', 'world', 'plot', 'scene', 'progress']) {
     if (!partial && !Object.hasOwn(value, key)) issues.push(`project.${key} is required`)
   }
-  for (const key of ['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints', 'notes']) {
+  for (const key of ['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints', 'notes', 'styleCorpusId']) {
     if (Object.hasOwn(value, key) && typeof value[key] !== 'string') {
       issues.push(`project.${key} must be a string; received ${receivedType(value[key])}`)
     }
@@ -683,6 +684,9 @@ export function defaultProject() {
     },
     progress: [],
     notes: '',
+    // Which knowledge-base style corpus this book writes with: '' follows the
+    // knowledge base's default, 'none' uses no corpus, anything else is an id.
+    styleCorpusId: '',
   }
 }
 
@@ -988,6 +992,7 @@ export function normalizeProject(value) {
     },
     progress,
     notes: text(input.notes),
+    styleCorpusId: text(input.styleCorpusId, 60),
   }
 }
 
@@ -1042,7 +1047,7 @@ export function mergeProject(currentValue, patchValue) {
   const current = normalizeProject(currentValue)
   const patch = patchValue && typeof patchValue === 'object' && !Array.isArray(patchValue) ? patchValue : {}
   const next = { ...current }
-  for (const key of ['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints', 'notes']) {
+  for (const key of ['title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints', 'notes', 'styleCorpusId']) {
     if (Object.hasOwn(patch, key)) next[key] = patch[key]
   }
   if (Object.hasOwn(patch, 'genreProfile')) {
@@ -1738,4 +1743,92 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
   const marker = '\n\n[Novel workspace facts truncated; open the right panel for full details.]\n'
   const factBudget = Math.max(0, limit - marker.length - protocol.length)
   return facts.slice(0, factBudget) + marker + protocol
+}
+
+const DIFF_SCALAR_KEYS = Object.freeze([
+  'title', 'genre', 'premise', 'tone', 'pov', 'targetWords', 'audience', 'contentRating', 'styleGuide', 'constraints', 'notes', 'styleCorpusId',
+])
+const DIFF_LIST_LABELS = Object.freeze({
+  characters: item => item.name || item.id,
+  relationships: item => item.label || item.id,
+  volumes: item => item.title || item.id,
+  chapters: item => [item.number ? `#${item.number}` : '', item.title || (item.number ? '' : item.id)].filter(Boolean).join(' '),
+  threads: item => item.title || item.id,
+  progress: item => item.chapter || compactSnippet(item.summary, 24),
+})
+
+function compactSnippet(value, limit = 120) {
+  const rendered = String(value ?? '').replace(/\s+/gu, ' ').trim()
+  return rendered.length > limit ? `${rendered.slice(0, limit - 1)}…` : rendered
+}
+
+function flattenChapters(project) {
+  return project.volumes.flatMap(volume => volume.chapters.map(chapter => ({ ...chapter, id: `${volume.id}/${chapter.id}` })))
+}
+
+function changedFields(before, after, ignore = []) {
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})])
+  return [...keys].filter(key => !ignore.includes(key) && JSON.stringify(before?.[key]) !== JSON.stringify(after?.[key]))
+}
+
+/**
+ * What changed between two versions of a project, section by section.
+ * Record sections report changed fields; list sections report items added,
+ * removed, and changed (matched by id). With `detail`, labels and short
+ * before/after snippets are included for the history compare view.
+ */
+export function describeProjectDiff(beforeValue, afterValue, { detail = false } = {}) {
+  const before = normalizeProject(beforeValue)
+  const after = normalizeProject(afterValue)
+  const sections = []
+  const scalars = DIFF_SCALAR_KEYS.filter(key => before[key] !== after[key])
+  if (scalars.length > 0) {
+    sections.push({
+      section: 'project', changed: scalars.length, fields: scalars,
+      ...(detail ? { values: scalars.map(field => ({ field, before: compactSnippet(before[field]), after: compactSnippet(after[field]) })) } : {}),
+    })
+  }
+  const genreFields = changedFields(before.genreProfile, after.genreProfile)
+  if (genreFields.length > 0) sections.push({ section: 'genreProfile', changed: genreFields.length, fields: genreFields })
+  for (const key of ['world', 'plot', 'scene']) {
+    const fields = changedFields(before[key], after[key])
+    if (fields.length === 0) continue
+    sections.push({
+      section: key, changed: fields.length, fields,
+      ...(detail ? { values: fields.map(field => ({ field, before: compactSnippet(before[key][field]), after: compactSnippet(after[key][field]) })) } : {}),
+    })
+  }
+  const lists = {
+    characters: [before.characters, after.characters],
+    relationships: [before.relationships, after.relationships],
+    volumes: [before.volumes, after.volumes],
+    chapters: [flattenChapters(before), flattenChapters(after)],
+    threads: [before.threads, after.threads],
+    progress: [before.progress, after.progress],
+  }
+  for (const [key, [left, right]] of Object.entries(lists)) {
+    const label = DIFF_LIST_LABELS[key]
+    const leftById = new Map(left.map(item => [item.id, item]))
+    const rightById = new Map(right.map(item => [item.id, item]))
+    const added = right.filter(item => !leftById.has(item.id))
+    const removed = left.filter(item => !rightById.has(item.id))
+    const ignore = key === 'volumes' ? ['chapters'] : []
+    const changed = right
+      .filter(item => leftById.has(item.id))
+      .map(item => ({ item, fields: changedFields(leftById.get(item.id), item, ignore) }))
+      .filter(entry => entry.fields.length > 0)
+    const moved = key === 'chapters' || key === 'volumes'
+      ? JSON.stringify(left.map(item => item.id).filter(id => rightById.has(id))) !== JSON.stringify(right.map(item => item.id).filter(id => leftById.has(id)))
+      : false
+    if (added.length + removed.length + changed.length === 0 && !moved) continue
+    sections.push({
+      section: key, added: added.length, removed: removed.length, changed: changed.length, ...(moved ? { reordered: true } : {}),
+      ...(detail ? {
+        addedItems: added.map(label).slice(0, 50),
+        removedItems: removed.map(label).slice(0, 50),
+        changedItems: changed.slice(0, 50).map(entry => ({ label: label(entry.item), fields: entry.fields })),
+      } : {}),
+    })
+  }
+  return sections
 }

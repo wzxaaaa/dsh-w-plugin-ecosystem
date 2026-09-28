@@ -13,8 +13,8 @@
  * both are host-free so they stay unit-testable.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdir, rename, stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import Schema from '@deepseek-ai/schemastery'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -23,6 +23,17 @@ import { dshHomePath, expandHomePath, resolveDshHome } from '@deepseek-ai/dsh-ho
 import { KnowledgeStore } from './kb-store.js'
 import { buildToolSpecs, summaryOf } from './kb-tools.js'
 import { firstLine } from './kb-format.js'
+import {
+  CORPORA_FILE,
+  DEFAULT_CORPUS_ID,
+  addCorpus,
+  findCorpus,
+  normalizeRegistry,
+  normalizeScopeRequest,
+  removeCorpus,
+  setActiveCorpus,
+  updateCorpus,
+} from './kb-corpora.js'
 import {
   BANNED_CONTEXT_ORDER,
   BANNED_FILE,
@@ -166,6 +177,12 @@ let KnowledgeBaseService = (() => {
   let _setMode_decorators
   let _getBanned_decorators
   let _setBanned_decorators
+  let _listCorpora_decorators
+  let _createCorpus_decorators
+  let _updateCorpus_decorators
+  let _deleteCorpus_decorators
+  let _setActiveCorpus_decorators
+  let _moveNotes_decorators
   return class KnowledgeBaseService extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata
@@ -231,6 +248,42 @@ let KnowledgeBaseService = (() => {
         access: { has: obj => 'setBanned' in obj, get: obj => obj.setBanned },
         metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _listCorpora_decorators = [Remote('listCorpora')]
+      __esDecorate(this, null, _listCorpora_decorators, {
+        kind: 'method', name: 'listCorpora', static: false, private: false,
+        access: { has: obj => 'listCorpora' in obj, get: obj => obj.listCorpora },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _createCorpus_decorators = [Remote('createCorpus')]
+      __esDecorate(this, null, _createCorpus_decorators, {
+        kind: 'method', name: 'createCorpus', static: false, private: false,
+        access: { has: obj => 'createCorpus' in obj, get: obj => obj.createCorpus },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _updateCorpus_decorators = [Remote('updateCorpus')]
+      __esDecorate(this, null, _updateCorpus_decorators, {
+        kind: 'method', name: 'updateCorpus', static: false, private: false,
+        access: { has: obj => 'updateCorpus' in obj, get: obj => obj.updateCorpus },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _deleteCorpus_decorators = [Remote('deleteCorpus')]
+      __esDecorate(this, null, _deleteCorpus_decorators, {
+        kind: 'method', name: 'deleteCorpus', static: false, private: false,
+        access: { has: obj => 'deleteCorpus' in obj, get: obj => obj.deleteCorpus },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _setActiveCorpus_decorators = [Remote('setActiveCorpus')]
+      __esDecorate(this, null, _setActiveCorpus_decorators, {
+        kind: 'method', name: 'setActiveCorpus', static: false, private: false,
+        access: { has: obj => 'setActiveCorpus' in obj, get: obj => obj.setActiveCorpus },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _moveNotes_decorators = [Remote('moveNotes')]
+      __esDecorate(this, null, _moveNotes_decorators, {
+        kind: 'method', name: 'moveNotes', static: false, private: false,
+        access: { has: obj => 'moveNotes' in obj, get: obj => obj.moveNotes },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       if (_metadata) {
         Object.defineProperty(this, Symbol.metadata, {
           enumerable: true,
@@ -256,7 +309,7 @@ let KnowledgeBaseService = (() => {
       const location = resolveRoot(settings.root)
       this.settings = settings
       this.location = location
-      const storeConfig = {
+      const storeConfig = this.storeConfig = {
         maxNoteChars: settings.maxNoteChars,
         importTargetChars: settings.importTargetChars,
         maxDocChars: settings.importMaxChars,
@@ -264,13 +317,15 @@ let KnowledgeBaseService = (() => {
       }
       // Assistant mode: the original durable-memory notes, untouched.
       this.assistantStore = new KnowledgeStore({ ...storeConfig, root: location.root, displayRoot: location.displayRoot })
-      // Writing mode: a wholly separate style corpus under <root>/style-corpus,
-      // so feeding in reference novels never mixes with the agent's own notes.
-      this.writingRoot = join(location.root, WRITING_SUBDIR)
-      this.writingDisplayRoot = location.displayRoot + '/' + WRITING_SUBDIR
-      this.writingStore = new KnowledgeStore({ ...storeConfig, root: this.writingRoot, displayRoot: this.writingDisplayRoot })
+      // Writing mode: isolated style corpora, each a directory of its own under
+      // the root (the original <root>/style-corpus is the "default" corpus), so
+      // reference novels never mix with the agent's notes or with each other.
+      this.corporaPath = join(location.root, CORPORA_FILE)
+      this.registry = this._readRegistry()
+      this.corpusStores = new Map()
+      // Other plugins (novel writing) may bind a conversation to one corpus.
+      this.scopeResolvers = new Set()
       this.modePath = join(location.root, MODE_FILE)
-      this.bannedPath = join(this.writingRoot, BANNED_FILE)
       this.mode = this._readMode()
       // A single proxy the tools and panel bind to: every property read and
       // method call forwards to whichever store the current mode selects, so a
@@ -284,9 +339,9 @@ let KnowledgeBaseService = (() => {
       })
       // Warm both snapshots; a missing root is just an empty collection.
       this.assistantStore.sync({ force: true }).catch((error) => this.report('initial sync failed', error))
-      this.writingStore.sync({ force: true }).catch(() => {})
+      this.corpusStore(this.registry.active).sync({ force: true }).catch(() => {})
       for (const spec of buildToolSpecs({
-        store: this.store,
+        storeFor: (exec) => this.storeForScope(this.scopeFor(exec && exec.agent)),
         searchLimit: settings.searchLimit,
         readChars: settings.readChars,
       })) {
@@ -299,18 +354,98 @@ let KnowledgeBaseService = (() => {
       // text() reads the live mode, so a switch takes effect the next turn.
       this.ctx.inject(['systemPrompt'], (scope) => {
         if (settings.promptGuidance !== false) {
-          scope.systemPrompt.section({ name: 'dsh-w-knowledge-base:guidance', order: GUIDANCE_ORDER, text: () => this.guidanceTextForMode() })
+          scope.systemPrompt.section({ name: 'dsh-w-knowledge-base:guidance', order: GUIDANCE_ORDER, text: (context) => this.guidanceTextForMode(context && context.agent) })
         }
         if (settings.promptIndex !== false) {
-          scope.systemPrompt.context({ name: 'dsh-w-knowledge-base:index', order: INDEX_CONTEXT_ORDER, text: () => this.indexText() })
-          scope.systemPrompt.context({ name: 'dsh-w-knowledge-base:banned', order: BANNED_CONTEXT_ORDER, text: () => this.bannedText() })
+          scope.systemPrompt.context({ name: 'dsh-w-knowledge-base:index', order: INDEX_CONTEXT_ORDER, text: (context) => this.indexText(context && context.agent) })
+          scope.systemPrompt.context({ name: 'dsh-w-knowledge-base:banned', order: BANNED_CONTEXT_ORDER, text: (context) => this.bannedText(context && context.agent) })
         }
       })
     }
 
-    /** @returns {KnowledgeStore} the store the current mode operates on. */
+    /** @returns {KnowledgeStore} the store the panel and unbound conversations use. */
     activeStore() {
-      return this.mode === 'writing' ? this.writingStore : this.assistantStore
+      return this.mode === 'writing' ? this.corpusStore(this.registry.active) : this.assistantStore
+    }
+
+    /** The store for one corpus id, created on first use. */
+    corpusStore(corpusId) {
+      const entry = findCorpus(this.registry, corpusId) || findCorpus(this.registry, this.registry.active)
+      let store = this.corpusStores.get(entry.id)
+      if (!store) {
+        store = new KnowledgeStore({
+          ...this.storeConfig,
+          root: join(this.location.root, entry.dir),
+          displayRoot: this.location.displayRoot + '/' + entry.dir,
+        })
+        this.corpusStores.set(entry.id, store)
+      }
+      return store
+    }
+
+    _readRegistry() {
+      try {
+        return normalizeRegistry(JSON.parse(readFileSync(this.corporaPath, 'utf8')))
+      } catch (error) {
+        if (!error || error.code !== 'ENOENT') this.report('corpus registry read failed', error)
+        return normalizeRegistry(null)
+      }
+    }
+
+    _writeRegistry(next) {
+      mkdirSync(this.location.root, { recursive: true })
+      const temporary = this.corporaPath + '.tmp'
+      writeFileSync(temporary, JSON.stringify(next, null, 2) + '\n', 'utf8')
+      renameSync(temporary, this.corporaPath)
+      this.registry = next
+    }
+
+    /**
+     * Let another plugin decide, per conversation, whether it writes and with
+     * which corpus. The resolver receives the agent and returns null (no
+     * opinion), { writing: false }, or { corpusId }. Returns a disposer.
+     * @param {(agent: object) => unknown} resolver - the scope resolver.
+     * @returns {() => void} unregisters the resolver.
+     */
+    registerScopeResolver(resolver) {
+      if (typeof resolver !== 'function') throw new TypeError('resolver must be a function')
+      this.scopeResolvers.add(resolver)
+      return () => { this.scopeResolvers.delete(resolver) }
+    }
+
+    /**
+     * Where one conversation reads and writes: a bound conversation follows its
+     * binding, everything else follows the panel's mode and default corpus.
+     * @param {object} [agent] - the conversation's agent, when known.
+     * @returns {{ mode: 'assistant' | 'writing', corpus: object | null, bound: boolean }} the scope.
+     */
+    scopeFor(agent) {
+      if (agent) {
+        for (const resolver of this.scopeResolvers) {
+          let request = null
+          try {
+            request = normalizeScopeRequest(resolver(agent))
+          } catch (error) {
+            this.report('scope resolver failed', error)
+          }
+          if (!request) continue
+          if (!request.writing) return { mode: 'assistant', corpus: null, bound: true }
+          const corpus = (request.corpusId && findCorpus(this.registry, request.corpusId)) || findCorpus(this.registry, this.registry.active)
+          return { mode: 'writing', corpus, bound: true }
+        }
+      }
+      return this.mode === 'writing'
+        ? { mode: 'writing', corpus: findCorpus(this.registry, this.registry.active), bound: false }
+        : { mode: 'assistant', corpus: null, bound: false }
+    }
+
+    storeForScope(scope) {
+      return scope.mode === 'writing' ? this.corpusStore(scope.corpus.id) : this.assistantStore
+    }
+
+    bannedPathFor(corpusId) {
+      const entry = findCorpus(this.registry, corpusId) || findCorpus(this.registry, this.registry.active)
+      return join(this.location.root, entry.dir, BANNED_FILE)
     }
 
     /**
@@ -327,13 +462,14 @@ let KnowledgeBaseService = (() => {
     }
 
     /**
-     * The active banned-phrase list: the user's file when present, otherwise the
-     * shipped defaults so writing mode is useful out of the box.
+     * One corpus's banned-phrase list: the user's file when present, otherwise
+     * the shipped defaults so writing mode is useful out of the box.
+     * @param {string} corpusId - the corpus.
      * @returns {string[]} the phrases to avoid.
      */
-    bannedPhrases() {
+    bannedPhrases(corpusId) {
       try {
-        return parseBannedList(readFileSync(this.bannedPath, 'utf8'))
+        return parseBannedList(readFileSync(this.bannedPathFor(corpusId), 'utf8'))
       } catch (error) {
         if (error && error.code === 'ENOENT') return [...DEFAULT_BANNED_PHRASES]
         this.report('banned list read failed', error)
@@ -342,35 +478,42 @@ let KnowledgeBaseService = (() => {
     }
 
     /**
-     * The guidance section for the active mode.
+     * The guidance section for one conversation's scope.
+     * @param {object} [agent] - the conversation's agent.
      * @returns {string} the section text.
      */
-    guidanceTextForMode() {
-      if (this.mode === 'writing') {
-        return writingGuidanceText(this.writingDisplayRoot, this.bannedPhrases().length > 0)
+    guidanceTextForMode(agent) {
+      const scope = this.scopeFor(agent)
+      if (scope.mode === 'writing') {
+        const store = this.corpusStore(scope.corpus.id)
+        return writingGuidanceText(store.displayRoot, this.bannedPhrases(scope.corpus.id).length > 0, scope.corpus.name)
       }
       return guidanceText(this.location.displayRoot)
     }
 
     /**
      * The banned-phrase runtime context, injected in writing mode only.
+     * @param {object} [agent] - the conversation's agent.
      * @returns {string} the injected text, empty outside writing mode.
      */
-    bannedText() {
-      return this.mode === 'writing' ? bannedPromptText(this.bannedPhrases()) : ''
+    bannedText(agent) {
+      const scope = this.scopeFor(agent)
+      return scope.mode === 'writing' ? bannedPromptText(this.bannedPhrases(scope.corpus.id)) : ''
     }
 
     /**
      * Render the live index for one prompt assembly. Assembly is synchronous, so
      * this serves the current snapshot and schedules a revalidation for the next
      * turn — notes edited on disk surface without a restart.
+     * @param {object} [agent] - the conversation's agent.
      * @returns {string} the index text.
      */
-    indexText() {
-      const store = this.activeStore()
+    indexText(agent) {
+      const scope = this.scopeFor(agent)
+      const store = this.storeForScope(scope)
       store.sync().catch((error) => this.report('index sync failed', error))
-      if (this.mode === 'writing') {
-        return styleIndexText(this.writingDisplayRoot, store.notes().length, store.tagFacet(), this.settings.promptIndexNotes)
+      if (scope.mode === 'writing') {
+        return styleIndexText(store.displayRoot, store.notes().length, store.tagFacet(), this.settings.promptIndexNotes, scope.corpus.name)
       }
       return store.indexSnapshot({ maxNotes: this.settings.promptIndexNotes, maxChars: this.settings.promptIndexChars })
     }
@@ -525,7 +668,13 @@ let KnowledgeBaseService = (() => {
      * @returns {Promise<{ mode: string, assistantRoot: string, writingRoot: string }>} the mode state.
      */
     async getMode() {
-      return { mode: this.mode, assistantRoot: this.location.displayRoot, writingRoot: this.writingDisplayRoot }
+      const corpus = findCorpus(this.registry, this.registry.active)
+      return {
+        mode: this.mode,
+        assistantRoot: this.location.displayRoot,
+        writingRoot: this.corpusStore(corpus.id).displayRoot,
+        corpus: { id: corpus.id, name: corpus.name, adult: corpus.adult },
+      }
     }
 
     /**
@@ -539,7 +688,7 @@ let KnowledgeBaseService = (() => {
       if (next !== this.mode) {
         this.mode = next
         try {
-          await mkdir(this.writingRoot, { recursive: true }).catch(() => {})
+          await mkdir(this.corpusStore(this.registry.active).root, { recursive: true }).catch(() => {})
           writeFileSync(this.modePath, JSON.stringify({ mode: next }) + '\n', 'utf8')
         } catch (error) {
           this.report('mode write failed', error)
@@ -557,7 +706,7 @@ let KnowledgeBaseService = (() => {
       let isDefault = false
       let phrases
       try {
-        phrases = parseBannedList(readFileSync(this.bannedPath, 'utf8'))
+        phrases = parseBannedList(readFileSync(this.bannedPathFor(this.registry.active), 'utf8'))
       } catch (error) {
         if (!error || error.code === 'ENOENT') { phrases = [...DEFAULT_BANNED_PHRASES]; isDefault = true } else throw error
       }
@@ -571,9 +720,86 @@ let KnowledgeBaseService = (() => {
      */
     async setBanned(text) {
       const phrases = parseBannedList(typeof text === 'string' ? text : '')
-      await mkdir(this.writingRoot, { recursive: true })
-      writeFileSync(this.bannedPath, formatBannedList(phrases), 'utf8')
+      await mkdir(this.corpusStore(this.registry.active).root, { recursive: true })
+      writeFileSync(this.bannedPathFor(this.registry.active), formatBannedList(phrases), 'utf8')
       return { phrases }
+    }
+
+    /**
+     * Every corpus with its size and source books, for the panel and for the
+     * novel-writing plugin's corpus picker.
+     * @returns {Promise<{ active: string, mode: string, corpora: object[] }>} the corpora.
+     */
+    async listCorpora() {
+      const corpora = []
+      for (const entry of this.registry.corpora) {
+        const store = this.corpusStore(entry.id)
+        await store.sync().catch((error) => this.report(`corpus '${entry.id}' sync failed`, error))
+        const sources = store.tagFacet().filter((item) => item.tag !== 'import').slice(0, 200)
+        corpora.push({
+          id: entry.id,
+          name: entry.name,
+          description: entry.description,
+          adult: entry.adult,
+          createdAt: entry.createdAt,
+          root: store.displayRoot,
+          notes: store.notes().length,
+          chars: store.notes().reduce((sum, note) => sum + note.chars, 0),
+          sources,
+          active: entry.id === this.registry.active,
+          isDefault: entry.id === DEFAULT_CORPUS_ID,
+        })
+      }
+      return { active: this.registry.active, mode: this.mode, corpora }
+    }
+
+    /** Create a corpus; with `activate`, also make it the default. */
+    async createCorpus(input) {
+      const { registry, entry } = addCorpus(this.registry, input)
+      const next = input && input.activate === true ? setActiveCorpus(registry, entry.id) : registry
+      await mkdir(join(this.location.root, entry.dir), { recursive: true })
+      this._writeRegistry(next)
+      return { corpus: entry, active: next.active }
+    }
+
+    async updateCorpus(corpusId, patch) {
+      this._writeRegistry(updateCorpus(this.registry, corpusId, patch))
+      return { corpus: findCorpus(this.registry, corpusId) }
+    }
+
+    /**
+     * Retire a corpus. Its directory moves to <root>/.trash-corpora so nothing
+     * is lost; conversations bound to it fall back to the default corpus.
+     */
+    async deleteCorpus(corpusId) {
+      const entry = findCorpus(this.registry, corpusId)
+      const next = removeCorpus(this.registry, corpusId)
+      const source = join(this.location.root, entry.dir)
+      let trashedTo = ''
+      if (await stat(source).then(() => true, () => false)) {
+        const trash = join(this.location.root, '.trash-corpora')
+        await mkdir(trash, { recursive: true })
+        trashedTo = join(trash, `${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}__${entry.id}`)
+        await rename(source, trashedTo)
+      }
+      this.corpusStores.delete(corpusId)
+      this._writeRegistry(next)
+      return { deleted: corpusId, active: next.active, trashedTo: trashedTo ? '.trash-corpora/' + trashedTo.split(/[\\/]/).pop() : '' }
+    }
+
+    async setActiveCorpus(corpusId) {
+      this._writeRegistry(setActiveCorpus(this.registry, corpusId))
+      await this.corpusStore(corpusId).sync({ force: true }).catch(() => {})
+      return { active: corpusId }
+    }
+
+    /** Move every note carrying `tag` (usually one source book) between corpora. */
+    async moveNotes(fromId, toId, tag) {
+      if (!findCorpus(this.registry, fromId)) throw new Error(`unknown corpus '${fromId}'`)
+      if (!findCorpus(this.registry, toId)) throw new Error(`unknown corpus '${toId}'`)
+      if (fromId === toId) throw new Error('source and target corpus are the same')
+      const outcome = await this.corpusStore(fromId).moveTaggedTo(this.corpusStore(toId), tag)
+      return { ...outcome, from: fromId, to: toId, tag }
     }
   }
 })()
