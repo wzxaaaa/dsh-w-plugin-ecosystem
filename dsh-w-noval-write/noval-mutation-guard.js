@@ -1,7 +1,10 @@
 const EXCLUSIVE_MUTATIONS = new Set(['novel_write', 'novel_advance'])
 
 export function currentTurnNumber(agent) {
-  const events = agent?.session?.events
+  const session = agent?.session
+  const events = typeof session?.snapshotEvents === 'function'
+    ? session.snapshotEvents()
+    : session?.events
   if (!events || typeof events[Symbol.iterator] !== 'function') return undefined
   let turn
   for (const event of events) {

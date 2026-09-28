@@ -6,9 +6,13 @@ const MAX_PROGRESS = 500
 const MAX_VOLUMES = 40
 const MAX_CHAPTERS_PER_VOLUME = 500
 const MAX_SCENES_PER_CHAPTER = 100
+const MAX_EVENTS_PER_CHAPTER = 200
 const MAX_CUSTOM_FIELDS = 100
+const MAX_THREADS = 300
+const MAX_THREAD_BEATS = 100
+const MAX_THREAD_LINKS = 40
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 export const PROJECT_EXPORT_FORMAT = 'dsh-w-noval-write/project'
 export const PROJECT_EXPORT_VERSION = 1
 export const WRITE_LINK_STORE_VERSION = 1
@@ -28,6 +32,7 @@ const PROJECT_KEYS = Object.freeze([
   'characters',
   'relationships',
   'volumes',
+  'threads',
   'world',
   'plot',
   'scene',
@@ -64,9 +69,24 @@ const OUTLINE_SCENE_KEYS = Object.freeze([
 ])
 const CHAPTER_KEYS = Object.freeze([
   'id', 'number', 'title', 'targetWords', 'status', 'summary', 'locations', 'events', 'dialogueNotes',
-  'endingHook', 'scenes', 'customFields',
+  'endingHook', 'manuscriptFile', 'scenes', 'customFields',
 ])
 const VOLUME_KEYS = Object.freeze(['id', 'title', 'summary', 'status', 'chapters', 'customFields'])
+export const THREAD_KINDS = Object.freeze(['foreshadowing', 'mystery', 'promise', 'chekhov', 'subplot', 'other'])
+export const THREAD_IMPORTANCE = Object.freeze(['core', 'major', 'minor'])
+export const THREAD_STATUSES = Object.freeze(['open', 'partial', 'resolved', 'dropped'])
+const THREAD_TEXT_KEYS = Object.freeze(['title', 'setup', 'truth', 'payoffPlan', 'resolution', 'notes'])
+const THREAD_CHAPTER_KEYS = Object.freeze(['plantedChapterId', 'plannedPayoffChapterId', 'resolvedChapterId'])
+const THREAD_ENUM_KEYS = Object.freeze({ kind: THREAD_KINDS, importance: THREAD_IMPORTANCE, status: THREAD_STATUSES })
+const THREAD_KEYS = Object.freeze([
+  'id', ...THREAD_TEXT_KEYS, 'kind', 'importance', 'status', ...THREAD_CHAPTER_KEYS,
+  'characterIds', 'knownByIds', 'beats', 'customFields',
+])
+const THREAD_BEAT_KEYS = Object.freeze(['id', 'chapterId', 'note'])
+/** A chapter counts as reached once its status says writing has begun. */
+const UNSTARTED_CHAPTER_STATUS = /^(|planned|plan|todo|outline|计划|计划中|待写|未写|未开始|大纲)$/iu
+export const THREAD_DUE_SOON_CHAPTERS = 3
+export const THREAD_STALE_CHAPTERS = 10
 
 export const NOVEL_TOOL_RETRY_PROTOCOL = Object.freeze([
   'Before every mutation, call novel_read and copy its revision into expected_revision.',
@@ -77,6 +97,8 @@ export const NOVEL_TOOL_RETRY_PROTOCOL = Object.freeze([
   'Use novel_character_patch, novel_relationship_patch, novel_volume_upsert, and novel_chapter_upsert for ID-targeted changes; do not resend whole arrays.',
   'Genre-specific data belongs in customFields as string key/value pairs. Structured long-form outlines belong in volumes[].chapters[], not one long chapterPlan string.',
   'When the user requests a chapter file, call novel_save_chapter with the full prose. Never claim a file exists unless it returns ok: true and verified: true.',
+  'When saving prose for an outline chapter, pass volume_id and chapter_id to novel_save_chapter so the outline links the file and tracks its word count.',
+  'Foreshadowing, mysteries, and promises live in threads[]. Use novel_threads to see what is due and novel_thread_upsert / novel_thread_remove for targeted changes; chapter references are outline chapter ids.',
 ])
 
 function schemaProperties(keys, required) {
@@ -198,6 +220,50 @@ function volumeToolSchema(required = false) {
   }
 }
 
+function threadBeatSchema() {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      id: { type: 'string' },
+      chapterId: { type: 'string', description: 'Outline chapter id where the thread is echoed or reinforced.' },
+      note: { type: 'string', required: true },
+    },
+  }
+}
+
+function threadProperties({ requireId }) {
+  return {
+    ...(requireId ? { id: { type: 'string', required: true } } : {}),
+    title: { type: 'string', ...(requireId ? { required: true } : {}), description: 'Short name of the setup, mystery, or promise.' },
+    kind: { type: 'string', enum: [...THREAD_KINDS], description: 'foreshadowing, mystery, promise, chekhov (planted object or skill), subplot, or other.' },
+    importance: { type: 'string', enum: [...THREAD_IMPORTANCE], description: 'core = main line, major, minor.' },
+    status: { type: 'string', enum: [...THREAD_STATUSES], description: 'open, partial (partly revealed), resolved, dropped.' },
+    plantedChapterId: { type: 'string', description: 'Outline chapter id where it was planted.' },
+    plannedPayoffChapterId: { type: 'string', description: 'Outline chapter id where it should pay off.' },
+    resolvedChapterId: { type: 'string', description: 'Outline chapter id where it actually paid off.' },
+    setup: { type: 'string', description: 'What the reader is shown when it is planted.' },
+    truth: { type: 'string', description: 'The hidden answer or real meaning; never reveal it early.' },
+    payoffPlan: { type: 'string', description: 'How the payoff is intended to land.' },
+    resolution: { type: 'string', description: 'How it actually paid off.' },
+    notes: { type: 'string' },
+    characterIds: { type: 'array', items: { type: 'string' }, description: 'Character ids involved in this thread.' },
+    knownByIds: { type: 'array', items: { type: 'string' }, description: 'Character ids who already know the truth.' },
+    beats: { type: 'array', items: threadBeatSchema(), description: 'Mid-book echoes that keep the thread alive.' },
+    customFields: customFieldsSchema(),
+  }
+}
+
+export function threadPatchToolSchema({ required = true } = {}) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: false,
+    description: 'Partial thread. Omitted fields are preserved; arrays replace the stored array; customFields merge and an empty string deletes a key.',
+    properties: threadProperties({ requireId: false }),
+  }
+}
+
 /** Build the exact DSH tool parameter schema for a complete project or partial patch. */
 export function projectToolSchema({ partial = false, required = true } = {}) {
   return {
@@ -227,6 +293,11 @@ export function projectToolSchema({ partial = false, required = true } = {}) {
         customFields: customFieldsSchema(),
       }, !partial),
       volumes: { type: 'array', items: volumeToolSchema(), ...(!partial ? { required: true } : {}) },
+      threads: {
+        type: 'array',
+        description: 'Foreshadowing and payoff ledger. Optional in complete projects; omitted threads are preserved by novel_write.',
+        items: { type: 'object', additionalProperties: false, properties: threadProperties({ requireId: true }) },
+      },
       world: recordSchema(WORLD_KEYS, !partial),
       plot: recordSchema(PLOT_KEYS, !partial),
       scene: recordSchema(SCENE_KEYS, !partial),
@@ -260,6 +331,8 @@ export function novelToolContract() {
     relationshipPatchSchema: relationshipPatchToolSchema(),
     volumePatchSchema: volumePatchToolSchema(),
     chapterPatchSchema: chapterPatchToolSchema(),
+    threadPatchSchema: threadPatchToolSchema(),
+    threadEnums: { kind: [...THREAD_KINDS], importance: [...THREAD_IMPORTANCE], status: [...THREAD_STATUSES] },
     emptyProjectExample: defaultProject(),
     retryProtocol: [...NOVEL_TOOL_RETRY_PROTOCOL],
     manuscriptFileProtocol: {
@@ -382,6 +455,48 @@ function validateVolume(value, path, issues) {
   if (Object.hasOwn(value, 'customFields')) validateCustomFields(value.customFields, `${path}.customFields`, issues)
 }
 
+function validateIdList(value, path, issues) {
+  if (!Array.isArray(value)) {
+    issues.push(`${path} must be an array of ids; received ${receivedType(value)}`)
+    return
+  }
+  value.forEach((entry, index) => {
+    if (typeof entry !== 'string') issues.push(`${path}[${index}] must be a string; received ${receivedType(entry)}`)
+  })
+}
+
+function validateThread(value, path, issues, { requireId = true } = {}) {
+  if (!isPlainObject(value)) {
+    issues.push(`${path} must be an object; received ${receivedType(value)}`)
+    return
+  }
+  const allowed = new Set(THREAD_KEYS)
+  for (const key of Object.keys(value)) if (!allowed.has(key)) issues.push(`${path}.${key} is not part of the canonical structure`)
+  if (requireId && !Object.hasOwn(value, 'id')) issues.push(`${path}.id is required`)
+  for (const key of ['id', ...THREAD_TEXT_KEYS, ...THREAD_CHAPTER_KEYS]) {
+    if (Object.hasOwn(value, key) && typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
+  }
+  for (const [key, allowedValues] of Object.entries(THREAD_ENUM_KEYS)) {
+    if (!Object.hasOwn(value, key)) continue
+    if (typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
+    else if (!allowedValues.includes(value[key])) issues.push(`${path}.${key} must be one of ${allowedValues.join(', ')}`)
+  }
+  for (const key of ['characterIds', 'knownByIds']) if (Object.hasOwn(value, key)) validateIdList(value[key], `${path}.${key}`, issues)
+  if (Object.hasOwn(value, 'beats')) {
+    if (!Array.isArray(value.beats)) issues.push(`${path}.beats must be an array; received ${receivedType(value.beats)}`)
+    else value.beats.forEach((beat, index) => validateFlexibleRecord(beat, `${path}.beats[${index}]`, THREAD_BEAT_KEYS, ['note'], issues))
+  }
+  if (Object.hasOwn(value, 'customFields')) validateCustomFields(value.customFields, `${path}.customFields`, issues)
+}
+
+/** Report shape problems in a partial thread patch before it is applied. */
+export function threadPatchIssues(value) {
+  const issues = []
+  validateThread(value, 'patch', issues, { requireId: false })
+  if (isPlainObject(value) && Object.hasOwn(value, 'id')) issues.push('patch.id is not allowed; pass thread_id instead')
+  return issues
+}
+
 /** Validate model-facing project input before any destructive normalization or write. */
 export function projectShapeIssues(value, { partial = false } = {}) {
   const issues = []
@@ -424,22 +539,29 @@ export function projectShapeIssues(value, { partial = false } = {}) {
       const names = new Map()
       for (const character of value.characters) {
         const name = isPlainObject(character) ? text(character.name, MAX_SHORT) : ''
-        if (name) names.set(name, (names.get(name) || 0) + 1)
+        const characterId = isPlainObject(character) ? text(character.id, 100) : ''
+        if (name && characterId) names.set(name, [...(names.get(name) || []), characterId])
       }
-      const resolves = endpoint => ids.has(endpoint) || names.get(endpoint) === 1
+      const resolveEndpoint = endpoint => ids.has(endpoint) ? endpoint : names.get(endpoint)?.length === 1 ? names.get(endpoint)[0] : ''
       value.relationships.forEach((relationship, index) => {
         if (!isPlainObject(relationship)) return
         const from = text(relationship.fromId, 100)
         const to = text(relationship.toId, 100)
-        if (from && !resolves(from)) issues.push(`project.relationships[${index}].fromId does not identify a unique character`)
-        if (to && !resolves(to)) issues.push(`project.relationships[${index}].toId does not identify a unique character`)
-        if (from && to && from === to) issues.push(`project.relationships[${index}] must connect two distinct characters`)
+        const fromId = resolveEndpoint(from)
+        const toId = resolveEndpoint(to)
+        if (from && !fromId) issues.push(`project.relationships[${index}].fromId does not identify a unique character`)
+        if (to && !toId) issues.push(`project.relationships[${index}].toId does not identify a unique character`)
+        if (fromId && toId && fromId === toId) issues.push(`project.relationships[${index}] must connect two distinct characters`)
       })
     }
   }
   if (Object.hasOwn(value, 'volumes')) {
     if (!Array.isArray(value.volumes)) issues.push(`project.volumes must be an array; received ${receivedType(value.volumes)}`)
     else value.volumes.forEach((volume, index) => validateVolume(volume, `project.volumes[${index}]`, issues))
+  }
+  if (Object.hasOwn(value, 'threads')) {
+    if (!Array.isArray(value.threads)) issues.push(`project.threads must be an array; received ${receivedType(value.threads)}`)
+    else value.threads.forEach((thread, index) => validateThread(thread, `project.threads[${index}]`, issues))
   }
   if (Object.hasOwn(value, 'world')) validateRecord(value.world, 'project.world', WORLD_KEYS, false, issues)
   if (Object.hasOwn(value, 'plot')) validateRecord(value.plot, 'project.plot', PLOT_KEYS, false, issues)
@@ -466,7 +588,16 @@ export function assertProjectShape(value, options) {
 }
 
 function text(value, limit = MAX_TEXT) {
-  return typeof value === 'string' ? value.trim().slice(0, limit) : ''
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim()
+  if (normalized.length > limit) throw new RangeError(`novel text exceeds ${limit} characters; no data was written`)
+  return normalized
+}
+
+function boundedArray(value, limit, field) {
+  if (!Array.isArray(value)) return []
+  if (value.length > limit) throw new RangeError(`${field} exceeds ${limit} entries; no data was written`)
+  return value
 }
 
 function id(value, prefix, index) {
@@ -497,6 +628,7 @@ export function defaultProject() {
     characters: [],
     relationships: [],
     volumes: [],
+    threads: [],
     world: {
       era: '',
       chronology: '',
@@ -623,7 +755,7 @@ function normalizeProgress(value, index) {
 function normalizeCustomFields(value) {
   if (!isPlainObject(value)) return {}
   const fields = {}
-  for (const [rawKey, rawValue] of Object.entries(value).slice(0, MAX_CUSTOM_FIELDS)) {
+  for (const [rawKey, rawValue] of boundedArray(Object.entries(value), MAX_CUSTOM_FIELDS, 'customFields')) {
     const key = text(rawKey, MAX_SHORT)
     if (key && typeof rawValue === 'string') fields[key] = text(rawValue)
   }
@@ -641,7 +773,7 @@ export function defaultOutlineScene() {
 export function defaultChapter() {
   return {
     id: '', number: '', title: '', targetWords: '', status: 'planned', summary: '', locations: '', events: [],
-    dialogueNotes: '', endingHook: '', scenes: [], customFields: {},
+    dialogueNotes: '', endingHook: '', manuscriptFile: '', scenes: [], customFields: {},
   }
 }
 
@@ -671,21 +803,20 @@ function normalizeChapter(value, index, characterReferences) {
     status: text(item.status, MAX_SHORT) || 'planned',
     summary: text(item.summary),
     locations: text(item.locations),
-    events: Array.isArray(item.events) ? item.events.slice(0, 200).map(event => text(event)).filter(Boolean) : [],
+    events: boundedArray(item.events, MAX_EVENTS_PER_CHAPTER, 'chapter.events').map(event => text(event)).filter(Boolean),
     dialogueNotes: text(item.dialogueNotes),
     endingHook: text(item.endingHook),
-    scenes: Array.isArray(item.scenes)
-      ? item.scenes.slice(0, MAX_SCENES_PER_CHAPTER).map((scene, sceneIndex) => normalizeOutlineScene(scene, sceneIndex, characterReferences))
-      : [],
+    manuscriptFile: text(item.manuscriptFile, MAX_SHORT),
+    scenes: boundedArray(item.scenes, MAX_SCENES_PER_CHAPTER, 'chapter.scenes')
+      .map((scene, sceneIndex) => normalizeOutlineScene(scene, sceneIndex, characterReferences)),
     customFields: normalizeCustomFields(item.customFields),
   }
 }
 
 function normalizeVolume(value, index, characterReferences) {
   const item = isPlainObject(value) ? value : {}
-  const chapters = Array.isArray(item.chapters)
-    ? item.chapters.slice(0, MAX_CHAPTERS_PER_VOLUME).map((chapter, chapterIndex) => normalizeChapter(chapter, chapterIndex, characterReferences))
-    : []
+  const chapters = boundedArray(item.chapters, MAX_CHAPTERS_PER_VOLUME, 'volume.chapters')
+    .map((chapter, chapterIndex) => normalizeChapter(chapter, chapterIndex, characterReferences))
   const used = new Set()
   for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
     let candidate = chapters[chapterIndex].id
@@ -703,12 +834,75 @@ function normalizeVolume(value, index, characterReferences) {
   }
 }
 
+export function defaultThread() {
+  return {
+    id: '', title: '', kind: 'foreshadowing', importance: 'major', status: 'open',
+    plantedChapterId: '', plannedPayoffChapterId: '', resolvedChapterId: '',
+    setup: '', truth: '', payoffPlan: '', resolution: '', notes: '',
+    characterIds: [], knownByIds: [], beats: [], customFields: {},
+  }
+}
+
+function enumValue(value, allowed, fallback) {
+  return typeof value === 'string' && allowed.includes(value.trim()) ? value.trim() : fallback
+}
+
+// Chapter references are kept even when the chapter is later deleted, so a
+// thread never silently forgets where it was planted; analysis ignores them.
+function chapterReference(value) {
+  const raw = text(value, 100)
+  return raw ? id(raw, 'chapter', 0) : ''
+}
+
+function characterList(value, characterReferences) {
+  const ids = []
+  for (const entry of boundedArray(value, MAX_THREAD_LINKS, 'thread character links')) {
+    const resolved = characterReferences.get(text(entry, MAX_SHORT))
+    if (resolved && !ids.includes(resolved)) ids.push(resolved)
+  }
+  return ids
+}
+
+function normalizeThread(value, index, characterReferences) {
+  const item = isPlainObject(value) ? value : {}
+  const base = defaultThread()
+  const beats = boundedArray(item.beats, MAX_THREAD_BEATS, 'thread.beats')
+    .map((beat, beatIndex) => {
+      const entry = isPlainObject(beat) ? beat : {}
+      return { id: id(entry.id, 'beat', beatIndex), chapterId: chapterReference(entry.chapterId), note: text(entry.note) }
+    })
+    .filter(beat => beat.note !== '' || beat.chapterId !== '')
+  const usedBeats = new Set()
+  for (const beat of beats) {
+    while (usedBeats.has(beat.id)) beat.id = `${beat.id}-x`
+    usedBeats.add(beat.id)
+  }
+  return {
+    ...base,
+    id: id(item.id, 'thread', index),
+    title: text(item.title, MAX_SHORT),
+    kind: enumValue(item.kind, THREAD_KINDS, base.kind),
+    importance: enumValue(item.importance, THREAD_IMPORTANCE, base.importance),
+    status: enumValue(item.status, THREAD_STATUSES, base.status),
+    plantedChapterId: chapterReference(item.plantedChapterId),
+    plannedPayoffChapterId: chapterReference(item.plannedPayoffChapterId),
+    resolvedChapterId: chapterReference(item.resolvedChapterId),
+    setup: text(item.setup),
+    truth: text(item.truth),
+    payoffPlan: text(item.payoffPlan),
+    resolution: text(item.resolution),
+    notes: text(item.notes),
+    characterIds: characterList(item.characterIds, characterReferences),
+    knownByIds: characterList(item.knownByIds, characterReferences),
+    beats,
+    customFields: normalizeCustomFields(item.customFields),
+  }
+}
+
 export function normalizeProject(value) {
   const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   const base = defaultProject()
-  const characters = Array.isArray(input.characters)
-    ? input.characters.slice(0, MAX_CHARACTERS).map(normalizeCharacter)
-    : []
+  const characters = boundedArray(input.characters, MAX_CHARACTERS, 'characters').map(normalizeCharacter)
   const used = new Set()
   for (let index = 0; index < characters.length; index += 1) {
     let candidate = characters[index].id
@@ -723,22 +917,35 @@ export function normalizeProject(value) {
     if (rawName) characterNameCounts.set(rawName, (characterNameCounts.get(rawName) || 0) + 1)
   }
   for (let index = 0; index < characters.length; index += 1) {
+    characterReferences.set(characters[index].id, characters[index].id)
+  }
+  for (let index = 0; index < characters.length; index += 1) {
     const source = input.characters[index]
     const rawId = source && typeof source === 'object' ? text(source.id, 100) : ''
-    const rawName = source && typeof source === 'object' ? text(source.name, MAX_SHORT) : ''
-    characterReferences.set(characters[index].id, characters[index].id)
     if (rawId && !characterReferences.has(rawId)) characterReferences.set(rawId, characters[index].id)
-    if (rawName && characterNameCounts.get(rawName) === 1) characterReferences.set(rawName, characters[index].id)
   }
-  const relationships = Array.isArray(input.relationships)
-    ? input.relationships.slice(0, MAX_RELATIONSHIPS).map((item, index) => normalizeRelationship(item, index, used, characterReferences))
-    : []
+  for (let index = 0; index < characters.length; index += 1) {
+    const source = input.characters[index]
+    const rawName = source && typeof source === 'object' ? text(source.name, MAX_SHORT) : ''
+    if (rawName && characterNameCounts.get(rawName) === 1 && !characterReferences.has(rawName)) {
+      characterReferences.set(rawName, characters[index].id)
+    }
+  }
+  const relationships = boundedArray(input.relationships, MAX_RELATIONSHIPS, 'relationships')
+    .map((item, index) => normalizeRelationship(item, index, used, characterReferences))
   const world = input.world && typeof input.world === 'object' && !Array.isArray(input.world) ? input.world : {}
   const plot = input.plot && typeof input.plot === 'object' && !Array.isArray(input.plot) ? input.plot : {}
   const scene = input.scene && typeof input.scene === 'object' && !Array.isArray(input.scene) ? input.scene : {}
-  const progress = Array.isArray(input.progress)
-    ? input.progress.slice(-MAX_PROGRESS).map(normalizeProgress)
-    : []
+  const progress = boundedArray(input.progress, MAX_PROGRESS, 'progress').map(normalizeProgress)
+  const threads = boundedArray(input.threads, MAX_THREADS, 'threads')
+    .map((thread, index) => normalizeThread(thread, index, characterReferences))
+  const usedThreads = new Set()
+  for (let index = 0; index < threads.length; index += 1) {
+    let candidate = threads[index].id
+    while (usedThreads.has(candidate)) candidate = `${candidate}-${index + 1}`
+    threads[index].id = candidate
+    usedThreads.add(candidate)
+  }
   return {
     ...base,
     title: text(input.title, MAX_SHORT),
@@ -757,9 +964,9 @@ export function normalizeProject(value) {
     },
     characters,
     relationships,
-    volumes: Array.isArray(input.volumes)
-      ? input.volumes.slice(0, MAX_VOLUMES).map((volume, index) => normalizeVolume(volume, index, characterReferences))
-      : [],
+    volumes: boundedArray(input.volumes, MAX_VOLUMES, 'volumes')
+      .map((volume, index) => normalizeVolume(volume, index, characterReferences)),
+    threads,
     world: Object.fromEntries(Object.keys(base.world).map(key => [key, text(world[key])])),
     plot: Object.fromEntries(Object.keys(base.plot).map(key => [key, text(plot[key])])),
     scene: {
@@ -851,6 +1058,7 @@ export function mergeProject(currentValue, patchValue) {
   if (Object.hasOwn(patch, 'characters')) next.characters = patch.characters
   if (Object.hasOwn(patch, 'relationships')) next.relationships = patch.relationships
   if (Object.hasOwn(patch, 'volumes')) next.volumes = patch.volumes
+  if (Object.hasOwn(patch, 'threads')) next.threads = patch.threads
   if (Object.hasOwn(patch, 'progress')) next.progress = patch.progress
   if (patch.world && typeof patch.world === 'object' && !Array.isArray(patch.world)) {
     next.world = { ...current.world, ...patch.world }
@@ -861,6 +1069,7 @@ export function mergeProject(currentValue, patchValue) {
   if (patch.scene && typeof patch.scene === 'object' && !Array.isArray(patch.scene)) {
     next.scene = { ...current.scene, ...patch.scene }
   }
+  assertProjectShape(next, { partial: false })
   return normalizeProject(next)
 }
 
@@ -990,6 +1199,234 @@ export function reorderChapter(projectValue, volumeId, chapterId, targetIndexVal
   return normalizeProject({ ...project, volumes })
 }
 
+/** Flatten the structured outline into reading order. Expects a normalized project. */
+export function chapterSequence(project) {
+  const chapters = []
+  for (const volume of project.volumes || []) {
+    for (const chapter of volume.chapters || []) {
+      chapters.push({
+        id: chapter.id, index: chapters.length, volumeId: volume.id, volumeTitle: volume.title,
+        number: chapter.number, title: chapter.title, status: chapter.status,
+      })
+    }
+  }
+  return chapters
+}
+
+/** The furthest outline chapter whose status shows that writing has begun, or -1. */
+export function currentChapterIndex(chapters) {
+  let current = -1
+  chapters.forEach((chapter, index) => {
+    if (!UNSTARTED_CHAPTER_STATUS.test(String(chapter.status || '').trim())) current = index
+  })
+  return current
+}
+
+export function chapterLabel(chapter) {
+  if (!chapter) return ''
+  return [chapter.number ? `#${chapter.number}` : '', chapter.title || chapter.id].filter(Boolean).join(' ')
+}
+
+const ACTIVE_THREAD_STATUSES = new Set(['open', 'partial'])
+export const THREAD_STATE_ORDER = Object.freeze(['overdue', 'due', 'soon', 'unplanned', 'open', 'resolved', 'dropped'])
+const IMPORTANCE_ORDER = Object.freeze({ core: 0, major: 1, minor: 2 })
+
+/**
+ * Place every thread on the outline timeline: where it was planted, when it
+ * is due, how long it has gone without an echo, and whether it is late.
+ */
+export function analyzeThreads(projectValue) {
+  const project = normalizeProject(projectValue)
+  const chapters = chapterSequence(project)
+  const position = new Map(chapters.map(chapter => [chapter.id, chapter.index]))
+  const current = currentChapterIndex(chapters)
+  const at = chapterId => (chapterId && position.has(chapterId) ? position.get(chapterId) : -1)
+  const counts = { total: project.threads.length, active: 0, overdue: 0, due: 0, soon: 0, unplanned: 0, open: 0, stale: 0, partial: 0, resolved: 0, dropped: 0 }
+  const threads = project.threads.map(thread => {
+    const plantedIndex = at(thread.plantedChapterId)
+    const payoffIndex = at(thread.plannedPayoffChapterId)
+    const resolvedIndex = at(thread.resolvedChapterId)
+    const beatIndexes = thread.beats.map(beat => at(beat.chapterId)).filter(index => index >= 0)
+    const touches = [plantedIndex, ...beatIndexes].filter(index => index >= 0 && (current < 0 || index <= current))
+    const lastTouchIndex = touches.length > 0 ? Math.max(...touches) : -1
+    const active = ACTIVE_THREAD_STATUSES.has(thread.status)
+    let state
+    if (!active) state = thread.status
+    else if (payoffIndex < 0) state = 'unplanned'
+    else if (current < 0) state = 'open'
+    else if (payoffIndex < current) state = 'overdue'
+    else if (payoffIndex === current) state = 'due'
+    else if (payoffIndex - current <= THREAD_DUE_SOON_CHAPTERS) state = 'soon'
+    else state = 'open'
+    const idleChapters = active && current >= 0 && lastTouchIndex >= 0 ? current - lastTouchIndex : -1
+    const stale = idleChapters >= THREAD_STALE_CHAPTERS
+    const warnings = []
+    const referenced = [thread.plantedChapterId, thread.plannedPayoffChapterId, thread.resolvedChapterId, ...thread.beats.map(beat => beat.chapterId)]
+    if (referenced.some(chapterId => chapterId && !position.has(chapterId))) warnings.push('missing-chapter')
+    if (plantedIndex >= 0 && payoffIndex >= 0 && payoffIndex < plantedIndex) warnings.push('payoff-before-plant')
+    if (thread.status === 'resolved' && !thread.resolvedChapterId) warnings.push('resolved-without-chapter')
+    if (active) counts.active += 1
+    if (thread.status === 'partial') counts.partial += 1
+    counts[state] += 1
+    if (stale) counts.stale += 1
+    return { id: thread.id, state, active, plantedIndex, payoffIndex, resolvedIndex, lastTouchIndex, idleChapters, stale, warnings }
+  })
+  return { chapters, currentIndex: current, currentChapter: current >= 0 ? chapters[current] : null, counts, threads }
+}
+
+/** Sort key for the ledger: urgency first, then importance, then payoff order. */
+export function compareThreadUrgency(left, right, byId) {
+  const state = THREAD_STATE_ORDER.indexOf(left.state) - THREAD_STATE_ORDER.indexOf(right.state)
+  if (state !== 0) return state
+  const importance = (IMPORTANCE_ORDER[byId.get(left.id)?.importance] ?? 1) - (IMPORTANCE_ORDER[byId.get(right.id)?.importance] ?? 1)
+  if (importance !== 0) return importance
+  const payoff = (left.payoffIndex < 0 ? Infinity : left.payoffIndex) - (right.payoffIndex < 0 ? Infinity : right.payoffIndex)
+  if (payoff !== 0 && Number.isFinite(payoff)) return payoff
+  return left.plantedIndex - right.plantedIndex
+}
+
+/** Everything a writer should keep in mind while drafting one chapter. */
+export function threadsForChapter(projectValue, chapterId) {
+  const project = normalizeProject(projectValue)
+  const insight = analyzeThreads(project)
+  const chapter = insight.chapters.find(item => item.id === text(chapterId, 100))
+  if (!chapter) throw new Error(`unknown chapter '${text(chapterId, 100)}'`)
+  const byId = new Map(project.threads.map(thread => [thread.id, thread]))
+  const pick = predicate => insight.threads.filter(predicate).sort((a, b) => compareThreadUrgency(a, b, byId)).map(info => ({ ...byId.get(info.id), insight: info }))
+  const index = chapter.index
+  return {
+    chapter,
+    payoffHere: pick(info => info.active && info.payoffIndex === index),
+    overdueBefore: pick(info => info.active && info.payoffIndex >= 0 && info.payoffIndex < index),
+    dueSoonAfter: pick(info => info.active && info.payoffIndex > index && info.payoffIndex - index <= THREAD_DUE_SOON_CHAPTERS),
+    plantedHere: pick(info => info.plantedIndex === index),
+    echoedHere: pick(info => byId.get(info.id).beats.some(beat => beat.chapterId === chapter.id)),
+    idle: pick(info => info.active && info.stale),
+  }
+}
+
+function threadArgumentError(lines) {
+  const error = new TypeError(['INVALID_NOVEL_ARGUMENTS: no data was written.', ...lines.slice(0, 12).map(line => `- ${line}`)].join('\n'))
+  error.code = 'INVALID_NOVEL_ARGUMENTS'
+  error.retryable = true
+  return error
+}
+
+/** Create or patch one thread by stable id, rejecting references the outline does not contain. */
+export function upsertThread(projectValue, threadId, patchValue, { addBeat } = {}) {
+  const project = normalizeProject(projectValue)
+  const patch = isPlainObject(patchValue) ? patchValue : {}
+  const beatInput = isPlainObject(addBeat) ? addBeat : null
+  if (Object.keys(patch).length === 0 && !beatInput) throw new Error('thread patch must not be empty')
+  const issues = threadPatchIssues(patch)
+  if (issues.length > 0) throw threadArgumentError([...issues, 'Call novel_schema and rebuild the thread patch, then retry once.'])
+  const chapterIds = new Set(chapterSequence(project).map(chapter => chapter.id))
+  const names = new Map()
+  for (const character of project.characters) if (character.name) names.set(character.name, [...(names.get(character.name) || []), character.id])
+  const resolveCharacter = raw => {
+    const key = text(raw, MAX_SHORT)
+    if (project.characters.some(character => character.id === key)) return key
+    return names.get(key)?.length === 1 ? names.get(key)[0] : ''
+  }
+  const problems = []
+  const checkChapter = (raw, field) => {
+    const reference = chapterReference(raw)
+    if (reference && !chapterIds.has(reference)) problems.push(`${field} '${text(raw, 100)}' is not an outline chapter id; call novel_outline_read`)
+  }
+  for (const key of THREAD_CHAPTER_KEYS) if (Object.hasOwn(patch, key)) checkChapter(patch[key], key)
+  for (const key of ['characterIds', 'knownByIds']) {
+    for (const raw of Array.isArray(patch[key]) ? patch[key] : []) {
+      if (!resolveCharacter(raw)) problems.push(`${key} entry '${text(raw, MAX_SHORT)}' does not identify a unique character`)
+    }
+  }
+  for (const beat of Array.isArray(patch.beats) ? patch.beats : []) if (isPlainObject(beat)) checkChapter(beat.chapterId, 'beats[].chapterId')
+  if (beatInput) {
+    checkChapter(beatInput.chapterId, 'add_beat.chapter_id')
+    if (!text(beatInput.note)) problems.push('add_beat.note must not be empty')
+  }
+  if (problems.length > 0) throw threadArgumentError(problems)
+  const key = id(threadId, 'thread', project.threads.length)
+  const threads = [...project.threads]
+  const index = threads.findIndex(thread => thread.id === key)
+  if (index < 0 && !text(patch.title, MAX_SHORT)) throw threadArgumentError(['a new thread needs a non-empty title'])
+  const current = index >= 0 ? threads[index] : { ...defaultThread(), id: key }
+  const next = {
+    ...current,
+    ...patch,
+    id: key,
+    customFields: mergeCustomFields(current.customFields, patch.customFields),
+  }
+  for (const listKey of ['characterIds', 'knownByIds']) {
+    if (Array.isArray(patch[listKey])) next[listKey] = patch[listKey].map(resolveCharacter).filter(Boolean)
+  }
+  if (beatInput) {
+    next.beats = [...next.beats, { id: `beat-${next.beats.length + 1}`, chapterId: text(beatInput.chapterId, 100), note: text(beatInput.note) }]
+  }
+  if (index >= 0) threads[index] = next
+  else threads.push(next)
+  const candidate = { ...project, threads }
+  assertProjectShape(candidate, { partial: false })
+  return normalizeProject(candidate)
+}
+
+export function removeThread(projectValue, threadId) {
+  const project = normalizeProject(projectValue)
+  const key = text(threadId, 100)
+  const threads = project.threads.filter(thread => thread.id !== key)
+  if (threads.length === project.threads.length) throw new Error(`unknown thread '${key}'`)
+  return normalizeProject({ ...project, threads })
+}
+
+/** Locate one outline chapter; volumeId may be omitted when the chapter id is unique. */
+export function findChapter(projectValue, volumeId, chapterId) {
+  const project = normalizeProject(projectValue)
+  const chapterKey = text(chapterId, 100)
+  const volumeKey = text(volumeId, 100)
+  const matches = []
+  for (const volume of project.volumes) {
+    if (volumeKey && volume.id !== volumeKey) continue
+    for (const chapter of volume.chapters) if (chapter.id === chapterKey) matches.push({ volume, chapter })
+  }
+  if (volumeKey && !project.volumes.some(volume => volume.id === volumeKey)) throw new Error(`unknown volume '${volumeKey}'`)
+  if (matches.length === 0) throw new Error(`unknown chapter '${chapterKey}'; call novel_outline_read for chapter ids`)
+  if (matches.length > 1) throw new Error(`chapter '${chapterKey}' exists in several volumes; pass volume_id`)
+  return matches[0]
+}
+
+/** Status given to a chapter the first time prose is linked, in the book's own language. */
+export function draftedChapterStatus(projectValue) {
+  const project = normalizeProject(projectValue)
+  const chinese = project.volumes.some(volume => volume.chapters.some(chapter => /\p{Script=Han}/u.test(chapter.status)))
+  return chinese ? '初稿' : 'drafted'
+}
+
+/**
+ * Point an outline chapter at its manuscript file. A file belongs to one
+ * chapter, so any other chapter holding it is unlinked. An unstarted chapter
+ * moves to `status` (default: drafted) so the ledger knows it was reached.
+ */
+export function linkChapterManuscript(projectValue, volumeId, chapterId, filename, { status } = {}) {
+  const project = normalizeProject(projectValue)
+  const { volume, chapter } = findChapter(project, volumeId, chapterId)
+  const file = text(filename, MAX_SHORT)
+  const nextStatus = text(status, MAX_SHORT)
+  const volumes = project.volumes.map(item => ({
+    ...item,
+    chapters: item.chapters.map(entry => {
+      if (item.id === volume.id && entry.id === chapter.id) {
+        const started = !UNSTARTED_CHAPTER_STATUS.test(entry.status.trim())
+        return {
+          ...entry,
+          manuscriptFile: file,
+          status: nextStatus || (file && !started ? draftedChapterStatus(project) : entry.status),
+        }
+      }
+      return file && entry.manuscriptFile === file ? { ...entry, manuscriptFile: '' } : entry
+    }),
+  }))
+  return normalizeProject({ ...project, volumes })
+}
+
 /** Advance the story ledger and optionally move the current-scene cursor. */
 export function advanceProject(currentValue, inputValue, now = Date.now()) {
   const current = normalizeProject(currentValue)
@@ -1021,7 +1458,7 @@ export function advanceProject(currentValue, inputValue, now = Date.now()) {
   return normalizeProject({
     ...current,
     scene: nextScene,
-    progress: [...current.progress, entry].slice(-MAX_PROGRESS),
+    progress: [...current.progress, entry],
   })
 }
 
@@ -1102,7 +1539,11 @@ function addCustomFields(lines, fields) {
   for (const [key, value] of Object.entries(fields || {})) add(lines, key, value)
 }
 
-export function projectPrompt(projectValue, maxChars = 12_000) {
+/**
+ * `manuscripts` optionally maps a manuscript filename to its live word count
+ * so the outline can show how much of each chapter is written.
+ */
+export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } = {}) {
   const project = normalizeProject(projectValue)
   const lines = ['# Novel writing workspace', '', 'The right-side Novel Writing panel is the source of truth for this book. Preserve its facts and continuity.']
   add(lines, 'Title', project.title)
@@ -1224,12 +1665,45 @@ export function projectPrompt(projectValue, maxChars = 12_000) {
           outlineTruncated = true
           break
         }
-        const details = [chapter.status, chapter.targetWords ? `${chapter.targetWords} words` : '', compact(chapter.summary), chapter.endingHook ? `hook: ${compact(chapter.endingHook)}` : ''].filter(Boolean).join('; ')
+        const written = chapter.manuscriptFile
+          ? (manuscripts && Number.isFinite(manuscripts.get?.(chapter.manuscriptFile))
+            ? `manuscript ${chapter.manuscriptFile} (${manuscripts.get(chapter.manuscriptFile)} words)`
+            : `manuscript ${chapter.manuscriptFile}`)
+          : ''
+        const details = [chapter.status, chapter.targetWords ? `target ${chapter.targetWords} words` : '', written, compact(chapter.summary), chapter.endingHook ? `hook: ${compact(chapter.endingHook)}` : ''].filter(Boolean).join('; ')
         lines.push(`  - ${chapter.number || ''} ${chapter.title || chapter.id}${details ? ` — ${details}` : ''}`)
         remainingChapters -= 1
       }
     }
     if (outlineTruncated) lines.push('  - [More chapters omitted; use novel_outline_read with volume_id, offset, and limit.]')
+  }
+  if (project.threads.length > 0) {
+    const insight = analyzeThreads(project)
+    const label = index => (index >= 0 ? chapterLabel(insight.chapters[index]) : '')
+    const clip = value => {
+      const rendered = compact(value)
+      return rendered.length > 160 ? `${rendered.slice(0, 157)}...` : rendered
+    }
+    const byId = new Map(project.threads.map(thread => [thread.id, thread]))
+    const counts = insight.counts
+    lines.push('', '## Story threads (foreshadowing ledger)')
+    lines.push(`- Current chapter: ${label(insight.currentIndex) || 'not started'}; active ${counts.active}, overdue ${counts.overdue}, due now ${counts.due}, due soon ${counts.soon}, unplanned ${counts.unplanned}, idle ${counts.stale}; resolved ${counts.resolved}, dropped ${counts.dropped}.`)
+    const active = insight.threads.filter(info => info.active).sort((a, b) => compareThreadUrgency(a, b, byId))
+    for (const info of active.slice(0, 24)) {
+      const thread = byId.get(info.id)
+      const details = [
+        `${thread.kind}/${thread.importance}`,
+        thread.status === 'partial' ? 'partly revealed' : '',
+        `planted ${label(info.plantedIndex) || '?'}`,
+        `payoff ${label(info.payoffIndex) || 'unplanned'}`,
+        info.stale ? `no echo for ${info.idleChapters} chapters` : '',
+        thread.setup ? `setup: ${clip(thread.setup)}` : '',
+        thread.truth ? `truth (hidden until payoff): ${clip(thread.truth)}` : '',
+        thread.payoffPlan ? `plan: ${clip(thread.payoffPlan)}` : '',
+      ].filter(Boolean).join('; ')
+      lines.push(`- [${info.state.toUpperCase()}] ${thread.title || thread.id} (${thread.id}) — ${details}`)
+    }
+    if (active.length > 24) lines.push('- [More active threads omitted; call novel_threads.]')
   }
   if (project.progress.length > 0) {
     lines.push('', '## Recent story progress')
@@ -1248,6 +1722,7 @@ export function projectPrompt(projectValue, maxChars = 12_000) {
     '- If the user asks to create/save/export a chapter file, call novel_save_chapter with the complete prose. Project mutations do not create manuscript files.',
     '- Never say a file was created or provide a path unless novel_save_chapter returned ok: true and verified: true. Report its exact returned path, bytes, and sha256.',
     '- Durable canon and story progress must be written back with the novel tools. Use outline/character/relationship tools for targeted changes instead of replacing arrays.',
+    ...(project.threads.length > 0 ? ['- Threads: before a chapter call novel_threads(chapter_id); pay off due/overdue threads or move their payoff; never reveal a truth early. After it, novel_thread_upsert new setups, add_beat echoes, resolved + resolvedChapterId for payoffs.'] : []),
     '- Before every mutation, novel_read; pass its exact revision as expected_revision.',
     '- Object arguments are direct JSON objects, never strings, Markdown, or nested outer arguments.',
     '- Prefer novel_patch. novel_write is complete canon replacement and preserves progress unless replace_progress is true.',

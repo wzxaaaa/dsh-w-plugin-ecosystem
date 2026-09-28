@@ -86,7 +86,7 @@ id 用 UTC 时间生成，所以文件名天然按时间排序；标题只用于
 ```powershell
 npm test
 pnpm pack --config.ignore-scripts=true
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.4.3.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.4.4.tgz
 ```
 
 装好以后重启桌面版（或重新启动 `dsh web`）；重装同一个版本号之前记得先 `remove`，否则 pnpm 不会重新解包。

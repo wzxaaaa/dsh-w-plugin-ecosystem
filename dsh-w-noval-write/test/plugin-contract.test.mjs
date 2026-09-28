@@ -64,7 +64,7 @@ test('declares the knowledge-base integration without embedding its store', () =
 
 test('stores one project per Harness workspace and exposes free model data tools', () => {
   assert.match(host, /join\(this\.root, 'workspaces', String\(workspaceId\), 'project\.json'\)/)
-  for (const name of ['novel_schema', 'novel_read', 'novel_save_chapter', 'novel_patch', 'novel_character_patch', 'novel_relationship_patch', 'novel_outline_read', 'novel_volume_upsert', 'novel_chapter_upsert', 'novel_chapter_remove', 'novel_chapter_reorder', 'novel_write', 'novel_advance']) {
+  for (const name of ['novel_schema', 'novel_read', 'novel_save_chapter', 'novel_patch', 'novel_character_patch', 'novel_relationship_patch', 'novel_outline_read', 'novel_volume_upsert', 'novel_chapter_upsert', 'novel_chapter_remove', 'novel_chapter_reorder', 'novel_threads', 'novel_thread_upsert', 'novel_thread_remove', 'novel_write', 'novel_advance']) {
     assert.match(host, new RegExp(`name: '${name}'`))
   }
   assert.match(host, /project: projectToolSchema\(\{ partial: false, required: true \}\)/)
@@ -78,6 +78,7 @@ test('stores one project per Harness workspace and exposes free model data tools
   assert.match(host, /concludeStoppedMutation/)
   assert.match(host, /replace_progress/)
   assert.match(host, /project\.progress = current\.project\.progress/)
+  assert.match(host, /if \(keepsThreads\) project\.threads = current\.project\.threads/)
   assert.match(host, /mutationRoundGuard\.check/)
   assert.match(host, /mutationRoundGuard\.record/)
   assert.match(host, /saveWorkspaceManuscript/)

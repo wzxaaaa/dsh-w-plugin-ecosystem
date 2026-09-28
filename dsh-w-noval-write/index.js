@@ -18,11 +18,15 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { dshHomePath, expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
   advanceProject,
+  analyzeThreads,
   assertProjectShape,
+  compareThreadUrgency,
   chapterPatchToolSchema,
   characterPatchToolSchema,
   defaultProject,
   defaultState,
+  findChapter,
+  linkChapterManuscript,
   mergeProject,
   novelToolContract,
   normalizeProject,
@@ -36,18 +40,22 @@ import {
   projectPrompt,
   relationshipPatchToolSchema,
   removeChapter,
+  removeThread,
   reorderChapter,
   projectExportDocument,
   projectFromImportDocument,
   scenePatchToolSchema,
+  threadPatchToolSchema,
+  threadsForChapter,
   updateWriteLinkStore,
   upsertChapter,
+  upsertThread,
   upsertVolume,
   volumePatchToolSchema,
   writeLinkForSession,
 } from './noval-write-core.js'
 import { NovelMutationRoundGuard } from './noval-mutation-guard.js'
-import { saveWorkspaceManuscript } from './noval-file-core.js'
+import { listWorkspaceManuscripts, readWorkspaceManuscript, saveWorkspaceManuscript } from './noval-file-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -215,6 +223,8 @@ let NovalWriterService = (() => {
   let _getLink_decorators
   let _editLink_decorators
   let _clearLink_decorators
+  let _listManuscripts_decorators
+  let _readManuscript_decorators
   return class NovalWriterService extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0
@@ -258,6 +268,16 @@ let NovalWriterService = (() => {
         kind: 'method', name: 'clearLink', static: false, private: false,
         access: { has: obj => 'clearLink' in obj, get: obj => obj.clearLink }, metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _listManuscripts_decorators = [Remote('listManuscripts')]
+      __esDecorate(this, null, _listManuscripts_decorators, {
+        kind: 'method', name: 'listManuscripts', static: false, private: false,
+        access: { has: obj => 'listManuscripts' in obj, get: obj => obj.listManuscripts }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _readManuscript_decorators = [Remote('readManuscript')]
+      __esDecorate(this, null, _readManuscript_decorators, {
+        kind: 'method', name: 'readManuscript', static: false, private: false,
+        access: { has: obj => 'readManuscript' in obj, get: obj => obj.readManuscript }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
@@ -277,6 +297,10 @@ let NovalWriterService = (() => {
       this.mutationRoundGuard = new NovelMutationRoundGuard()
       this.workspaceRegistry = undefined
       this.knowledgeBase = undefined
+      // Manuscript statistics: per-file counts keyed by path+mtime, and the
+      // latest filename → words map per workspace for the prompt.
+      this.manuscriptCache = new Map()
+      this.manuscriptWords = new Map()
 
       ctx.inject(['workspaceRegistry'], (scope) => {
         this.workspaceRegistry = scope.workspaceRegistry
@@ -301,6 +325,8 @@ let NovalWriterService = (() => {
             const workspace = this.workspaceForAgentSync(context.agent)
             if (!workspace) return '# Novel writing workspace\n\nThis conversation used /write, but its session is not attached to a registered Workspace.'
             const state = this.stateForWorkspace(workspace.id)
+            // Refresh counts in the background; this turn uses the last known ones.
+            this.manuscriptStats(workspace).catch(() => {})
             return [
               '# Linked Harness Workspace',
               '',
@@ -309,7 +335,7 @@ let NovalWriterService = (() => {
               `- Writing objective: ${link.objective}`,
               '- Shared by every conversation attached to this Workspace.',
               '',
-              projectPrompt(state.project, this.settings.promptMaxChars),
+              projectPrompt(state.project, this.settings.promptMaxChars, { manuscripts: this.manuscriptWords.get(String(workspace.id)) }),
             ].join('\n')
           },
         })
@@ -542,6 +568,23 @@ let NovalWriterService = (() => {
       return this.mutate(workspaceId, expectedRevision, current => ({ ...current, project: defaultProject() }))
     }
 
+    async manuscriptStats(workspace) {
+      const listing = await listWorkspaceManuscripts(workspace.path, { cache: this.manuscriptCache })
+      this.manuscriptWords.set(String(workspace.id), new Map(listing.files.map(file => [file.filename, file.words])))
+      return listing
+    }
+
+    async listManuscripts(workspaceId) {
+      const workspace = this.workspaceRecord(workspaceId)
+      const listing = await this.manuscriptStats(workspace)
+      return { files: listing.files, truncated: listing.truncated }
+    }
+
+    async readManuscript(workspaceId, filename) {
+      const workspace = this.workspaceRecord(workspaceId)
+      return readWorkspaceManuscript(workspace.path, filename, { maxChars: 4000 })
+    }
+
     async getLink(sessionId) {
       return writeLinkForSession(this.writeLinks, sessionId)
     }
@@ -589,7 +632,7 @@ let NovalWriterService = (() => {
         name: 'novel_read',
         description: '读取当前 Harness 工作区共享的小说项目设定，同时返回权威结构和重试协议。任何写入前必须先读取 revision；不要猜测项目结构。',
         parameters: {
-          section: { type: 'string', enum: ['all', 'project', 'genreProfile', 'characters', 'relationships', 'volumes', 'world', 'plot', 'scene', 'progress'], description: '要读取的部分；默认 all。结构化章节大纲位于 volumes。' },
+          section: { type: 'string', enum: ['all', 'project', 'genreProfile', 'characters', 'relationships', 'volumes', 'threads', 'world', 'plot', 'scene', 'progress'], description: '要读取的部分；默认 all。结构化章节大纲位于 volumes，伏笔账本位于 threads（分析结果请用 novel_threads）。' },
         },
         output: toolOutput('小说设定已读取', { includeValue: true }),
         async execute(args, exec) {
@@ -598,7 +641,7 @@ let NovalWriterService = (() => {
           const contract = novelToolContract()
           if (section === 'all') return { ...self.view(workspace, state), contract }
           if (section === 'project') {
-            const { characters, relationships, volumes, world, plot, scene, progress, ...overview } = state.project
+            const { characters, relationships, volumes, threads, world, plot, scene, progress, ...overview } = state.project
             return { workspace: { id: String(workspace.id), title: workspace.title }, revision: state.revision, project: overview, contract }
           }
           return { workspace: { id: String(workspace.id), title: workspace.title }, revision: state.revision, [section]: state.project[section], contract }
@@ -607,24 +650,43 @@ let NovalWriterService = (() => {
 
       this.ctx.tools.register(defineTool({
         name: 'novel_save_chapter',
-        description: '把已经完成的小说章节正文真实写入当前 Harness Workspace。用户要求创建、生成、保存或导出章节文件时必须调用；只有返回 ok: true 且 verified: true 后才能声称文件已生成。filename 只能是工作区根目录下的单个 .md/.txt 文件名。',
+        description: '把已经完成的小说章节正文真实写入当前 Harness Workspace。用户要求创建、生成、保存或导出章节文件时必须调用；只有返回 ok: true 且 verified: true 后才能声称文件已生成。filename 只能是工作区根目录下的单个 .md/.txt 文件名。正文属于大纲中的某一章时，同时传 chapter_id（必要时加 volume_id），大纲会关联这个文件、统计字数，并把尚未开始的章节标为初稿。',
         parameters: {
           filename: { type: 'string', required: true, description: '工作区根目录下的文件名，例如 第1章_测试.md；禁止目录、绝对路径和路径穿越。无扩展名时自动补 .md。' },
           content: { type: 'string', required: true, description: '要落盘的完整章节正文，不是摘要、设定或 JSON。' },
           overwrite: { type: 'boolean', description: '默认 false。已有同名但内容不同的文件时，只有明确需要替换才传 true。' },
+          chapter_id: { type: 'string', description: '可选；这份正文对应的大纲章节 id（见 novel_outline_read）。' },
+          volume_id: { type: 'string', description: '可选；章节所在的卷 id。chapter_id 在多卷中重复时必填。' },
+          chapter_status: { type: 'string', description: '可选；关联后要写入的章节状态，例如 初稿、修改中、定稿。省略时只把未开始的章节改为初稿。' },
         },
         output: toolOutput('小说章节文件已核验', { includeValue: true }),
         finalizeContent: manuscriptFailureContent,
         async execute(args, exec) {
-          const { workspace } = await self.modelState(exec)
+          const { workspace, state } = await self.modelState(exec)
+          const chapterId = typeof args?.chapter_id === 'string' ? args.chapter_id.trim() : ''
+          // Resolve the chapter before touching the disk so a bad id writes nothing.
+          const target = chapterId ? findChapter(state.project, args?.volume_id, chapterId) : null
           const saved = await saveWorkspaceManuscript(workspace.path, {
             filename: args?.filename,
             content: args?.content,
             overwrite: args?.overwrite === true,
           })
+          let linked
+          if (target) {
+            const result = await self.mutate(String(workspace.id), undefined, current => ({
+              ...current,
+              project: linkChapterManuscript(current.project, target.volume.id, target.chapter.id, saved.filename, { status: args?.chapter_status }),
+            }))
+            const chapter = findChapter(result.project, target.volume.id, target.chapter.id).chapter
+            linked = { volumeId: target.volume.id, chapterId: chapter.id, status: chapter.status, revision: result.revision }
+          }
+          const listing = await self.manuscriptStats(workspace).catch(() => undefined)
+          const words = listing?.files.find(file => file.filename === saved.filename)?.words
           return {
             ok: true,
             ...saved,
+            ...(Number.isFinite(words) ? { words } : {}),
+            ...(linked ? { linked } : {}),
             workspace: { id: String(workspace.id), title: workspace.title, path: workspace.path },
           }
         },
@@ -713,13 +775,22 @@ let NovalWriterService = (() => {
           if (volumeId && volumes.length === 0) throw new Error(`unknown volume '${volumeId}'`)
           const offset = Number.isSafeInteger(args?.offset) ? Math.max(0, args.offset) : 0
           const limit = Number.isSafeInteger(args?.limit) ? Math.max(1, Math.min(100, args.limit)) : 50
+          const listing = volumes.some(volume => volume.chapters.some(chapter => chapter.manuscriptFile))
+            ? await self.manuscriptStats(workspace).catch(() => undefined)
+            : undefined
+          const files = new Map((listing?.files || []).map(file => [file.filename, file]))
+          const withManuscript = chapter => {
+            if (!chapter.manuscriptFile) return chapter
+            const file = files.get(chapter.manuscriptFile)
+            return { ...chapter, manuscript: file ? { exists: true, words: file.words, bytes: file.bytes, updatedAt: file.updatedAt } : { exists: listing ? false : undefined } }
+          }
           const value = volumes.map(volume => {
             if (chapterId) {
               const chapter = volume.chapters.find(item => item.id === chapterId)
               if (!chapter) throw new Error(`unknown chapter '${chapterId}'`)
-              return { ...volume, chapters: [chapter], totalChapters: volume.chapters.length }
+              return { ...volume, chapters: [withManuscript(chapter)], totalChapters: volume.chapters.length }
             }
-            return { ...volume, chapters: volume.chapters.slice(offset, offset + limit), totalChapters: volume.chapters.length }
+            return { ...volume, chapters: volume.chapters.slice(offset, offset + limit).map(withManuscript), totalChapters: volume.chapters.length }
           })
           return { workspace: { id: String(workspace.id), title: workspace.title }, revision: state.revision, volumes: value }
         },
@@ -812,6 +883,92 @@ let NovalWriterService = (() => {
       }))
 
       this.ctx.tools.register(defineTool({
+        name: 'novel_threads',
+        description: '读取伏笔/悬念/承诺账本及其时间线分析：当前写到哪一章（按大纲章节状态推断）、哪些线索逾期、本章该回收、即将回收、未规划回收或久未呼应。写某一章之前传 chapter_id，获取这一章需要回收、呼应和避免提前揭示的线索。',
+        parameters: {
+          chapter_id: { type: 'string', description: '可选；准备撰写或修改的大纲章节 id。' },
+          include: { type: 'string', enum: ['active', 'all'], description: '默认 active，只返回进行中（open/partial）的线索；all 包含已回收和放弃的。' },
+        },
+        output: toolOutput('线索账本已读取', { includeValue: true }),
+        async execute(args, exec) {
+          const { workspace, state } = await self.modelState(exec)
+          const project = state.project
+          const insight = analyzeThreads(project)
+          const byId = new Map(project.threads.map(thread => [thread.id, thread]))
+          const includeAll = args?.include === 'all'
+          const threads = insight.threads
+            .filter(info => includeAll || info.active)
+            .sort((a, b) => compareThreadUrgency(a, b, byId))
+            .map(info => ({ ...byId.get(info.id), insight: info }))
+          const chapterId = typeof args?.chapter_id === 'string' ? args.chapter_id.trim() : ''
+          return {
+            workspace: { id: String(workspace.id), title: workspace.title },
+            revision: state.revision,
+            currentChapter: insight.currentChapter,
+            counts: insight.counts,
+            threads,
+            ...(chapterId ? { chapterFocus: threadsForChapter(project, chapterId) } : {}),
+            guidance: [
+              'Pay off overdue and due threads in the chapter being written, or deliberately move plannedPayoffChapterId.',
+              'Keep every truth hidden until its payoff chapter; knownByIds lists the characters who already know it.',
+              'Echo idle threads so readers do not forget them; record echoes with novel_thread_upsert add_beat.',
+            ],
+          }
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_thread_upsert',
+        description: '按稳定 id 创建或局部更新一条伏笔/悬念/承诺线索。新线索必须有 title。章节字段只能填 novel_outline_read 返回的大纲章节 id；角色字段填角色 id。add_beat 追加一次中途呼应。回收时设置 status: resolved、resolvedChapterId 和 resolution。先 novel_read 并复制 revision。',
+        parameters: {
+          thread_id: { type: 'string', required: true, description: '稳定线索 id，例如 obituary-author；不存在则创建。' },
+          patch: threadPatchToolSchema({ required: false }),
+          add_beat: {
+            type: 'object',
+            additionalProperties: false,
+            description: '可选；追加一次中途呼应。',
+            properties: {
+              chapter_id: { type: 'string', description: '呼应所在的大纲章节 id。' },
+              note: { type: 'string', required: true, description: '这一章如何呼应这条线索。' },
+            },
+          },
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('线索已保存'),
+        finalizeContent: mutationFailureContent('thread patch'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const addBeat = args?.add_beat ? { chapterId: args.add_beat.chapter_id, note: args.add_beat.note } : undefined
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: upsertThread(current.project, args?.thread_id, args?.patch, { addBeat }),
+          }))
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_thread_remove',
+        description: '从账本中删除一条线索。只在用户明确要求删除时调用；放弃的线索应改为 status: dropped 而不是删除。',
+        parameters: {
+          thread_id: { type: 'string', required: true },
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('线索已删除'),
+        finalizeContent: mutationFailureContent('thread remove'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const result = await self.mutate(String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: removeThread(current.project, args?.thread_id),
+          }))
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
         name: 'novel_write',
         description: '完整替换当前工作区小说项目，仅用于大规模重构。先 novel_read 并保留全部字段；project 必须是直接的完整 JSON 对象，禁止字符串化、Markdown 或再次包裹 {expected_revision, project}。失败时调用 novel_schema、修正并重试一次。',
         parameters: {
@@ -837,9 +994,12 @@ let NovalWriterService = (() => {
           }
           assertProjectShape(args?.project, { partial: false })
           const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          // A complete rewrite that leaves threads out must not wipe the ledger.
+          const keepsThreads = !Object.hasOwn(args.project, 'threads')
           const result = await self.mutate(String(workspace.id), expectedRevision, current => {
             const project = normalizeProject(args?.project)
             if (args?.replace_progress !== true) project.progress = current.project.progress
+            if (keepsThreads) project.threads = current.project.threads
             return { ...current, project }
           })
           if (result.changed === true) self.mutationRoundGuard.record(exec?.agent, 'novel_write')
@@ -854,7 +1014,7 @@ let NovalWriterService = (() => {
           summary: { type: 'string', required: true, description: '本次实际发生的剧情进展。' },
           chapter: { type: 'string', description: '章节或场次名称。' },
           canon_changes: { type: 'string', description: '本次新增或改变的永久事实。' },
-          open_threads: { type: 'string', description: '仍待回收的伏笔、承诺或冲突。' },
+          open_threads: { type: 'string', description: '仍待回收的伏笔、承诺或冲突的简述；结构化的线索账本请用 novel_thread_upsert 维护。' },
           scene: scenePatchToolSchema(),
           expected_revision: { type: 'integer', required: true, description: '必填并发保护；复制最近一次 novel_read 返回的 revision。' },
         },

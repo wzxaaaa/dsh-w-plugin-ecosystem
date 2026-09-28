@@ -40,21 +40,28 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 | --- | --- |
 | `novel_schema` | 返回权威项目 JSON Schema、空项目示例和参数失败后的重试协议 |
 | `novel_read` | 读取完整项目或指定部分 |
-| `novel_save_chapter` | 把完整章节正文原子写入工作区，并回读校验路径、字节数和 SHA-256 |
+| `novel_save_chapter` | 把完整章节正文原子写入工作区，并回读校验路径、字节数和 SHA-256；传 `chapter_id`（必要时加 `volume_id`）时把文件关联到大纲章节、返回字数，并把未开始的章节标为初稿 |
 | `novel_patch` | 自由局部修改；对象部分深度合并，提供的数组整体替换 |
 | `novel_character_patch` | 按角色 ID 局部更新一张角色卡，不重发角色数组 |
 | `novel_relationship_patch` | 按关系 ID 局部更新关系线，并校验端点 |
-| `novel_outline_read` | 按卷、章节和范围读取结构化大纲 |
+| `novel_outline_read` | 按卷、章节和范围读取结构化大纲；已关联正文的章节附带实时字数、文件大小和更新时间 |
 | `novel_volume_upsert` | 按稳定 ID 创建或更新一卷 |
 | `novel_chapter_upsert` | 按稳定 ID 创建或更新一章 |
 | `novel_chapter_remove` | 删除指定章节 |
 | `novel_chapter_reorder` | 调整章节在卷内的顺序 |
-| `novel_write` | 完整重写项目，适合大规模重构 |
+| `novel_threads` | 读取伏笔/悬念/承诺账本及时间线分析；传 `chapter_id` 时返回这一章该回收、已逾期、即将到期、在此埋设或呼应、以及久未呼应的线索 |
+| `novel_thread_upsert` | 按稳定 ID 创建或局部更新一条线索，`add_beat` 追加一次中途呼应；章节和角色引用会校验必须真实存在 |
+| `novel_thread_remove` | 删除一条线索（放弃的线索应改为 `dropped` 而不是删除） |
+| `novel_write` | 完整重写项目，适合大规模重构；参数里没有 `threads` 时保留现有线索账本 |
 | `novel_advance` | 追加剧情进展、永久设定变化、待续线索，并可更新当前场景 |
 
 `novel_read` 会把当前数据、revision、权威结构和重试协议一并返回给模型。所有写工具的对象参数都使用完整嵌套 JSON Schema；`project`、`patch` 和 `scene` 必须是直接 JSON 对象，不能是 JSON 字符串、Markdown 或再次包裹的整套工具参数。
 
-0.8.2 将 `/write` 的会话事件注册迁移到 Harness 0.1.2-alpha.4 的 `uiConversation.events` 服务；0.8.1 修复 `customFields` 工具 Schema 与 Harness 编译器不兼容、导致插件树和桌面后端无法启动的问题。自由字段的数据结构与行为不变。
+0.10.0 打通正文与大纲：每个大纲章节可以关联工作区根目录下的一个 .md / .txt 正文文件（一个文件只属于一章）。字数不写进项目，而是由插件实时统计工作区文件（按中文习惯：每个汉字和全角标点算一字，每个英文单词或数字算一字，忽略 Markdown 标记），手动改过正文后刷新即可更新。AI 用 `novel_save_chapter` 保存正文时传 `chapter_id` 会自动关联，并把尚未开始的章节标为初稿，线索账本推断的当前章节因此不再需要手动维护。「大纲」页新增全书进度卡片（已写字数 / 目标字数、已写章数、缺失文件、未关联文件，以及按文件名自动关联：识别 第3章、第三章、ch03、03_ 开头和章名），卷和章节显示实际字数与目标字数，章节展开后可以选择正文文件并预览开头。
+
+0.9.0 新增线索账本（schema v5）：每条伏笔、悬念或承诺记录类型、重要程度、状态、埋设 / 计划回收 / 实际回收章节、读者看到的内容、隐藏的真相、回收方案、关联角色、知情角色和中途呼应。插件按大纲章节状态推断当前写到哪一章，自动标出逾期、本章回收、即将回收（3 章内）、未规划回收和久未呼应（10 章以上）的线索；模型的系统提示按紧急程度列出进行中的线索，并新增 `novel_threads`、`novel_thread_upsert`、`novel_thread_remove` 三个工具。右侧工作台的页面切换改为从一个按钮展开的 3×3 宫格，每格显示该页摘要，逾期和本章待回收的线索会在宫格和按钮上标红；新的「线索」页提供统计、筛选、搜索、排序、可编辑卡片和章节时间线。schema v4 项目读取时自动获得空账本，旧的导出文件仍可导入。
+
+0.8.5 重做右侧工作台界面：顶部 8 个 Tab 改为单行下划线标签（窄侧栏不再折成 2×4 网格），卷章场景大纲改为可折叠行（摘要行显示章号、字数、场景数与状态），角色改为卡片选择器，次要字段组默认折叠，并适配暗色主题；修复事件列表无法换行、自定义字段改名时字段被删除或覆盖的问题。0.8.3 修复工作区切换失败时旧草稿可能误写入新工作区、关系端点被静默清空或误绑定、超限内容被静默截断，以及新版 Harness 中同轮写入保护失效的问题；窄侧栏中的工作台 Tab 改为自动换行。0.8.2 将 `/write` 的会话事件注册迁移到 Harness 0.1.2-alpha.4 的 `uiConversation.events` 服务；0.8.1 修复 `customFields` 工具 Schema 与 Harness 编译器不兼容、导致插件树和桌面后端无法启动的问题。自由字段的数据结构与行为不变。
 
 0.8.0 将项目升级到 schema v4：新增题材配置和各层 `customFields`，加入结构化的卷—章—场景大纲，以及角色、关系、卷和章节的按 ID 局部工具。旧 schema v3 项目读取时会自动补齐新结构，不需要手工迁移；原有 `plot.chapterPlan` 与 `plot.outline` 保留为兼容概览字段。角色和关系不再要求模型为每个非核心字段提交空字符串，重名角色不能再通过姓名被静默绑定到错误关系。右侧工作台新增“大纲”Tab，并按工作区暂存未保存草稿。
 
@@ -138,7 +145,7 @@ $DSH_HOME/noval-write/session-links.json
 3. `dsh-w-noval-write`
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-noval-write-0.8.2.tgz
+dsh plugin --profile web add .\dsh-w-noval-write-0.10.0.tgz
 ```
 
 缺少知识库时，项目工作台与 AI 数据工具不受影响，`/write` 会明确报告知识库未挂载。

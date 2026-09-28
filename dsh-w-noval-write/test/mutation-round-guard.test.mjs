@@ -12,6 +12,16 @@ test('reads the current Harness model turn from session events', () => {
   assert.equal(currentTurnNumber({}), undefined)
 })
 
+test('current Harness session snapshots keep the destructive guard active', () => {
+  const events = [turnEvent(7)]
+  const agent = { session: { snapshotEvents: () => events } }
+  const guard = new NovelMutationRoundGuard()
+  guard.record(agent, 'novel_write')
+  assert.equal(guard.check(agent, 'novel_advance').allowed, false)
+  events.push(turnEvent(8))
+  assert.deepEqual(guard.check(agent, 'novel_advance'), { allowed: true })
+})
+
 test('blocks write and advance from oscillating in one model turn', () => {
   const guard = new NovelMutationRoundGuard()
   const agent = { session: { events: [turnEvent(7)] } }

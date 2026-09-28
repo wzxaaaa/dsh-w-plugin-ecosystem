@@ -7,70 +7,118 @@ window.__ModuleLoader__.load({
 
     // ── styles ───────────────────────────────────────────────────────────
     var CSS = [
-      ".dshwkb-panel{--dshwkb-accent:var(--dsw-alias-state-business-primary,#3978e8);container:knowledge-panel / inline-size;display:flex;flex-direction:column;gap:12px;min-height:0;height:100%;box-sizing:border-box;padding:5px 3px;color:var(--dsw-alias-label-primary,#1f2329);font-family:var(--dsw-font-ui,ui-sans-serif,system-ui,sans-serif)}",
-      ".dshwkb-panel[data-surface=sidebar]{padding:13px 12px;background:var(--dsw-specific-sidebar-fill,#f8fafc)}",
-      ".dshwkb-head{display:flex;flex-direction:column;gap:9px;min-width:0;padding-bottom:1px}",
+      ".dshwkb-panel{--kb-accent:var(--dsw-alias-state-business-primary,#3978e8);--kb-fg:var(--dsw-alias-label-primary,#1f2329);--kb-fg2:var(--dsw-alias-label-secondary,#646a73);--kb-fg3:var(--dsw-alias-label-tertiary,#8f959e);--kb-surface:var(--dsw-alias-bg-layer-1,#fff);--kb-border:var(--dsw-alias-border-l1,#e5e7eb);--kb-hover:var(--dsw-alias-interactive-bg-hover,#f2f5fa);--kb-fill:color-mix(in srgb,var(--kb-fg) 5%,transparent);--kb-accent-soft:color-mix(in srgb,var(--kb-accent) 11%,transparent);--kb-danger:var(--dsw-alias-state-error-primary,#d64545);--kb-ok:#2e9d6a;container:knowledge-panel / inline-size;display:flex;flex-direction:column;gap:10px;min-height:0;height:100%;box-sizing:border-box;padding:4px 2px;color:var(--kb-fg);font-family:var(--dsw-font-ui,ui-sans-serif,system-ui,sans-serif);font-size:13px}",
+      ".dshwkb-panel *,.dshwkb-panel *:before,.dshwkb-panel *:after{box-sizing:border-box}",
+      ".dshwkb-panel button{font-family:inherit}",
+      ".dshwkb-panel :focus-visible{outline:2px solid var(--kb-accent);outline-offset:1px}",
+      ".dshwkb-panel[data-surface=sidebar]{padding:12px 12px 10px;background:var(--dsw-specific-sidebar-fill,#f7f8fa)}",
+      ".dshwkb-head{display:flex;flex-direction:column;gap:8px;min-width:0}",
       ".dshwkb-head-top,.dshwkb-head-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}",
-      ".dshwkb-head-actions{flex-wrap:wrap}",
+      ".dshwkb-head-actions{flex-wrap:nowrap;border-bottom:1px solid var(--kb-border)}",
       ".dshwkb-headings{flex:1;min-width:0;display:flex;align-items:center;gap:8px}",
-      ".dshwkb-title{font-size:16px;font-weight:600;line-height:22px}",
-      ".dshwkb-meta{display:inline-flex;align-items:center;flex:none;height:26px;box-sizing:border-box;padding:0 10px;border:1px solid rgba(57,120,232,.15);border-radius:999px;background:rgba(57,120,232,.07);color:var(--dshwkb-accent);font-size:12px;font-weight:600;line-height:1;white-space:nowrap}",
-      ".dshwkb-primary{flex:none;height:34px;padding:0 14px;border:0;border-radius:9px;background:var(--dshwkb-accent);color:#fff;font-size:13px;font-weight:650;box-shadow:0 2px 6px rgba(57,120,232,.22);cursor:pointer;transition:transform .15s,filter .15s,box-shadow .15s}",
-      ".dshwkb-primary:hover{filter:brightness(1.04);box-shadow:0 4px 10px rgba(57,120,232,.27);transform:translateY(-1px)}",
-      ".dshwkb-primary:disabled{opacity:.6;cursor:default}",
-      ".dshwkb-ghost{flex:none;height:34px;padding:0 12px;border:1px solid var(--dsw-alias-border-l1,#e6e9ee);border-radius:9px;background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#1f2329);font-size:13px;font-weight:500;cursor:pointer}",
-      ".dshwkb-ghost:hover{border-color:var(--dsw-alias-state-business-primary,#3978e8);color:var(--dsw-alias-state-business-primary,#3978e8)}",
-      ".dshwkb-ghost[data-danger=true]:hover{border-color:#e04a4a;color:#e04a4a}",
-      ".dshwkb-searchrow{display:flex;gap:6px;align-items:center;padding:3px 4px;border:1px solid var(--dsw-alias-border-l1,#e6e9ee);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 3px 10px rgba(31,35,41,.045)}",
-      ".dshwkb-searchrow .dshwkb-ghost{border:0;background:transparent}",
-      ".dshwkb-input{flex:1;min-width:0;height:36px;padding:0 10px;box-sizing:border-box;border:0;border-radius:9px;background:transparent;color:inherit;font-size:13px;font-family:inherit}",
-      ".dshwkb-input:focus{outline:none;background:var(--dsw-specific-sidebar-fill,#f7f8fa)}",
-      ".dshwkb-textarea{width:100%;min-height:220px;flex:1;padding:10px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l1,#e6e9ee);border-radius:8px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit;font-size:13px;line-height:20px;font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);resize:vertical}",
-      ".dshwkb-tags{display:flex;flex-wrap:nowrap;gap:7px;min-height:28px;overflow-x:auto;overflow-y:hidden;padding:1px 1px 4px;scrollbar-width:thin;scroll-snap-type:x proximity}",
-      ".dshwkb-chip{height:27px;flex:none;padding:0 10px;border:1px solid var(--dsw-alias-border-l1,#e6e9ee);border-radius:999px;background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-secondary,#68717e);font-size:12px;white-space:nowrap;scroll-snap-align:start;cursor:pointer}",
-      ".dshwkb-chip[data-active=true]{border-color:var(--dsw-alias-state-business-primary,#3978e8);background:var(--dsw-alias-interactive-bg-selected,#dce8ff);color:var(--dsw-alias-state-business-primary,#3978e8)}",
-      ".dshwkb-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:9px;padding:1px 2px 5px 1px;scrollbar-gutter:stable}",
-      ".dshwkb-row{width:100%;display:flex;flex-direction:column;gap:6px;padding:12px 13px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l1,#e6e9ee);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 2px 7px rgba(31,35,41,.035);text-align:left;cursor:pointer;transition:border-color .15s,background .15s,box-shadow .15s}",
-      ".dshwkb-row:hover{border-color:rgba(57,120,232,.42);background:var(--dsw-alias-interactive-bg-hover,#f5f8ff);box-shadow:0 5px 14px rgba(31,35,41,.065)}",
-      ".dshwkb-row-title{font-size:14px;font-weight:650;line-height:21px;overflow-wrap:anywhere}",
-      ".dshwkb-row-preview{font-size:12.5px;line-height:19px;color:var(--dsw-alias-label-secondary,#68717e);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
-      ".dshwkb-row-foot{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;color:var(--dsw-alias-label-tertiary,#87909d)}",
-      ".dshwkb-row-tag{padding:0 6px;border-radius:9px;background:var(--dsw-specific-sidebar-fill,#f2f4f7);color:var(--dsw-alias-label-secondary,#68717e)}",
+      ".dshwkb-title{font-size:16px;font-weight:650;line-height:22px;white-space:nowrap}",
+      ".dshwkb-meta{display:inline-flex;align-items:center;gap:4px;flex:none;height:22px;padding:0 8px;border-radius:999px;background:var(--kb-fill);color:var(--kb-fg2);font-size:12px;line-height:1;white-space:nowrap}",
+      ".dshwkb-meta b{color:var(--kb-fg);font-weight:650}",
+      ".dshwkb-modebar{display:inline-flex;flex:none;gap:2px;padding:2px;border-radius:8px;background:var(--kb-fill)}",
+      ".dshwkb-mode{height:26px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--kb-fg2);font-size:12px;font-weight:500;white-space:nowrap;cursor:pointer;transition:background .15s,color .15s}",
+      ".dshwkb-mode:hover:not([data-active]){color:var(--kb-fg)}",
+      ".dshwkb-mode[data-active=true]{background:var(--kb-surface);color:var(--kb-fg);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--kb-border)}",
+      ".dshwkb-mode:disabled{cursor:progress}",
+      ".dshwkb-tabs{display:flex;gap:18px;min-width:0}",
+      ".dshwkb-tab{position:relative;height:34px;padding:0 1px;border:0;background:transparent;color:var(--kb-fg2);font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;transition:color .15s}",
+      ".dshwkb-tab:hover{color:var(--kb-fg)}",
+      ".dshwkb-tab[data-active=true]{color:var(--kb-fg);font-weight:600}",
+      ".dshwkb-tab[data-active=true]:after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:var(--kb-accent)}",
+      ".dshwkb-primary,.dshwkb-ghost{display:inline-flex;align-items:center;justify-content:center;gap:5px;flex:none;height:30px;padding:0 12px;border-radius:8px;font-size:12.5px;white-space:nowrap;cursor:pointer;transition:filter .15s,border-color .15s,color .15s,background .15s}",
+      ".dshwkb-primary{border:0;background:var(--kb-accent);color:#fff;font-weight:600}",
+      ".dshwkb-primary:hover:not(:disabled){filter:brightness(1.08)}",
+      ".dshwkb-ghost{border:1px solid var(--kb-border);background:var(--kb-surface);color:var(--kb-fg);font-weight:500}",
+      ".dshwkb-ghost:hover:not(:disabled){border-color:color-mix(in srgb,var(--kb-accent) 45%,var(--kb-border));color:var(--kb-accent)}",
+      ".dshwkb-ghost[data-danger=true]{color:var(--kb-danger)}",
+      ".dshwkb-ghost[data-danger=true]:hover:not(:disabled){border-color:var(--kb-danger);color:var(--kb-danger);background:color-mix(in srgb,var(--kb-danger) 7%,var(--kb-surface))}",
+      ".dshwkb-ghost[data-armed=true],.dshwkb-ghost[data-armed=true]:hover:not(:disabled){border-color:var(--kb-danger);background:var(--kb-danger);color:#fff}",
+      ".dshwkb-primary:disabled,.dshwkb-ghost:disabled{opacity:.55;cursor:default}",
+      ".dshwkb-head-actions>.dshwkb-primary{height:28px;padding:0 10px 0 8px;margin:0 0 4px auto}",
+      ".dshwkb-icon-btn{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0;border:0;border-radius:7px;background:transparent;color:var(--kb-fg3);cursor:pointer;transition:background .15s,color .15s}",
+      ".dshwkb-icon-btn:hover:not(:disabled){background:var(--kb-hover);color:var(--kb-fg)}",
+      ".dshwkb-link{align-self:flex-start;padding:0;border:0;background:none;color:var(--kb-accent);font-size:12px;line-height:18px;text-align:left;cursor:pointer}",
+      ".dshwkb-link:hover{text-decoration:underline}",
+      ".dshwkb-searchrow{display:flex;align-items:center;gap:2px;flex:none;height:34px;padding:0 3px 0 10px;border:1px solid var(--kb-border);border-radius:9px;background:var(--kb-surface);color:var(--kb-fg3);transition:border-color .15s,box-shadow .15s}",
+      ".dshwkb-searchrow:focus-within{border-color:var(--kb-accent);box-shadow:0 0 0 3px var(--kb-accent-soft)}",
+      ".dshwkb-input{flex:1;width:100%;min-width:0;height:34px;padding:0 10px;border:1px solid var(--kb-border);border-radius:8px;background:var(--kb-surface);color:var(--kb-fg);font:inherit;font-size:13px;transition:border-color .15s,box-shadow .15s}",
+      ".dshwkb-input:focus,.dshwkb-textarea:focus{outline:none;border-color:var(--kb-accent);box-shadow:0 0 0 3px var(--kb-accent-soft)}",
+      ".dshwkb-searchrow .dshwkb-input,.dshwkb-searchrow .dshwkb-input:focus{height:32px;padding:0 6px;border:0;background:transparent;box-shadow:none}",
+      ".dshwkb-input::placeholder,.dshwkb-textarea::placeholder{color:var(--kb-fg3)}",
+      ".dshwkb-textarea{width:100%;min-height:200px;flex:1;padding:10px 12px;border:1px solid var(--kb-border);border-radius:8px;background:var(--kb-surface);color:var(--kb-fg);font-size:12.5px;line-height:1.7;font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);resize:vertical;transition:border-color .15s,box-shadow .15s}",
+      ".dshwkb-tags{display:flex;flex-wrap:nowrap;flex:none;gap:6px;min-height:24px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-snap-type:x proximity;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent)}",
+      ".dshwkb-tags::-webkit-scrollbar{display:none}",
+      ".dshwkb-chip{display:inline-flex;align-items:center;gap:4px;height:24px;flex:none;padding:0 9px;border:1px solid var(--kb-border);border-radius:999px;background:var(--kb-surface);color:var(--kb-fg2);font-size:12px;white-space:nowrap;scroll-snap-align:start;cursor:pointer;transition:border-color .15s,color .15s,background .15s}",
+      ".dshwkb-chip:hover{color:var(--kb-fg);border-color:color-mix(in srgb,var(--kb-fg) 22%,var(--kb-border))}",
+      ".dshwkb-chip-count{color:var(--kb-fg3);font-size:11px}",
+      ".dshwkb-chip[data-active=true]{border-color:transparent;background:var(--kb-accent-soft);color:var(--kb-accent);font-weight:600}",
+      ".dshwkb-chip[data-active=true] .dshwkb-chip-count{color:inherit;opacity:.7}",
+      ".dshwkb-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:6px;margin:0 -4px;padding:1px 4px 6px;scrollbar-width:thin}",
+      ".dshwkb-row{width:100%;display:flex;flex-direction:column;flex:none;gap:3px;padding:10px 12px;border:1px solid var(--kb-border);border-radius:10px;background:var(--kb-surface);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s}",
+      ".dshwkb-row:hover{border-color:color-mix(in srgb,var(--kb-accent) 40%,var(--kb-border));box-shadow:0 2px 10px color-mix(in srgb,var(--kb-fg) 7%,transparent)}",
+      ".dshwkb-row-title{font-size:13.5px;font-weight:600;line-height:20px;overflow-wrap:anywhere}",
+      ".dshwkb-row-preview{font-size:12.5px;line-height:18px;color:var(--kb-fg2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
+      ".dshwkb-row-foot{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin-top:3px;font-size:11px;line-height:16px;color:var(--kb-fg3)}",
+      ".dshwkb-row-tag{color:var(--kb-accent);font-weight:500}",
+      ".dshwkb-row-sep{width:3px;height:3px;flex:none;border-radius:50%;background:currentColor;opacity:.55}",
+      ".dshwkb-score{margin-left:auto;padding:0 6px;border-radius:999px;background:var(--kb-fill);color:var(--kb-fg2)}",
       ".dshwkb-detail{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}",
-      ".dshwkb-detail-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
-      ".dshwkb-detail-title{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:22px;overflow-wrap:anywhere}",
-      ".dshwkb-detail-meta{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--dsw-alias-label-tertiary,#87909d);overflow-wrap:anywhere}",
-      ".dshwkb-body{flex:1;min-height:0;margin:0;overflow:auto;padding:12px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l1,#e6e9ee);border-radius:10px;background:var(--dsw-specific-sidebar-fill,#fafbfc);font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12px;line-height:19px;white-space:pre-wrap;overflow-wrap:anywhere}",
-      ".dshwkb-field{display:flex;flex-direction:column;gap:4px}",
-      ".dshwkb-label{font-size:12px;color:var(--dsw-alias-label-secondary,#68717e)}",
-      ".dshwkb-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,#68717e);overflow-wrap:anywhere}",
-      ".dshwkb-panel>.dshwkb-status:not([data-kind]){padding:9px 11px;border:1px solid rgba(57,120,232,.13);border-left:3px solid var(--dshwkb-accent);border-radius:9px;background:rgba(57,120,232,.045);line-height:19px}",
-      ".dshwkb-status[data-kind=error]{color:#e04a4a}",
-      ".dshwkb-status[data-kind=ok]{color:#2aa06a}",
-      ".dshwkb-empty{padding:22px 4px;color:var(--dsw-alias-label-tertiary,#87909d);font-size:13px;line-height:20px}",
+      ".dshwkb-detail-bar{display:flex;align-items:center;gap:6px;min-width:0}",
+      ".dshwkb-back{display:inline-flex;align-items:center;gap:2px;height:28px;margin-right:auto;padding:0 8px 0 3px;border:0;border-radius:7px;background:transparent;color:var(--kb-fg2);font-size:12.5px;cursor:pointer}",
+      ".dshwkb-back:hover{background:var(--kb-hover);color:var(--kb-fg)}",
+      ".dshwkb-detail-title{font-size:16px;font-weight:650;line-height:23px;overflow-wrap:anywhere}",
+      ".dshwkb-detail-meta{display:flex;flex-wrap:wrap;gap:3px 12px;font-size:11.5px;line-height:17px;color:var(--kb-fg3);overflow-wrap:anywhere}",
+      ".dshwkb-detail-meta b{margin-right:4px;font-weight:500;color:var(--kb-fg2)}",
+      ".dshwkb-detail-tags{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:12px}",
+      ".dshwkb-body{flex:1;min-height:0;margin:0;overflow:auto;padding:14px 16px;border:1px solid var(--kb-border);border-radius:10px;background:var(--kb-surface);font-family:inherit;font-size:13px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}",
+      ".dshwkb-field{display:flex;flex-direction:column;gap:5px}",
+      ".dshwkb-field>.dshwkb-input{flex:none}",
+      ".dshwkb-label{font-size:12px;font-weight:500;line-height:17px;color:var(--kb-fg2)}",
+      ".dshwkb-status{font-size:12px;line-height:18px;color:var(--kb-fg2);overflow-wrap:anywhere}",
+      ".dshwkb-callout{display:flex;flex:none;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:8px;background:var(--kb-accent-soft);color:var(--kb-fg2);font-size:12px;line-height:18px;overflow-wrap:anywhere}",
+      ".dshwkb-callout svg{flex:none;margin-top:1px;color:var(--kb-accent)}",
+      ".dshwkb-callout[data-kind=warn]{background:color-mix(in srgb,#d98a1f 12%,transparent)}",
+      ".dshwkb-callout[data-kind=warn] svg{color:#c77a12}",
+      ".dshwkb-notice{display:flex;align-items:center;gap:6px;flex:none;padding:6px 5px 6px 10px;border-radius:8px;font-size:12px;line-height:18px;overflow-wrap:anywhere;animation:dshwkb-in .18s ease-out}",
+      ".dshwkb-notice[data-kind=ok]{background:color-mix(in srgb,var(--kb-ok) 12%,transparent);color:var(--kb-ok)}",
+      ".dshwkb-notice[data-kind=error]{background:color-mix(in srgb,var(--kb-danger) 10%,transparent);color:var(--kb-danger)}",
+      ".dshwkb-notice-text{flex:1;min-width:0}",
+      ".dshwkb-notice .dshwkb-icon-btn{width:22px;height:22px;color:inherit;opacity:.7}",
+      ".dshwkb-notice .dshwkb-icon-btn:hover:not(:disabled){opacity:1;background:transparent;color:inherit}",
+      ".dshwkb-empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:36px 16px;text-align:center;color:var(--kb-fg3);font-size:12.5px;line-height:19px}",
+      ".dshwkb-empty-icon{width:42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:12px;background:var(--kb-fill);color:var(--kb-fg3)}",
+      ".dshwkb-skeletons{display:flex;flex-direction:column;gap:6px}",
+      ".dshwkb-skeleton{height:72px;border-radius:10px;background:linear-gradient(90deg,var(--kb-fill) 25%,color-mix(in srgb,var(--kb-fg) 9%,transparent) 50%,var(--kb-fill) 75%);background-size:200% 100%;animation:dshwkb-shimmer 1.3s linear infinite}",
       ".dshwkb-rail-button{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary,#68717e);cursor:pointer}",
       ".dshwkb-rail-button:hover{background:var(--dsw-alias-interactive-bg-hover,#e9edf3);color:var(--dsw-alias-label-primary,#1f2329)}",
       ".dshwkb-rail-button[data-active=true]{background:var(--dsw-alias-interactive-bg-selected,#dce8ff);color:var(--dsw-alias-state-business-primary,#3978e8)}",
-  ".dshwkb-modebar{display:flex;flex:none;gap:3px;max-width:100%;padding:3px;border:1px solid var(--dsw-alias-border-l1,#e6e9ee);border-radius:11px;background:rgba(31,35,41,.035);width:max-content}",
-  ".dshwkb-mode{height:29px;padding:0 11px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary,#68717e);font-size:12px;font-weight:500;white-space:nowrap;cursor:pointer}",
-  ".dshwkb-mode[data-active=true]{background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#1f2329);box-shadow:0 1px 3px rgba(31,35,41,.12)}",
-  ".dshwkb-head-actions>.dshwkb-primary{margin-left:auto}",
-  "@container knowledge-panel (max-width:380px){.dshwkb-head-top{align-items:center}.dshwkb-head-top .dshwkb-modebar{min-width:0}.dshwkb-head-actions{display:grid;grid-template-columns:minmax(0,1fr) auto}.dshwkb-head-actions .dshwkb-modebar{min-width:0;width:auto}.dshwkb-head-actions .dshwkb-mode{flex:1;padding:0 8px}.dshwkb-head-actions>.dshwkb-primary{margin-left:0;padding:0 12px}.dshwkb-row{padding:11px 12px}}",
-  ".dshwkb-dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:170px;padding:22px 18px;box-sizing:border-box;border:1.5px dashed rgba(57,120,232,.35);border-radius:14px;background:rgba(57,120,232,.035);text-align:center;transition:border-color .15s,background .15s}",
-  ".dshwkb-dropzone[data-over=true]{border-color:var(--dsw-alias-state-business-primary,#3978e8);background:var(--dsw-alias-interactive-bg-hover,#f5f8ff)}",
-  ".dshwkb-drop-title{font-size:14px;font-weight:600;line-height:20px}",
-  ".dshwkb-drop-hint{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,#68717e);max-width:420px}",
-  ".dshwkb-drop-note{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#87909d);max-width:440px}",
-  ".dshwkb-imports{display:flex;flex-direction:column;gap:8px;overflow:auto;flex:1;min-height:0}",
-  ".dshwkb-import-card{display:flex;flex-direction:column;gap:7px;padding:12px 13px;border:1px solid var(--dsw-alias-border-l1,#e6e9ee);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 2px 7px rgba(31,35,41,.035)}",
-  ".dshwkb-import-card[data-kind=error]{border-color:#f2b8b8;background:#fff7f7}",
-  ".dshwkb-import-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center}",
-  ".dshwkb-import-name{flex:1;min-width:0;font-size:13px;font-weight:600;line-height:20px;overflow-wrap:anywhere}",
-  ".dshwkb-import-summary{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,#68717e)}",
-  ".dshwkb-import-notes{display:flex;flex-direction:column;gap:2px;max-height:120px;overflow:auto;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#87909d)}",
-  ".dshwkb-import-stale{color:#c96a2b}",
-  ".dshwkb-import-actions{display:flex;gap:8px}",
-  ".dshwkb-browse-hint{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#87909d);cursor:pointer}",
+      ".dshwkb-dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;flex:none;min-height:190px;padding:22px 18px;border:1.5px dashed color-mix(in srgb,var(--kb-accent) 35%,var(--kb-border));border-radius:12px;background:color-mix(in srgb,var(--kb-accent) 3%,var(--kb-surface));text-align:center;transition:border-color .15s,background .15s}",
+      ".dshwkb-dropzone[data-over=true]{border-color:var(--kb-accent);background:var(--kb-accent-soft)}",
+      ".dshwkb-drop-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:12px;background:var(--kb-accent-soft);color:var(--kb-accent)}",
+      ".dshwkb-drop-title{font-size:14px;font-weight:600;line-height:20px}",
+      ".dshwkb-drop-hint{max-width:420px;font-size:12px;line-height:18px;color:var(--kb-fg2)}",
+      ".dshwkb-drop-note{max-width:440px;font-size:11px;line-height:16px;color:var(--kb-fg3)}",
+      ".dshwkb-dropzone .dshwkb-primary{margin-top:4px}",
+      ".dshwkb-imports-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;color:var(--kb-fg2)}",
+      ".dshwkb-imports{display:flex;flex-direction:column;gap:6px;overflow:auto;flex:1;min-height:0}",
+      ".dshwkb-import-card{display:flex;flex-direction:column;flex:none;gap:6px;padding:10px 12px;border:1px solid var(--kb-border);border-left:3px solid var(--kb-ok);border-radius:10px;background:var(--kb-surface)}",
+      ".dshwkb-import-card[data-kind=error]{border-left-color:var(--kb-danger)}",
+      ".dshwkb-import-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center}",
+      ".dshwkb-import-name{flex:1;min-width:0;font-size:13px;font-weight:600;line-height:20px;overflow-wrap:anywhere}",
+      ".dshwkb-badge{display:inline-flex;align-items:center;flex:none;height:20px;padding:0 7px;border-radius:999px;background:color-mix(in srgb,var(--kb-ok) 13%,transparent);color:var(--kb-ok);font-size:11px;font-weight:600}",
+      ".dshwkb-badge[data-kind=error]{background:color-mix(in srgb,var(--kb-danger) 12%,transparent);color:var(--kb-danger)}",
+      ".dshwkb-import-summary{font-size:12px;line-height:18px;color:var(--kb-fg2)}",
+      ".dshwkb-import-notes{display:flex;flex-direction:column;gap:2px;max-height:120px;overflow:auto;font-size:11.5px;line-height:17px;color:var(--kb-fg3)}",
+      ".dshwkb-import-stale{color:#c77a12}",
+      ".dshwkb-import-actions{display:flex;align-items:center;gap:8px}",
+      ".dshwkb-banned-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}",
+      "@keyframes dshwkb-in{from{opacity:0;transform:translateY(4px)}}",
+      "@keyframes dshwkb-shimmer{to{background-position:-200% 0}}",
+      "@container knowledge-panel (max-width:380px){.dshwkb-tabs{gap:14px}.dshwkb-mode{padding:0 8px}.dshwkb-row{padding:9px 11px}.dshwkb-head-actions>.dshwkb-primary{padding:0 8px 0 6px}.dshwkb-body{padding:12px 13px}}",
     ].join("\n");
     var tagId = "dsh-w-knowledge-base/styles";
 
@@ -146,18 +194,38 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Small stroke icons for buttons and empty states.
+    function Icon(props) {
+      var size = props.size || 16;
+      return React.createElement("svg", { viewBox: "0 0 20 20", width: size, height: size, "aria-hidden": true, fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round" },
+        ICON_PATHS[props.name].map(function (d, index) { return React.createElement("path", { key: index, d: d }); })
+      );
+    }
+    var ICON_PATHS = {
+      search: ["M9 15.2a6.2 6.2 0 100-12.4 6.2 6.2 0 000 12.4z", "M13.5 13.5l3.7 3.7"],
+      refresh: ["M16 10a6 6 0 01-10.5 4", "M4 10a6 6 0 0110.5-4", "M14.5 2.8V6h-3.2", "M5.5 17.2V14h3.2"],
+      plus: ["M10 4.5v11", "M4.5 10h11"],
+      back: ["M12 4.5L6.5 10l5.5 5.5"],
+      upload: ["M10 13V3.5", "M6.5 7L10 3.5 13.5 7", "M4 12.5v2.2c0 .7.6 1.3 1.3 1.3h9.4c.7 0 1.3-.6 1.3-1.3v-2.2"],
+      info: ["M10 17a7 7 0 100-14 7 7 0 000 14z", "M10 9.2v4.3", "M10 6.6v.1"],
+      close: ["M5.5 5.5l9 9", "M14.5 5.5l-9 9"],
+      notes: ["M5.5 3h6.5l3.5 3.5V16a1 1 0 01-1 1h-9a1 1 0 01-1-1V4a1 1 0 011-1z", "M11.5 3v4h4", "M7.5 10.5h5", "M7.5 13.5h3.5"],
+    };
+
     // ── note list ────────────────────────────────────────────────────────
     function NoteRow(props) {
       var note = props.note;
       var t = props.t;
-      var foot = [
-        React.createElement("span", { key: "updated" }, t("updatedLabel") + " " + shortDate(note.updated)),
-        React.createElement("span", { key: "chars" }, note.chars + " " + t("charsLabel")),
-      ];
-      if (note.score > 0) foot.push(React.createElement("span", { key: "score" }, t("scoreLabel") + " " + note.score));
-      var tags = (note.tags || []).map(function (tag) {
-        return React.createElement("span", { className: "dshwkb-row-tag", key: "tag-" + tag }, tag);
+      var foot = (note.tags || []).map(function (tag) {
+        return React.createElement("span", { className: "dshwkb-row-tag", key: "tag-" + tag }, "#" + tag);
       });
+      if (foot.length > 0) foot.push(React.createElement("span", { className: "dshwkb-row-sep", key: "sep-tags", "aria-hidden": true }));
+      foot.push(
+        React.createElement("span", { key: "updated" }, shortDate(note.updated)),
+        React.createElement("span", { className: "dshwkb-row-sep", key: "sep-chars", "aria-hidden": true }),
+        React.createElement("span", { key: "chars" }, note.chars + " " + t("charsLabel"))
+      );
+      if (note.score > 0) foot.push(React.createElement("span", { className: "dshwkb-score", key: "score", title: t("scoreLabel") }, t("scoreLabel") + " " + note.score));
       return React.createElement("button", {
         type: "button",
         className: "dshwkb-row",
@@ -165,7 +233,7 @@ window.__ModuleLoader__.load({
       },
         React.createElement("span", { className: "dshwkb-row-title" }, note.title),
         note.preview ? React.createElement("span", { className: "dshwkb-row-preview" }, note.preview) : null,
-        React.createElement("span", { className: "dshwkb-row-foot" }, tags.concat(foot))
+        React.createElement("span", { className: "dshwkb-row-foot" }, foot)
       );
     }
 
@@ -175,20 +243,23 @@ window.__ModuleLoader__.load({
       var note = props.note;
       var editing = props.editing;
       var draft = props.draft;
+      function metaItem(key, label, value) {
+        return value ? React.createElement("span", { key: key }, React.createElement("b", null, label), value) : null;
+      }
       var meta = editing && note.id === ""
-        ? [React.createElement("span", { key: "new" }, t("newNote"))]
+        ? null
         : [
-          React.createElement("span", { key: "id" }, t("idLabel") + " " + note.id),
-          React.createElement("span", { key: "created" }, t("createdLabel") + " " + shortDate(note.created)),
-          React.createElement("span", { key: "updated" }, t("updatedLabel") + " " + shortDate(note.updated)),
-          note.path ? React.createElement("span", { key: "path" }, t("pathLabel") + " " + note.path) : null,
-          note.source ? React.createElement("span", { key: "source" }, t("sourceLabel") + " " + note.source) : null,
-          note.workspace ? React.createElement("span", { key: "workspace" }, t("workspaceLabel") + " " + note.workspace) : null,
+          metaItem("updated", t("updatedLabel"), shortDate(note.updated)),
+          metaItem("created", t("createdLabel"), shortDate(note.created)),
+          metaItem("source", t("sourceLabel"), note.source),
+          metaItem("workspace", t("workspaceLabel"), note.workspace),
+          metaItem("path", t("pathLabel"), note.path),
+          metaItem("id", t("idLabel"), note.id),
         ];
       var actions = editing
         ? [
-          React.createElement("button", { key: "save", type: "button", className: "dshwkb-primary", disabled: props.busy, onClick: props.onSave }, props.busy ? t("saving") : t("save")),
           React.createElement("button", { key: "cancel", type: "button", className: "dshwkb-ghost", disabled: props.busy, onClick: props.onCancel }, t("cancel")),
+          React.createElement("button", { key: "save", type: "button", className: "dshwkb-primary", disabled: props.busy, onClick: props.onSave }, props.busy ? t("saving") : t("save")),
         ]
         : [
           React.createElement("button", { key: "edit", type: "button", className: "dshwkb-ghost", onClick: props.onEdit }, t("edit")),
@@ -197,17 +268,24 @@ window.__ModuleLoader__.load({
             type: "button",
             className: "dshwkb-ghost",
             "data-danger": "true",
+            "data-armed": props.confirming || undefined,
             disabled: props.busy,
             onClick: props.onDelete,
           }, props.busy ? t("removing") : props.confirming ? t("confirmRemove") : t("remove")),
         ];
+      var tags = !editing && note.tags && note.tags.length > 0
+        ? React.createElement("div", { className: "dshwkb-detail-tags" }, note.tags.map(function (tag) {
+          return React.createElement("span", { className: "dshwkb-row-tag", key: tag }, "#" + tag);
+        }))
+        : null;
       return React.createElement("div", { className: "dshwkb-detail" },
-        React.createElement("div", { className: "dshwkb-detail-head" },
-          React.createElement("button", { type: "button", className: "dshwkb-ghost", onClick: props.onBack }, t("back")),
-          React.createElement("span", { className: "dshwkb-detail-title" }, editing ? (draft.title || t("newNote")) : note.title),
+        React.createElement("div", { className: "dshwkb-detail-bar" },
+          React.createElement("button", { type: "button", className: "dshwkb-back", onClick: props.onBack }, React.createElement(Icon, { name: "back" }), t("back")),
           actions
         ),
-        React.createElement("div", { className: "dshwkb-detail-meta" }, meta),
+        React.createElement("div", { className: "dshwkb-detail-title" }, editing ? (draft.title || t("newNote")) : note.title),
+        tags,
+        meta ? React.createElement("div", { className: "dshwkb-detail-meta" }, meta) : null,
         editing
           ? React.createElement(React.Fragment, null,
             React.createElement("div", { className: "dshwkb-field" },
@@ -310,6 +388,13 @@ window.__ModuleLoader__.load({
         mountedRef.current = true;
         return function () { mountedRef.current = false; };
       }, []);
+
+      // Success notices fade on their own; errors stay until dismissed.
+      React.useEffect(function () {
+        if (!notice || notice.kind !== "ok") return undefined;
+        var handle = window.setTimeout(function () { if (mountedRef.current) setNotice(null); }, 3200);
+        return function () { window.clearTimeout(handle); };
+      }, [notice]);
 
       React.useEffect(function () {
         if (typeof kb.getMode !== "function") return;
@@ -544,7 +629,7 @@ window.__ModuleLoader__.load({
             key: "chip-" + entry.tag,
             "data-active": activeTag === entry.tag || undefined,
             onClick: function () { setActiveTag(activeTag === entry.tag ? "" : entry.tag); },
-          }, entry.tag + " (" + entry.count + ")");
+          }, entry.tag, React.createElement("span", { className: "dshwkb-chip-count" }, entry.count));
         })
       );
 
@@ -576,9 +661,16 @@ window.__ModuleLoader__.load({
           },
         });
       } else if (view.status === "loading") {
-        body = React.createElement("div", { className: "dshwkb-empty" }, t("loading"));
+        body = React.createElement("div", { className: "dshwkb-skeletons", "aria-busy": "true", "aria-label": t("loading") },
+          [0, 1, 2].map(function (index) { return React.createElement("div", { className: "dshwkb-skeleton", key: index, style: { opacity: 1 - index * 0.25 } }); })
+        );
       } else if (view.notes.length === 0) {
-        body = React.createElement("div", { className: "dshwkb-empty" }, query === "" && activeTag === "" ? t("empty") : t("emptyQuery"));
+        var pristine = query === "" && activeTag === "";
+        body = React.createElement("div", { className: "dshwkb-empty" },
+          React.createElement("span", { className: "dshwkb-empty-icon" }, React.createElement(Icon, { name: pristine ? "notes" : "search", size: 20 })),
+          pristine ? t("empty") : t("emptyQuery"),
+          pristine ? React.createElement("button", { type: "button", className: "dshwkb-link", style: { alignSelf: "center" }, onClick: function () { setMode("feed"); } }, t("browseHint")) : null
+        );
       } else {
         body = React.createElement("div", { className: "dshwkb-list" },
           view.notes.map(function (note) {
@@ -637,15 +729,13 @@ window.__ModuleLoader__.load({
                   return React.createElement("span", { key: "stale-" + lineIndex }, line);
                 }))
               : null,
-            React.createElement("div", { className: "dshwkb-import-actions" },
-              React.createElement("button", { type: "button", className: "dshwkb-ghost", onClick: function () { viewNotes(value.docSlug || ""); } }, t("viewNotes"))
-            )
+            React.createElement("button", { type: "button", className: "dshwkb-link", onClick: function () { viewNotes(value.docSlug || ""); } }, t("viewNotes") + " →")
           );
         }
         return React.createElement("div", { className: "dshwkb-import-card", "data-kind": entry.ok ? "ok" : "error", key: "import-" + index + "-" + entry.name },
           React.createElement("div", { className: "dshwkb-import-head" },
             React.createElement("span", { className: "dshwkb-import-name" }, entry.name),
-            React.createElement("span", { className: "dshwkb-row-tag" }, t(entry.ok ? "dropped" : "importFailed"))
+            React.createElement("span", { className: "dshwkb-badge", "data-kind": entry.ok ? "ok" : "error" }, t(entry.ok ? "dropped" : "importFailed"))
           ),
           inner
         );
@@ -664,7 +754,10 @@ window.__ModuleLoader__.load({
               event.preventDefault();
               setDropOver(true);
             },
-            onDragLeave: function () {
+            onDragLeave: function (event) {
+              // dragleave also fires when the pointer crosses into a child
+              // element; only clear the highlight when it leaves the zone.
+              if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget)) return;
               setDropOver(false);
             },
             onDrop: function (event) {
@@ -673,6 +766,7 @@ window.__ModuleLoader__.load({
               feedFiles(event.dataTransfer && event.dataTransfer.files);
             },
           },
+            React.createElement("span", { className: "dshwkb-drop-icon" }, React.createElement(Icon, { name: "upload", size: 22 })),
             React.createElement("span", { className: "dshwkb-drop-title" }, importing ? t("feeding") : t("dropTitle")),
             React.createElement("span", { className: "dshwkb-drop-hint" }, t("dropHint")),
             React.createElement("button", { type: "button", className: "dshwkb-primary", onClick: pickFiles, disabled: importing }, t("dropBrowse")),
@@ -687,12 +781,13 @@ window.__ModuleLoader__.load({
             onChange: onFilePicked,
           }),
           imports.length === 0
-            ? React.createElement("div", { className: "dshwkb-empty" }, t("dropHint"))
-            : React.createElement("div", { className: "dshwkb-imports" },
-              imports.map(renderImportResult),
-              React.createElement("div", { className: "dshwkb-import-actions" },
-                React.createElement("button", { type: "button", className: "dshwkb-ghost", onClick: function () { setImports([]); } }, t("refresh"))
-              )
+            ? null
+            : React.createElement(React.Fragment, null,
+              React.createElement("div", { className: "dshwkb-imports-head" },
+                React.createElement("span", null, t("importResults")),
+                React.createElement("button", { type: "button", className: "dshwkb-link", disabled: importing, onClick: function () { setImports([]); } }, t("clearResults"))
+              ),
+              React.createElement("div", { className: "dshwkb-imports" }, imports.map(renderImportResult))
             )
         );
       }
@@ -753,9 +848,14 @@ window.__ModuleLoader__.load({
       }
 
       function renderBanned() {
+        var phraseCount = banned.text.split(/\r?\n/).filter(function (line) {
+          var trimmed = line.trim();
+          return trimmed !== "" && trimmed.charAt(0) !== "#";
+        }).length;
         return React.createElement("div", { className: "dshwkb-detail" },
-          React.createElement("div", { className: "dshwkb-label" }, t("bannedHint")),
-          banned.isDefault ? React.createElement("div", { className: "dshwkb-status" }, t("bannedDefault")) : null,
+          React.createElement("div", { className: "dshwkb-callout" }, React.createElement(Icon, { name: "info" }),
+            React.createElement("span", null, t("bannedHint"), banned.isDefault ? " " + t("bannedDefault") : "")
+          ),
           React.createElement("textarea", {
             className: "dshwkb-textarea",
             value: banned.text,
@@ -766,11 +866,13 @@ window.__ModuleLoader__.load({
               setBanned(function () { return { status: "ready", text: val, isDefault: false }; });
             },
           }),
-          React.createElement("div", { className: "dshwkb-import-actions" },
+          React.createElement("div", { className: "dshwkb-banned-foot" },
+            React.createElement("span", { className: "dshwkb-status" }, banned.status === "ready" ? phraseCount + " " + t("bannedCount") : ""),
             React.createElement("button", {
               type: "button",
               className: "dshwkb-primary",
-              disabled: bannedSaving || banned.status === "loading",
+              // After a failed load the editor holds "", and saving would wipe the stored list.
+              disabled: bannedSaving || banned.status !== "ready",
               onClick: saveBanned,
             }, bannedSaving ? t("saving") : t("bannedSave"))
           )
@@ -782,55 +884,65 @@ window.__ModuleLoader__.load({
           React.createElement("div", { className: "dshwkb-head-top" },
             React.createElement("div", { className: "dshwkb-headings" },
               surface === "settings" ? React.createElement("div", { className: "dshwkb-title" }, t("title")) : null,
-              React.createElement("div", { className: "dshwkb-meta", title: view.root || undefined }, view.total + " " + t("countLabel"))
+              React.createElement("div", { className: "dshwkb-meta", title: view.root || undefined }, React.createElement("b", null, view.total), t("countLabel"))
             ),
-            React.createElement("div", { className: "dshwkb-modebar", "data-role": "working" },
-            React.createElement("button", {
-              type: "button",
-              className: "dshwkb-mode",
-              disabled: switching,
-              "data-active": workMode === "assistant" || undefined,
-              onClick: function () { switchWorkingMode("assistant"); },
-            }, t("workAssistant")),
-            React.createElement("button", {
-              type: "button",
-              className: "dshwkb-mode",
-              disabled: switching,
-              "data-active": workMode === "writing" || undefined,
-              onClick: function () { switchWorkingMode("writing"); },
-            }, t("workWriting"))
+            React.createElement("div", { className: "dshwkb-modebar", "data-role": "working", role: "radiogroup", "aria-label": t("workModeLabel") },
+              React.createElement("button", {
+                type: "button",
+                className: "dshwkb-mode",
+                role: "radio",
+                "aria-checked": workMode === "assistant",
+                disabled: switching,
+                "data-active": workMode === "assistant" || undefined,
+                onClick: function () { switchWorkingMode("assistant"); },
+              }, t("workAssistant")),
+              React.createElement("button", {
+                type: "button",
+                className: "dshwkb-mode",
+                role: "radio",
+                "aria-checked": workMode === "writing",
+                disabled: switching,
+                "data-active": workMode === "writing" || undefined,
+                onClick: function () { switchWorkingMode("writing"); },
+              }, t("workWriting"))
             )
           ),
           React.createElement("div", { className: "dshwkb-head-actions" },
-            React.createElement("div", { className: "dshwkb-modebar" },
+            React.createElement("div", { className: "dshwkb-tabs", role: "tablist" },
               React.createElement("button", {
-              type: "button",
-              className: "dshwkb-mode",
-              "data-active": mode === "browse" || undefined,
-              onClick: function () { setMode("browse"); setSelected(null); setEditing(false); setNotice(null); },
+                type: "button",
+                className: "dshwkb-tab",
+                role: "tab",
+                "aria-selected": mode === "browse",
+                "data-active": mode === "browse" || undefined,
+                onClick: function () { setMode("browse"); setSelected(null); setEditing(false); setNotice(null); },
               }, t("modeNotes")),
               React.createElement("button", {
-              type: "button",
-              className: "dshwkb-mode",
-              "data-active": mode === "feed" || undefined,
-              onClick: function () { setMode("feed"); setSelected(null); setEditing(false); setNotice(null); },
+                type: "button",
+                className: "dshwkb-tab",
+                role: "tab",
+                "aria-selected": mode === "feed",
+                "data-active": mode === "feed" || undefined,
+                onClick: function () { setMode("feed"); setSelected(null); setEditing(false); setNotice(null); },
               }, t("modeFeed")),
               workMode === "writing"
                 ? React.createElement("button", {
                   type: "button",
-                  className: "dshwkb-mode",
+                  className: "dshwkb-tab",
+                  role: "tab",
+                  "aria-selected": mode === "banned",
                   "data-active": mode === "banned" || undefined,
                   onClick: openBanned,
-                  }, t("modeBanned"))
+                }, t("modeBanned"))
                 : null
             ),
-            mode !== "banned"
-              ? React.createElement("button", { type: "button", className: "dshwkb-primary", onClick: startCreate }, t("create"))
+            mode !== "banned" && selected === null
+              ? React.createElement("button", { type: "button", className: "dshwkb-primary", onClick: startCreate }, React.createElement(Icon, { name: "plus", size: 14 }), t("create"))
               : null
           )
         ),
-        workMode === "writing" && mode !== "banned"
-          ? React.createElement("div", { className: "dshwkb-status" }, t("workHintWriting"))
+        workMode === "writing" && mode !== "banned" && selected === null
+          ? React.createElement("div", { className: "dshwkb-callout" }, React.createElement(Icon, { name: "info" }), React.createElement("span", null, t("workHintWriting")))
           : null,
         mode === "banned"
           ? renderBanned()
@@ -839,25 +951,30 @@ window.__ModuleLoader__.load({
           : React.createElement(React.Fragment, null,
             selected === null
               ? React.createElement("div", { className: "dshwkb-searchrow" },
+                React.createElement(Icon, { name: "search", size: 15 }),
                 React.createElement("input", {
                   className: "dshwkb-input",
+                  type: "search",
                   value: query,
                   placeholder: t("searchPlaceholder"),
+                  "aria-label": t("searchPlaceholder"),
                   onChange: function (event) { setQuery(event.target.value); },
                 }),
-                React.createElement("button", { type: "button", className: "dshwkb-ghost", onClick: function () { load(query, activeTag); } }, t("refresh"))
+                React.createElement("button", { type: "button", className: "dshwkb-icon-btn", title: t("refresh"), "aria-label": t("refresh"), onClick: function () { load(query, activeTag); } }, React.createElement(Icon, { name: "refresh", size: 15 }))
               )
-              : null,
-            selected === null && view.total === 0
-              ? React.createElement("span", { className: "dshwkb-browse-hint", onClick: function () { setMode("feed"); } }, t("browseHint"))
               : null,
             selected === null ? chips : null,
             view.warnings.length > 0 && selected === null
-              ? React.createElement("div", { className: "dshwkb-status" }, t("warnings") + ": " + view.warnings.join("; "))
+              ? React.createElement("div", { className: "dshwkb-callout", "data-kind": "warn" }, React.createElement(Icon, { name: "info" }), React.createElement("span", null, t("warnings") + ": " + view.warnings.join("; ")))
               : null,
             body
           ),
-        notice !== null ? React.createElement("div", { className: "dshwkb-status", "data-kind": notice.kind }, notice.text) : null
+        notice !== null
+          ? React.createElement("div", { className: "dshwkb-notice", "data-kind": notice.kind, role: notice.kind === "error" ? "alert" : "status" },
+            React.createElement("span", { className: "dshwkb-notice-text" }, notice.text),
+            React.createElement("button", { type: "button", className: "dshwkb-icon-btn", "aria-label": t("dismiss"), onClick: function () { setNotice(null); } }, React.createElement(Icon, { name: "close", size: 13 }))
+          )
+          : null
       );
     }
 
@@ -976,6 +1093,10 @@ window.__ModuleLoader__.load({
         "bannedSaved": "\u5df2\u4fdd\u5b58\u7981\u7528\u5957\u8def\u8868\u3002",
         "bannedDefault": "\u5f53\u524d\u7528\u7684\u662f\u5185\u7f6e\u9ed8\u8ba4\u8868\uff0c\u4fdd\u5b58\u540e\u53d8\u4e3a\u4f60\u81ea\u5df1\u7684\u3002",
         "bannedCount": "\u6761",
+        "workModeLabel": "\u5de5\u4f5c\u6a21\u5f0f",
+        "dismiss": "\u5173\u95ed\u63d0\u793a",
+        "importResults": "\u672c\u6b21\u6295\u5582",
+        "clearResults": "\u6e05\u7a7a\u8bb0\u5f55",
       },
       en: {
         "nav": "Knowledge base",
@@ -1052,6 +1173,10 @@ window.__ModuleLoader__.load({
         "bannedSaved": "Banned-cliché list saved.",
         "bannedDefault": "Showing the built-in default list; saving makes it your own.",
         "bannedCount": "phrases",
+        "workModeLabel": "Working mode",
+        "dismiss": "Dismiss",
+        "importResults": "This session's feeds",
+        "clearResults": "Clear list",
       },
     };
 
@@ -1071,7 +1196,15 @@ window.__ModuleLoader__.load({
 
       function unwrap(method, args) {
         return knowledgeBase[method].apply(knowledgeBase, args).then(function (result) {
-          if (!result.ok) throw new Error(method + " failed: " + JSON.stringify(result.error));
+          if (!result.ok) {
+            // Keep the host's code so the panel can map known failures
+            // (KB_IMPORT_BINARY, ...) to readable text instead of raw JSON.
+            var detail = result.error;
+            var message = detail && typeof detail.message === "string" ? detail.message : JSON.stringify(detail);
+            var error = new Error(method + " failed: " + message);
+            if (detail && typeof detail.code === "string") error.code = detail.code;
+            throw error;
+          }
           return result.value;
         });
       }

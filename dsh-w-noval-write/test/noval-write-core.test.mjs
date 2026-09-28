@@ -116,6 +116,17 @@ test('normalization preserves Unicode ids and resolves relationship endpoints by
   assert.equal(project.scene.povCharacterId, 'father')
 })
 
+test('a character name cannot override another character id in relationships', () => {
+  const project = normalizeProject({
+    ...defaultProject(),
+    characters: [{ id: 'alex', name: '主角' }, { id: 'bob', name: 'alex' }],
+    relationships: [{ id: 'r', fromId: 'alex', toId: 'bob' }],
+  })
+  assert.equal(project.relationships[0].fromId, 'alex')
+  assert.equal(project.relationships[0].toId, 'bob')
+  assert.deepEqual(projectShapeIssues(project), [])
+})
+
 test('normalization trims text and rejects non-object collections', () => {
   const project = normalizeProject({
     title: '  长夜  ',
@@ -137,14 +148,15 @@ test('state normalization keeps revision without a mode switch', () => {
   assert.equal(Object.hasOwn(defaultState(0), 'enabled'), false)
 })
 
-test('schema v3 projects migrate in memory to v4 without losing legacy canon', () => {
+test('schema v3 projects migrate in memory to the current schema without losing legacy canon', () => {
   const legacy = defaultProject()
   delete legacy.genreProfile
   delete legacy.volumes
   legacy.title = '旧项目'
   legacy.characters = [{ id: 'hero', name: '林岚', role: '主角' }]
   const state = normalizeState({ schemaVersion: 3, revision: 9, project: legacy })
-  assert.equal(state.schemaVersion, 4)
+  assert.equal(state.schemaVersion, 5)
+  assert.deepEqual(state.project.threads, [])
   assert.equal(state.revision, 9)
   assert.equal(state.project.characters[0].role, '主角')
   assert.deepEqual(state.project.characters[0].customFields, {})
@@ -197,6 +209,25 @@ test('partial model patches merge structured sections and preserve omitted canon
   assert.equal(merged.notes, 'AI 更新')
 })
 
+test('relationship patches reject unknown endpoints before normalization can erase them', () => {
+  const current = normalizeProject({
+    ...defaultProject(),
+    characters: [{ id: 'a', name: '甲' }, { id: 'b', name: '乙' }],
+    relationships: [{ id: 'r', fromId: 'a', toId: 'b' }],
+  })
+  assert.throws(() => mergeProject(current, {
+    relationships: [{ id: 'r', fromId: 'a', toId: 'missing' }],
+  }), error => error.code === 'INVALID_NOVEL_ARGUMENTS' && /toId does not identify a unique character/.test(error.message))
+  assert.equal(current.relationships[0].toId, 'b')
+})
+
+test('normalization rejects over-limit content instead of silently discarding it', () => {
+  assert.throws(() => normalizeProject({ ...defaultProject(), title: 'x'.repeat(241) }), /exceeds 240 characters/)
+  assert.throws(() => normalizeProject({ ...defaultProject(), plot: { outline: 'x'.repeat(20001) } }), /exceeds 20000 characters/)
+  assert.throws(() => normalizeProject({ ...defaultProject(), characters: Array.from({ length: 81 }, (_, index) => ({ id: `c${index}`, name: `角色${index}` })) }), /characters exceeds 80 entries/)
+  assert.throws(() => normalizeProject({ ...defaultProject(), volumes: [{ id: 'v', chapters: [{ id: 'c', events: Array(201).fill('事件') }] }] }), /chapter.events exceeds 200 entries/)
+})
+
 test('model tool schema exposes the complete canonical object structure', () => {
   const schema = projectToolSchema({ partial: false })
   assert.equal(schema.type, 'object')
@@ -239,7 +270,7 @@ test('partial patches accept canonical fields and reject empty or schema-driftin
 
 test('schema discovery contract includes an example and automatic retry protocol', () => {
   const contract = novelToolContract()
-  assert.equal(contract.schemaVersion, 4)
+  assert.equal(contract.schemaVersion, 5)
   assert.equal(contract.chapterSchema.properties.events.type, 'array')
   assert.deepEqual(contract.emptyProjectExample, defaultProject())
   assert.ok(contract.retryProtocol.some(line => /novel_schema/.test(line)))
@@ -259,6 +290,16 @@ test('AI advance appends durable progress and updates the scene cursor', () => {
   assert.equal(project.progress[0].at, '2026-08-23T00:00:00.000Z')
   assert.equal(project.scene.chapter, '第三章')
   assert.equal(project.scene.location, '钟楼')
+})
+
+test('AI advance does not erase old progress when the history limit is reached', () => {
+  const current = normalizeProject({
+    ...defaultProject(),
+    progress: Array.from({ length: 500 }, (_, index) => ({ id: `p${index}`, summary: `第${index}章` })),
+  })
+  assert.throws(() => advanceProject(current, { chapter: '第501章', summary: '继续' }), /progress exceeds 500 entries/)
+  assert.equal(current.progress[0].id, 'p0')
+  assert.equal(current.progress.length, 500)
 })
 
 test('AI advance deduplicates an identical latest progress entry', () => {
