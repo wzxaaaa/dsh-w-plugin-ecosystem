@@ -20,6 +20,16 @@ test('registers a complete host and client template protocol', () => {
   assert.doesNotMatch(client, /Promise\.all\(\[save\(/)
 })
 
+// Writing cordis.patch.yml hot-reloads systemPrompt, which restarts agent-loop
+// and disposes every live session; the client then keeps that session (e.g. a
+// workspace's blank "new conversation") locked as removed.
+test('host never writes the hot-reloaded profile patch', () => {
+  assert.doesNotMatch(host, /writePatchArrayAtomic|mutatePatchArray|updatePersonaPatch\(/)
+  assert.doesNotMatch(host, /(writeFile|writeJsonAtomic|rename|rm)\(\s*(this\.)?patchPath/)
+  assert.match(host, /\.dsh-w-persona-override\.json/)
+  assert.match(host, /readOverrideFromPatch/)
+})
+
 test('persona patch updates preserve unrelated profile rows and config', () => {
   const rows = [
     { id: 'other', config: { enabled: true } },

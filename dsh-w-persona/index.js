@@ -5,16 +5,23 @@
  *   - getState(): the current custom persona (the saved override, or the
  *     HARNESS DEFAULT captured on first use into a state file) plus the
  *     harness default itself.
- *   - save(text): persist a persona override into the profile's
- *     cordis.patch.yml (`- id: system-prompt, config: { personaPrefix }`). Saving
- *     the default text removes the override instead (clean revert).
+ *   - save(text): persist a persona override into a profile-local state file
+ *     (`.dsh-w-persona-override.json`). Saving the default text clears the
+ *     override instead (clean revert).
  *
- * Persistence alone is NOT enough: every agent preset mounts its own
- * `@deepseek-ai/dsh-persona` row that shadows the deployment persona. This
- * plugin therefore also registers a GLOBAL `system-prompt/assemble` listener
- * that rewrites the current `deployment:persona-prefix` section (or the legacy
- * `deployment:persona` section) to the saved override on every model turn, so
- * it applies instantly regardless of the active preset.
+ * The override is applied by a GLOBAL `system-prompt/assemble` listener that
+ * rewrites the current `deployment:persona-prefix` section (or the legacy
+ * `deployment:persona` section) on every model turn, so it applies instantly
+ * regardless of the active preset (every preset mounts its own persona row
+ * that would shadow a deployment-level config anyway).
+ *
+ * The plugin deliberately never writes the profile's cordis.patch.yml: the
+ * Harness hot-reloads that file, a changed `system-prompt` config reloads the
+ * systemPrompt service, and agent-loop (which injects it) restarts and disposes
+ * every live session. The client keeps a disposed session's resident instance
+ * flagged `removed`, so the workspace's reused blank "new conversation" stayed
+ * locked until the app restarted. Older versions stored the override in that
+ * patch; such a legacy row is still read (never rewritten) as a fallback.
  */
 
 import {
@@ -81,6 +88,7 @@ var __esDecorate = function (ctor, descriptorIn, decorators, contextIn, initiali
 
 const PATCH_FILE = 'cordis.patch.yml'
 const DEFAULT_STATE_FILE = '.dsh-w-persona-default.txt'
+const OVERRIDE_STATE_FILE = '.dsh-w-persona-override.json'
 const DIALOGUE_STATE_FILE = '.dsh-w-persona-dialogue.json'
 const TEMPLATE_STATE_FILE = '.dsh-w-persona-templates.json'
 const PROMPT_ROW_ID = 'system-prompt'
@@ -150,26 +158,6 @@ async function withPatchLock(path, callback) {
     await handle.close().catch(() => {})
     await rm(lockPath, { force: true }).catch(() => {})
   }
-}
-
-async function writePatchArrayAtomic(path, data) {
-  const tempPath = join(dirname(path), '.' + basename(path) + '.' + process.pid + '.' + randomUUID() + '.tmp')
-  try {
-    await writeFile(tempPath, yaml.dump(data, { noRefs: true, lineWidth: 120 }), 'utf8')
-    await rename(tempPath, path)
-  } finally {
-    await rm(tempPath, { force: true }).catch(() => {})
-  }
-}
-
-async function mutatePatchArray(path, callback) {
-  return withPatchLock(path, async () => {
-    const current = await readPatchArray(path)
-    const next = await callback(current)
-    if (!Array.isArray(next)) throw new Error('patch mutation must return an array')
-    await writePatchArrayAtomic(path, next)
-    return next
-  })
 }
 
 async function writeJsonAtomic(path, value) {
@@ -254,6 +242,9 @@ let PersonaManagerGateway = (() => {
 
       // undefined = not yet read, null = no override, string = saved override.
       this._customPersona = undefined
+      // undefined = not yet read; true when an older version left its
+      // override in cordis.patch.yml.
+      this._legacyPatchOverride = undefined
       // The preset is captured on the first model request per session. Later
       // setting changes therefore affect new conversations without rewriting
       // the context of conversations already in progress.
@@ -270,7 +261,7 @@ let PersonaManagerGateway = (() => {
       const self = this
       this.ctx.on('system-prompt/assemble', async (assembly, _context, next) => {
         const assembled = await next()
-        const custom = await self.getCustomPersona()
+        const custom = await self.getAssemblyPersona()
         if (custom === null || !assembled || !Array.isArray(assembled.sections)) return assembled
         return rewritePersonaAssembly(assembled, custom)
       })
@@ -327,6 +318,11 @@ let PersonaManagerGateway = (() => {
       return join(this.profileDir(), DEFAULT_STATE_FILE)
     }
 
+    /** Path of the profile-local persona override. */
+    overrideStatePath() {
+      return join(this.profileDir(), OVERRIDE_STATE_FILE)
+    }
+
     /** Path of the profile-local DeepSeek dialogue preset. */
     dialogueStatePath() {
       return join(this.profileDir(), DIALOGUE_STATE_FILE)
@@ -352,7 +348,7 @@ let PersonaManagerGateway = (() => {
       return personaFromConfig(entry?.options?.config) ?? ''
     }
 
-    /** The saved override from the profile patch (null when absent). */
+    /** The legacy override an older version wrote into the profile patch (null when absent). */
     async readOverrideFromPatch() {
       const data = await readPatchArray(this.patchPath())
       for (let index = data.length - 1; index >= 0; index--) {
@@ -364,11 +360,59 @@ let PersonaManagerGateway = (() => {
       return null
     }
 
-    /** The saved custom persona (cached after first read). */
+    /** The override state file: undefined when absent, else `{ persona: string | null }`. */
+    async readOverrideState() {
+      let raw
+      try {
+        raw = await readFile(this.overrideStatePath(), 'utf8')
+      } catch (error) {
+        if (error && error.code === 'ENOENT') return undefined
+        throw error
+      }
+      if (raw.trim() === '') return undefined
+      const parsed = JSON.parse(raw)
+      const persona = parsed && typeof parsed === 'object' ? parsed.persona : undefined
+      if (persona !== null && typeof persona !== 'string') {
+        throw new Error(OVERRIDE_STATE_FILE + ': persona must be a string or null')
+      }
+      return { persona }
+    }
+
+    /**
+     * The saved custom persona (cached after first read). The state file wins;
+     * without it, a legacy patch override is still honored.
+     */
     async getCustomPersona() {
       if (this._customPersona !== undefined) return this._customPersona
-      this._customPersona = await this.readOverrideFromPatch()
+      const state = await this.readOverrideState()
+      this._customPersona = state !== undefined ? state.persona : await this.readOverrideFromPatch()
       return this._customPersona
+    }
+
+    /** Whether an older version left its override in cordis.patch.yml (cached). */
+    async hasLegacyPatchOverride() {
+      if (this._legacyPatchOverride === undefined) {
+        this._legacyPatchOverride = (await this.readOverrideFromPatch()) !== null
+      }
+      return this._legacyPatchOverride
+    }
+
+    /**
+     * Text the assemble listener writes into the persona section, or null to
+     * leave the Harness assembly untouched. A legacy patch row still feeds the
+     * loader config, so "back to default" must rewrite it to the captured default.
+     */
+    async getAssemblyPersona() {
+      const custom = await this.getCustomPersona()
+      if (custom !== null) return custom
+      return (await this.hasLegacyPatchOverride()) ? this.readDefaultPersona() : null
+    }
+
+    /** Persist the override (null when `text` is the default) and refresh the cache. */
+    async writeOverrideState(text, defaultText) {
+      const persona = text !== defaultText ? text : null
+      await writeJsonAtomic(this.overrideStatePath(), { version: 1, persona })
+      this._customPersona = persona
     }
 
     /**
@@ -459,20 +503,23 @@ let PersonaManagerGateway = (() => {
 
     async writeConfiguration(text, preset) {
       const defaultText = await this.readDefaultPersona()
-      const patchPath = this.patchPath()
+      const overridePath = this.overrideStatePath()
       const dialoguePath = this.dialogueStatePath()
-      await withPatchLock(patchPath, async () => {
-        const beforePatch = await readPatchArray(patchPath)
-        const nextPatch = updatePersonaPatch(beforePatch, text, defaultText)
-        await writePatchArrayAtomic(patchPath, nextPatch)
+      await withPatchLock(overridePath, async () => {
+        const before = await readFile(overridePath, 'utf8').catch(error => {
+          if (error && error.code === 'ENOENT') return undefined
+          throw error
+        })
+        await this.writeOverrideState(text, defaultText)
         try {
           await writeJsonAtomic(dialoguePath, preset)
         } catch (error) {
-          await writePatchArrayAtomic(patchPath, beforePatch).catch(() => {})
+          if (before === undefined) await rm(overridePath, { force: true }).catch(() => {})
+          else await writeFile(overridePath, before, 'utf8').catch(() => {})
+          this._customPersona = undefined
           throw error
         }
       })
-      this._customPersona = text !== defaultText ? text : null
       return { defaultText }
     }
 
@@ -481,8 +528,8 @@ let PersonaManagerGateway = (() => {
         if (typeof text !== 'string') throw new Error('persona text must be a string')
         if (Buffer.byteLength(text, 'utf8') > MAX_PERSONA_BYTES) throw new Error('persona text exceeds the 1 MB limit')
         const defaultText = await this.readDefaultPersona()
-        await mutatePatchArray(this.patchPath(), data => updatePersonaPatch(data, text, defaultText))
-        this._customPersona = text !== defaultText ? text : null
+        const path = this.overrideStatePath()
+        await withPatchLock(path, () => this.writeOverrideState(text, defaultText))
         return { saved: true, current: text, defaultText, applied: true }
       })
     }
