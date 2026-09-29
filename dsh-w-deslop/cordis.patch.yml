@@ -1,0 +1,6 @@
+# dsh-w-deslop bundle layer: one loader row contributes the Host rules, scan
+# tool, /deslop command and Remote service, plus the browser settings form.
+# It links to dsh-w-noval-write at runtime and stays inert without it.
+- insert:
+    - id: dsh-w-deslop
+      name: dsh-w-deslop
