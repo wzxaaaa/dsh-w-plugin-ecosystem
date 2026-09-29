@@ -2298,11 +2298,20 @@ window.__ModuleLoader__.load({
       var ignoredRevisionRef = React.useRef(-1);
       // A message to show once the newly bound novel has loaded.
       var pendingNoticeRef = React.useRef(null);
+      // Discarding unsaved edits is confirmed inside the panel: a native
+      // window.confirm() leaves the Electron window without keyboard focus on
+      // Windows, freezing the panel and the chat input until it is refocused.
+      var discardSlot = React.useState(null);
+      var pendingDiscard = discardSlot[0];
+      var setPendingDiscard = discardSlot[1];
+      function askDiscard(run) {
+        if (!dirtyRef.current) { run(); return; }
+        setPendingDiscard({ run: run });
+      }
       revisionRef.current = state && String(state.workspace && state.workspace.id) === workspaceId ? state.revision : -1;
       busyRef.current = busy;
 
       var load = React.useCallback(function (forceRemote) {
-        if (forceRemote && dirtyRef.current && typeof window.confirm === "function" && !window.confirm(t("discardConfirm"))) return;
         var requestId = ++requestRef.current;
         if (!workspaceId) {
           setState(null);
@@ -2497,7 +2506,9 @@ window.__ModuleLoader__.load({
         }
       }
       function libraryAction(run, message) {
-        if (dirtyRef.current && typeof window.confirm === "function" && !window.confirm(t("discardConfirm"))) return;
+        askDiscard(function () { runLibraryAction(run, message); });
+      }
+      function runLibraryAction(run, message) {
         setLibraryBusy(true);
         run().then(function (value) {
           setLibraryBusy(false);
@@ -2708,6 +2719,14 @@ window.__ModuleLoader__.load({
           ),
           React.createElement(SectionNav, { t: t, tab: tab, tabs: tabs, project: draft, onSelect: setTab })
         ),
+        pendingDiscard && dirty
+          ? React.createElement("div", { className: "dshwnw-external", role: "alert" },
+            React.createElement("span", null, t("discardConfirm")),
+            React.createElement("div", { className: "dshwnw-actions" },
+              React.createElement("button", { type: "button", className: "dshwnw-danger", onClick: function () { var run = pendingDiscard.run; setPendingDiscard(null); run(); } }, t("discardAction")),
+              React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { setPendingDiscard(null); } }, t("cancel"))
+            ))
+          : null,
         external && dirty
           ? React.createElement("div", { className: "dshwnw-external", role: "alert" },
             React.createElement("span", null, t("externalChanged").replace("{what}", externalSummary(external) || t("externalSomething"))),
@@ -2719,7 +2738,7 @@ window.__ModuleLoader__.load({
         React.createElement("div", { className: "dshwnw-body", key: tab, role: "tabpanel" }, content),
         React.createElement("div", { className: "dshwnw-footer" },
           React.createElement("span", { className: "dshwnw-notice", role: "status", "data-kind": notice ? notice.kind : undefined, "data-dirty": dirty ? "true" : undefined, title: notice ? notice.text : undefined }, React.createElement("span", { className: "dshwnw-notice-text" }, notice ? notice.text : dirty ? t("unsaved") : t("synced"))),
-          React.createElement("button", { type: "button", className: "dshwnw-button", disabled: busy || !dirty, onClick: function () { load(true); } }, t("reload")),
+          React.createElement("button", { type: "button", className: "dshwnw-button", disabled: busy || !dirty, onClick: function () { askDiscard(function () { load(true); }); } }, t("reload")),
           React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: busy || !dirty, onClick: save }, busy ? t("saving") : t("save"))
         )
       );
@@ -2774,7 +2793,7 @@ window.__ModuleLoader__.load({
       worldTitle: "世界观设定", worldHint: "从时间空间、社会系统和文化认知三层写清会影响因果与选择的规则。", groupWorldFrame: "时间与空间", groupWorldSystems: "制度与资源", groupWorldCulture: "文化与公共认知", era: "时代、纪年与技术阶段", chronology: "历史时间线与关键年代", geography: "地理格局、距离与交通", environment: "自然环境、气候与生存条件", locations: "关键地点及其叙事功能", rules: "世界硬规则、代价与例外", factions: "势力、目标、资源与关系", politics: "权力结构、法律与治理", society: "阶层、家庭、组织与社会规范", economy: "生产、货币、稀缺资源与交易", worldConflicts: "系统性矛盾与当前危机", culture: "习俗、礼仪、禁忌与日常", beliefs: "宗教、价值观与公共信念", technology: "科技 / 魔法体系及限制", lore: "历史、传说、误传与公共认知",
       plotTitle: "情节骨架", plotHint: "先写清欲望—阻力—代价—选择，再组织转折、伏笔和章节节奏。", groupPlotCore: "戏剧核心", groupPlotStructure: "主线结构", groupPlotWeaving: "支线、伏笔与节奏", themes: "主题与母题", storyQuestion: "核心戏剧问题", protagonistGoal: "主角总体目标", plotStakes: "总体风险与失败代价", coreConflict: "核心冲突", antagonisticForce: "对抗力量及其逻辑", opening: "开局、常态与诱发事件", midpoint: "中点转折与认知改变", climax: "高潮、终极选择与代价", ending: "结局状态与主题回应", subplots: "支线及其与主线的交汇", foreshadowing: "伏笔清单、埋设与回收", reveals: "秘密、揭示顺序与知情范围", pacing: "节奏曲线与张弛安排", chapterPlan: "章节计划（目标、冲突、转折、钩子）", outline: "详细节拍 / 场景大纲",
       outlineTitle: "结构化卷章大纲", outlineHint: "每卷、每章、每场戏独立保存；模型可以按 ID 精确读取和修改，不必重发整份长大纲。类型专用路线写入自定义字段。", outlineEmpty: "还没有结构化大纲。先新增一卷。", addVolume: "新增卷", unnamedVolume: "未命名卷", volumeTitle: "卷名", volumeSummary: "本卷概要", outlineStatus: "状态", chaptersTitle: "章节", addChapter: "新增章", unnamedChapter: "未命名章节", chapterNumber: "章号", chapterTitle: "章名", chapterWords: "目标字数", chapterLocations: "主要场景", chapterSummary: "章节概要", chapterEvents: "事件列表（每行一项）", dialogueNotes: "对话示例与语言备注", endingHook: "收束与下一章钩子", chapterScenes: "场景拆分", addScene: "新增场景", unnamedScene: "未命名场景", sceneName: "场景名",
-      discardConfirm: "当前工作区有未保存修改。确定丢弃这些修改并切换或重新加载吗？",
+      discardConfirm: "你有未保存的修改，继续会丢弃它们。", discardAction: "丢弃并继续",
       sceneTitle: "当前场景", sceneHint: "把一场戏写成可执行单元：谁在何时何地，为何行动，发生哪些节拍，结束后什么永久改变。", groupSceneFrame: "场景坐标", groupSceneDramatic: "戏剧执行", groupSceneContinuity: "连续性与状态变化", chapter: "章节 / 场次", sceneTime: "具体时间 / 与上场间隔", location: "地点与空间条件", scenePov: "本场 POV 角色", participants: "出场角色与入退场", sceneGoal: "本场可验证目标", sceneConflict: "阻力、升级与两难", beats: "节拍序列（行动—反应—升级—转折）", emotionalTurn: "情绪起点、转折与终点", sensoryAnchor: "关键感官、意象与环境细节", sceneOutcome: "实际 / 预期结果与代价", knowledgeChanges: "谁获得、误解或隐瞒了什么", propChanges: "道具、伤势、位置与资源变化", continuity: "连续性账本（进入场景前必须成立的事实）", nextHook: "离场钩子与下一场承诺",
       untitledBook: "未命名作品", addCharacter: "新增角色", addRelationship: "新增关系", volumeSettings: "本卷设定", wordsUnit: "字", scenesUnit: "场", moveUp: "上移", moveDown: "下移",
       tab_threads: "线索", navLabel: "切换页面", navAlert: "{n} 条线索需要处理",
@@ -2853,7 +2872,7 @@ window.__ModuleLoader__.load({
       worldTitle: "Worldbuilding", worldHint: "Define time and space, social systems, and cultural beliefs that shape causality and choice.", groupWorldFrame: "Time and space", groupWorldSystems: "Systems and resources", groupWorldCulture: "Culture and belief", era: "Era and technology stage", chronology: "Historical chronology", geography: "Geography and travel", environment: "Environment and survival", locations: "Key locations", rules: "Hard rules, costs, exceptions", factions: "Factions and interests", politics: "Power, law, governance", society: "Class, family, institutions", economy: "Economy and scarce resources", worldConflicts: "Systemic conflicts", culture: "Culture and daily life", beliefs: "Beliefs and religion", technology: "Technology / magic", lore: "History, lore, public beliefs",
       plotTitle: "Plot spine", plotHint: "Define desire, resistance, cost, and choice before arranging turns, setups, and pacing.", groupPlotCore: "Dramatic core", groupPlotStructure: "Main structure", groupPlotWeaving: "Subplots and pacing", themes: "Themes", storyQuestion: "Dramatic question", protagonistGoal: "Protagonist goal", plotStakes: "Global stakes", coreConflict: "Core conflict", antagonisticForce: "Antagonistic force", opening: "Opening and inciting incident", midpoint: "Midpoint reversal", climax: "Climax and final choice", ending: "Ending state", subplots: "Subplots", foreshadowing: "Foreshadowing and payoff", reveals: "Reveals and knowledge order", pacing: "Pacing curve", chapterPlan: "Chapter plan", outline: "Detailed beat outline",
       outlineTitle: "Structured volume and chapter outline", outlineHint: "Store each volume, chapter, and scene independently so the model can read and patch by stable ID.", outlineEmpty: "No structured outline yet. Add a volume first.", addVolume: "Add volume", unnamedVolume: "Untitled volume", volumeTitle: "Volume title", volumeSummary: "Volume summary", outlineStatus: "Status", chaptersTitle: "Chapters", addChapter: "Add chapter", unnamedChapter: "Untitled chapter", chapterNumber: "Number", chapterTitle: "Chapter title", chapterWords: "Target words", chapterLocations: "Primary locations", chapterSummary: "Chapter summary", chapterEvents: "Events, one per line", dialogueNotes: "Dialogue examples and notes", endingHook: "Ending and next hook", chapterScenes: "Scene breakdown", addScene: "Add scene", unnamedScene: "Untitled scene", sceneName: "Scene name",
-      discardConfirm: "This workspace has unsaved changes. Discard them and switch or reload?",
+      discardConfirm: "You have unsaved changes; continuing discards them.", discardAction: "Discard and continue",
       sceneTitle: "Current scene", sceneHint: "Make the scene executable: who acts where and why, the beat sequence, and what permanently changes.", groupSceneFrame: "Scene coordinates", groupSceneDramatic: "Dramatic execution", groupSceneContinuity: "Continuity and state", chapter: "Chapter / scene", sceneTime: "Time / gap from prior scene", location: "Place and conditions", scenePov: "POV character", participants: "Participants and entrances", sceneGoal: "Verifiable scene goal", sceneConflict: "Obstacle, escalation, dilemma", beats: "Beat sequence", emotionalTurn: "Emotional turn", sensoryAnchor: "Sensory anchors", sceneOutcome: "Outcome and cost", knowledgeChanges: "Knowledge changes", propChanges: "Object and state changes", continuity: "Continuity ledger", nextHook: "Exit hook",
       untitledBook: "Untitled book", addCharacter: "Add character", addRelationship: "Add relationship", volumeSettings: "Volume settings", wordsUnit: "words", scenesUnit: "scenes", moveUp: "Move up", moveDown: "Move down",
       tab_threads: "Threads", navLabel: "Switch section", navAlert: "{n} threads need attention",

@@ -24,10 +24,12 @@ DeepSeek Harness 人设（人格）管理插件：在「设置」左侧 **Agent�
 
 ```powershell
 pnpm pack
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-persona-0.3.3.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-persona-0.3.4.tgz
 ```
 
 重启桌面版（或 `dsh web`）后，设置 → 左侧「人设」即可使用。
+
+`0.3.4` 修复删除人设模板后面板和对话输入框“卡死”的问题：删除改为在面板内二次确认（按钮变红，再点一次才删除），不再弹出系统确认框。Electron 在 Windows 上关闭系统确认框后会丢失键盘焦点，导致模板列表和聊天输入框都无法操作，只能切换窗口才能恢复。另外所有保存/应用/删除操作加了 30 秒超时，请求意外无响应时会报错并解锁面板。
 
 `0.3.3` 适配新版 Harness 的 `personaPrefix` 配置与 `deployment:persona-prefix` 组装段，同时保留旧版段名和旧配置的读取兼容。
 

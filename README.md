@@ -10,7 +10,7 @@
 | --- | ---: | --- | --- |
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.3.2` | 自定义插件管理、启停和拖拽安装；隐藏 preset 内部实现模块；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.3.2.tgz?raw=1) |
 | [`dsh-w-right-sidebar`](./dsh-w-right-sidebar) | `0.7.1` | W 系列共用的右侧 Sidebar 宿主：工具栏、工具页返回、收缩栏直达工具，并真实挤压中间对话区域, 已完美兼容**dsh-better-sidebar**; **建议第二个安装** | [下载 `.tgz`](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.7.1.tgz?raw=1) |
-| [`dsh-w-noval-write`](./dsh-w-noval-write) | `0.13.0` | 一个工作区多本小说、按对话绑定的小说数据层：schema v5 自定义字段、卷章场景大纲、伏笔线索账本、正文字数追踪、版本历史与回滚、按 ID 局部 AI 工具和持久 `/write`；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.13.0.tgz?raw=1) |
+| [`dsh-w-noval-write`](./dsh-w-noval-write) | `0.13.1` | 一个工作区多本小说、按对话绑定的小说数据层：schema v5 自定义字段、卷章场景大纲、伏笔线索账本、正文字数追踪、版本历史与回滚、按 ID 局部 AI 工具和持久 `/write`；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.13.1.tgz?raw=1) |
 | [`dsh-w-whale-tail`](./dsh-w-whale-tail) | `0.5.0` | 右侧 Sidebar 中的鲸鱼娘工具：透明主立绘、眨眼与状态动作、流动液体爱心淫乱值和对话记忆窗口 | [下载 `.tgz`](./dsh-w-whale-tail/dsh-w-whale-tail-0.5.0.tgz?raw=1) |
 | [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.2.0` | 在设置中管理已归档对话，兼容新旧 Harness，并自动续跑历史待删除记录 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.2.0.tgz?raw=1) |
 | [`dsh-w-assistant-refresh`](./dsh-w-assistant-refresh) | `0.2.2` | 在同一会话内重生成指定 AI 回复，不创建新对话并隐藏被替换的旧回复 | [下载 `.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1) |
@@ -19,7 +19,7 @@
 | [`dsh-w-computer-use`](./dsh-w-computer-use) | `0.3.2` | Windows 鼠标、键盘、窗口和安全边框控制 | [下载 `.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1) |
 | [`dsh-w-easy-upload`](./dsh-w-easy-upload) | `0.2.0` | 保留原图缩略图与原文字，由视觉插件为纯文本主模型提供后台识图结果 | [下载 `.tgz`](./dsh-w-easy-upload/dsh-w-easy-upload-0.2.0.tgz?raw=1) |
 | [`dsh-w-knowledge-base`](./dsh-w-knowledge-base) | `0.5.0` | 双模式跨会话 Markdown 知识库：assistant 笔记与多个互相隔离的 writing 文风素材库、`kb_*` 工具、千万字符整本投喂，以及响应式侧栏界面 | [下载 `.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.5.0.tgz?raw=1) |
-| [`dsh-w-persona`](./dsh-w-persona) | `0.3.1` | 在设置中编辑 Persona，保存并一键切换完整人设模板，同时配置隐藏的两轮 user/assistant 对话预设；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.3.1.tgz?raw=1) |
+| [`dsh-w-persona`](./dsh-w-persona) | `0.3.4` | 在设置中编辑 Persona，保存并一键切换完整人设模板，同时配置隐藏的两轮 user/assistant 对话预设；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-persona/dsh-w-persona-0.3.4.tgz?raw=1) |
 | [`dsh-w-reasoning-bridge`](./dsh-w-reasoning-bridge) | `0.2.2` | 在官方模型设置中启用中转模型能力，并让对话框直接显示 DSH 原生“推理等级”选择器；中转协议按端点而非模型名称判断 | [下载 `.tgz`](./dsh-w-reasoning-bridge/dsh-w-reasoning-bridge-0.2.2.tgz?raw=1) |
 | [`dsh-w-vision`](./dsh-w-vision) | `0.3.2` | 统一接管物理屏幕、本地图片/落盘截图及上传图片识别，文本主模型也可用 | [下载 `.tgz`](./dsh-w-vision/dsh-w-vision-0.3.2.tgz?raw=1) |
 | [`dsh-w-route-primer`](./dsh-w-route-primer) | `0.3.0` | 路由预热、任务分类与模式工具；感谢风神开源 `routing-suite` 和社区开源贡献 | [下载 `.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1) |
@@ -59,7 +59,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 5. [`dsh-w-chatflow-0.3.2.tgz`](./dsh-w-chatflow/dsh-w-chatflow-0.3.2.tgz?raw=1)
 6. [`dsh-w-camera-watch-0.1.0.tgz`](./dsh-w-camera-watch/dsh-w-camera-watch-0.1.0.tgz?raw=1)
 7. [`dsh-w-computer-use-0.3.2.tgz`](./dsh-w-computer-use/dsh-w-computer-use-0.3.2.tgz?raw=1)
-8. [`dsh-w-persona-0.3.1.tgz`](./dsh-w-persona/dsh-w-persona-0.3.1.tgz?raw=1)
+8. [`dsh-w-persona-0.3.4.tgz`](./dsh-w-persona/dsh-w-persona-0.3.4.tgz?raw=1)
 9. [`dsh-w-reasoning-bridge-0.2.2.tgz`](./dsh-w-reasoning-bridge/dsh-w-reasoning-bridge-0.2.2.tgz?raw=1)
 10. [`dsh-w-route-primer-0.3.0.tgz`](./dsh-w-route-primer/dsh-w-route-primer-0.3.0.tgz?raw=1)
 11. [`dsh-w-teacher-help-me-0.2.0.tgz`](./dsh-w-teacher-help-me/dsh-w-teacher-help-me-0.2.0.tgz?raw=1)
@@ -67,7 +67,7 @@ dsh plugin --profile web add .\dsh-w-custom-plugins\dsh-w-custom-plugins-0.3.2.t
 13. [`dsh-w-archive-manager-0.2.0.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.2.0.tgz?raw=1)
 14. [`dsh-w-assistant-refresh-0.2.2.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.2.tgz?raw=1)
 15. [`dsh-w-knowledge-base-0.5.0.tgz`](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.5.0.tgz?raw=1)
-16. [`dsh-w-noval-write-0.13.0.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.13.0.tgz?raw=1)
+16. [`dsh-w-noval-write-0.13.1.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.13.1.tgz?raw=1)
 
 拖入后页面会显示上传/安装进度，并调用官方 `dsh plugin add` 完成安装。建议一次只拖入一个文件，等待成功提示后再安装下一个；全部安装完成后再重启一次桌面版或 `dsh web`，确保所有插件都已加载。
 

@@ -89,3 +89,7 @@ test('stores each novel in its own workspace folder, binds conversations, and ex
   assert.match(host, /noFileWritten: true/)
   assert.doesNotMatch(host, /project: \{ type: 'json'/)
 })
+
+test('the panel never calls a native dialog, which strands keyboard focus in Electron on Windows', () => {
+  assert.doesNotMatch(client, /window\.(confirm|alert|prompt)\(\s*[^)\s]/)
+})

@@ -23,6 +23,9 @@ window.__ModuleLoader__.load({
       ".pw-template-button{height:34px;padding:0 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;cursor:pointer}",
       ".pw-template-button[data-primary=true]{border-color:transparent;background:var(--dsw-alias-state-business-primary);color:#fff;font-weight:600}",
       ".pw-template-button[data-danger=true]{color:var(--dsw-alias-state-error-primary,#d64545)}",
+      ".pw-template-button[data-armed=true]{border-color:transparent;background:var(--dsw-alias-state-error-primary,#d64545);color:#fff;font-weight:600}",
+      ".pw-confirm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#d64545) 9%,transparent);color:var(--dsw-alias-state-error-primary,#d64545);font-size:12px;line-height:18px}",
+      ".pw-confirm span{flex:1;min-width:0}",
       ".pw-template-button:disabled,.pw-template-select:disabled,.pw-template-name:disabled{cursor:default;opacity:.5}",
       ".pw-default{box-sizing:border-box;width:100%;margin:0;padding:12px 14px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);border-radius:8px;font-family:var(--ds-font-family-code);font-size:12px;line-height:19px;color:var(--dsw-alias-label-secondary);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}",
       ".pw-field{position:relative;display:flex;flex-direction:column;gap:6px}",
@@ -161,6 +164,12 @@ window.__ModuleLoader__.load({
       var hintSlot = React.useState(null);
       var hint = hintSlot[0];
       var setHint = hintSlot[1];
+      // Deleting asks inside the panel. A native window.confirm() dialog leaves
+      // the Electron window without keyboard focus on Windows, which froze the
+      // template list and the chat input until the window was refocused.
+      var armedSlot = React.useState("");
+      var armedId = armedSlot[0];
+      var setArmedId = armedSlot[1];
       var mountedRef = React.useRef(true);
       var loadSeq = React.useRef(0);
       var editSeq = React.useRef(0);
@@ -211,6 +220,11 @@ window.__ModuleLoader__.load({
         };
       }, []);
       React.useEffect(function () { load(); }, [load]);
+      React.useEffect(function () {
+        if (!armedId) return undefined;
+        var timer = setTimeout(function () { setArmedId(""); }, 6000);
+        return function () { clearTimeout(timer); };
+      }, [armedId]);
 
       function editPreset(field, value) {
         editSeq.current += 1;
@@ -241,12 +255,19 @@ window.__ModuleLoader__.load({
         return nextTemplates;
       }
 
+      function withTimeout(promise) {
+        return new Promise(function (resolve, reject) {
+          var timer = setTimeout(function () { reject(new Error("timed out")); }, 30000);
+          promise.then(function (value) { clearTimeout(timer); resolve(value); }, function (error) { clearTimeout(timer); reject(error); });
+        });
+      }
+
       function runBusy(action, onSuccess, successText) {
         if (saveBusyRef.current) return;
         saveBusyRef.current = true;
         setSaving(true);
         setHint(null);
-        action().then(
+        withTimeout(action()).then(
           function (state) {
             saveBusyRef.current = false;
             if (!mountedRef.current) return;
@@ -313,7 +334,9 @@ window.__ModuleLoader__.load({
       }
 
       function onDeleteTemplate() {
-        if (!selectedId || !window.confirm(t("templateDeleteConfirm"))) return;
+        if (!selectedId) return;
+        if (armedId !== selectedId) { setArmedId(selectedId); setHint(null); return; }
+        setArmedId("");
         runBusy(
           function () { return deleteTemplate(selectedId); },
           function (state) {
@@ -394,6 +417,7 @@ window.__ModuleLoader__.load({
                           var chosen = data.templates.find(function (template) { return template.id === id; });
                           setSelectedId(id);
                           setTemplateName(chosen ? chosen.name : "");
+                          setArmedId("");
                           setHint(null);
                         },
                       },
@@ -425,8 +449,20 @@ window.__ModuleLoader__.load({
                   React.createElement("button", { type: "button", className: "pw-template-button", "data-primary": "true", disabled: saving || !selectedTemplate, onClick: onApplyTemplate }, t("templateApply")),
                   React.createElement("button", { type: "button", className: "pw-template-button", disabled: saving || !templateName.trim(), onClick: function () { onSaveTemplate(false); } }, t("templateSaveNew")),
                   React.createElement("button", { type: "button", className: "pw-template-button", disabled: saving || !selectedTemplate || !templateName.trim(), onClick: function () { onSaveTemplate(true); } }, t("templateOverwrite")),
-                  React.createElement("button", { type: "button", className: "pw-template-button", "data-danger": "true", disabled: saving || !selectedTemplate, onClick: onDeleteTemplate }, t("templateDelete")),
+                  React.createElement("button", {
+                    type: "button", className: "pw-template-button", "data-danger": "true",
+                    "data-armed": armedId && armedId === selectedId ? "true" : undefined,
+                    disabled: saving || !selectedTemplate, onClick: onDeleteTemplate,
+                  }, armedId && armedId === selectedId ? t("templateDeleteArmed") : t("templateDelete")),
                 ),
+                armedId && armedId === selectedId && selectedTemplate
+                  ? React.createElement(
+                    "div",
+                    { className: "pw-confirm", role: "alert" },
+                    React.createElement("span", null, t("templateDeleteConfirm").replace("{name}", selectedTemplate.name)),
+                    React.createElement("button", { type: "button", className: "pw-template-button", onClick: function () { setArmedId(""); } }, t("cancel")),
+                  )
+                  : null,
               ),
               React.createElement(
                 "div",
@@ -560,7 +596,9 @@ window.__ModuleLoader__.load({
         templateSaveNew: "\u4fdd\u5b58\u4e3a\u65b0\u6a21\u677f",
         templateOverwrite: "\u8986\u76d6\u6a21\u677f",
         templateDelete: "\u5220\u9664",
-        templateDeleteConfirm: "\u786e\u5b9a\u5220\u9664\u8fd9\u4e2a\u4eba\u8bbe\u6a21\u677f\u5417\uff1f\u5f53\u524d\u5df2\u5e94\u7528\u7684\u4eba\u8bbe\u4e0d\u4f1a\u88ab\u6e05\u7a7a\u3002",
+        templateDeleteConfirm: "\u786e\u5b9a\u5220\u9664\u6a21\u677f\u300c{name}\u300d\uff1f\u5f53\u524d\u5df2\u5e94\u7528\u7684\u4eba\u8bbe\u4e0d\u4f1a\u88ab\u6e05\u9664\u3002\u518d\u70b9\u4e00\u6b21\u7ea2\u8272\u6309\u94ae\u786e\u8ba4\u3002",
+        templateDeleteArmed: "\u786e\u8ba4\u5220\u9664",
+        cancel: "\u53d6\u6d88",
         templateNameRequired: "\u8bf7\u5148\u8f93\u5165\u6a21\u677f\u540d\u79f0\u3002",
         templateSaved: "\u5df2\u4fdd\u5b58\u4e3a\u65b0\u6a21\u677f\u3002",
         templateUpdated: "\u5df2\u8986\u76d6\u9009\u4e2d\u7684\u6a21\u677f\u3002",
@@ -597,7 +635,9 @@ window.__ModuleLoader__.load({
         templateSaveNew: "Save as new",
         templateOverwrite: "Overwrite template",
         templateDelete: "Delete",
-        templateDeleteConfirm: "Delete this persona template? The currently applied persona will not be cleared.",
+        templateDeleteConfirm: "Delete template \"{name}\"? The currently applied persona is not cleared. Click the red button again to confirm.",
+        templateDeleteArmed: "Confirm delete",
+        cancel: "Cancel",
         templateNameRequired: "Enter a template name first.",
         templateSaved: "Saved as a new template.",
         templateUpdated: "Updated the selected template.",
