@@ -11,8 +11,12 @@ const MAX_CUSTOM_FIELDS = 100
 const MAX_THREADS = 300
 const MAX_THREAD_BEATS = 100
 const MAX_THREAD_LINKS = 40
+const MAX_SYSTEMS = 12
+const MAX_TIERS = 60
+const MAX_PROGRESSION_TEMPLATES = 100
+const MAX_PROGRESSION_RECORDS = 3000
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 export const PROJECT_EXPORT_FORMAT = 'dsh-w-noval-write/project'
 export const PROJECT_EXPORT_VERSION = 1
 export const WRITE_LINK_STORE_VERSION = 1
@@ -33,6 +37,7 @@ const PROJECT_KEYS = Object.freeze([
   'relationships',
   'volumes',
   'threads',
+  'progression',
   'world',
   'plot',
   'scene',
@@ -84,6 +89,18 @@ const THREAD_KEYS = Object.freeze([
   'characterIds', 'knownByIds', 'beats', 'customFields',
 ])
 const THREAD_BEAT_KEYS = Object.freeze(['id', 'chapterId', 'note'])
+// Progression systems, for any genre. A book tracks any number of systems
+// (修为境界, 炼丹品级, 宗门职位, 位分, 军衔…), each an ordered tier ladder from low
+// to high, plus a ledger of per-chapter state changes. A character's standing
+// in every system at any chapter is folded from the ledger in outline order,
+// so the canon never loses its history. Condition, holdings and revealed
+// cards belong to the character, not to one system.
+const PROGRESSION_SYSTEM_KEYS = Object.freeze(['id', 'name', 'notes', 'tiers'])
+const TIER_KEYS = Object.freeze(['id', 'name', 'stages', 'advance', 'cost', 'gap', 'notes'])
+const PROGRESSION_RECORD_KEYS = Object.freeze([
+  'id', 'characterId', 'chapterId', 'systemId', 'tierId', 'stage', 'condition', 'holdings', 'revealed', 'gained', 'lost', 'note',
+])
+export const PROGRESSION_TEMPLATE_STORE_VERSION = 1
 /** A chapter counts as reached once its status says writing has begun. */
 const UNSTARTED_CHAPTER_STATUS = /^(|planned|plan|todo|outline|计划|计划中|待写|未写|未开始|大纲)$/iu
 export const THREAD_DUE_SOON_CHAPTERS = 3
@@ -100,6 +117,8 @@ export const NOVEL_TOOL_RETRY_PROTOCOL = Object.freeze([
   'When the user requests a chapter file, call novel_save_chapter with the full prose. Never claim a file exists unless it returns ok: true and verified: true.',
   'When saving prose for an outline chapter, pass volume_id and chapter_id to novel_save_chapter so the outline links the file and tracks its word count.',
   'Foreshadowing, mysteries, and promises live in threads[]. Use novel_threads to see what is due and novel_thread_upsert / novel_thread_remove for targeted changes; chapter references are outline chapter ids.',
+  'Books may track one or more progression systems (e.g. 修为境界, 炼丹品级, 宗门职位) in progression.systems, each an ordered tier ladder, lowest first; edit systems with novel_patch. Per-chapter character state lives in progression.records; use novel_progression_read, novel_progression_record and novel_progression_remove. novel_progression_templates lists reusable system templates.',
+  'Use novel_search to find earlier details in the written chapters; it returns hits in outline order with chapter labels.',
 ])
 
 function schemaProperties(keys, required) {
@@ -265,6 +284,75 @@ export function threadPatchToolSchema({ required = true } = {}) {
   }
 }
 
+function tierProperties() {
+  return {
+    id: { type: 'string', description: 'Stable tier id, unique within its system; defaults to the name.' },
+    name: { type: 'string', required: true, description: 'Tier name in the system, e.g. 筑基, 一流高手, 贵人, 上尉.' },
+    stages: { type: 'string', description: 'Sub-stages in order, e.g. 初期、中期、后期、圆满.' },
+    advance: { type: 'string', description: 'What it takes to rise into this tier.' },
+    cost: { type: 'string', description: 'Price, risk or bottleneck of rising.' },
+    gap: { type: 'string', description: 'How far this tier stands above the previous one; what beating someone a tier higher needs.' },
+    notes: { type: 'string', description: 'Anything else specific to this tier, e.g. lifespan, privileges, obligations.' },
+  }
+}
+
+function systemProperties() {
+  return {
+    id: { type: 'string', description: 'Stable system id; defaults to the name.' },
+    name: { type: 'string', required: true, description: 'System name, e.g. 修为境界, 炼丹品级, 宗门职位.' },
+    notes: { type: 'string', description: 'How the system works overall.' },
+    tiers: { type: 'array', description: 'Ordered ladder, lowest tier first.', items: { type: 'object', additionalProperties: false, properties: tierProperties() } },
+  }
+}
+
+/** One per-chapter progression record; ids reference characters, outline chapters, systems and tiers. */
+export function progressionRecordPatchToolSchema({ required = true } = {}) {
+  return {
+    type: 'object',
+    ...(required ? { required: true } : {}),
+    additionalProperties: false,
+    description: 'Partial progression record. Omitted fields are preserved. systemId + tierId record a rise or fall in one system; condition, holdings and revealed describe the character. holdings is a full snapshot that replaces the previous one.',
+    properties: {
+      characterId: { type: 'string', description: 'Character id (or unique name).' },
+      chapterId: { type: 'string', description: 'Outline chapter id where the change happens.' },
+      systemId: { type: 'string', description: 'System id or name the tier or stage belongs to; required with tierId or stage.' },
+      tierId: { type: 'string', description: 'Tier id or name within that system the character is in from this chapter on.' },
+      stage: { type: 'string', description: 'Sub-stage within the tier, e.g. 中期.' },
+      condition: { type: 'string', description: 'Injury, illness, curse, disgrace or other lasting condition from this chapter on; write the recovery when it ends.' },
+      holdings: { type: 'string', description: 'Complete snapshot of items, assets, subordinates or resources held after this chapter.' },
+      revealed: { type: 'string', description: 'Hidden cards, abilities or secrets exposed to others in this chapter.' },
+      gained: { type: 'string', description: 'What was gained in this chapter.' },
+      lost: { type: 'string', description: 'What was spent, lost or destroyed in this chapter.' },
+      note: { type: 'string', description: 'Why; required context for a tier drop or a skipped tier.' },
+    },
+  }
+}
+
+function progressionToolSchema() {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    description: 'Progression systems, for any genre. enabled turns tracking on; systems lists each ladder; records is the per-chapter state ledger. Arrays replace the stored arrays; omitted keys are preserved.',
+    properties: {
+      enabled: { type: 'boolean', description: 'Whether this book tracks progression.' },
+      systems: { type: 'array', items: { type: 'object', additionalProperties: false, properties: systemProperties() } },
+      records: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            ...progressionRecordPatchToolSchema({ required: false }).properties,
+            id: { type: 'string' },
+            characterId: { type: 'string', required: true },
+            chapterId: { type: 'string', required: true },
+          },
+        },
+      },
+    },
+  }
+}
+
 /** Build the exact DSH tool parameter schema for a complete project or partial patch. */
 export function projectToolSchema({ partial = false, required = true } = {}) {
   return {
@@ -299,6 +387,7 @@ export function projectToolSchema({ partial = false, required = true } = {}) {
         description: 'Foreshadowing and payoff ledger. Optional in complete projects; omitted threads are preserved by novel_write.',
         items: { type: 'object', additionalProperties: false, properties: threadProperties({ requireId: true }) },
       },
+      progression: progressionToolSchema(),
       world: recordSchema(WORLD_KEYS, !partial),
       plot: recordSchema(PLOT_KEYS, !partial),
       scene: recordSchema(SCENE_KEYS, !partial),
@@ -334,6 +423,7 @@ export function novelToolContract() {
     chapterPatchSchema: chapterPatchToolSchema(),
     threadPatchSchema: threadPatchToolSchema(),
     threadEnums: { kind: [...THREAD_KINDS], importance: [...THREAD_IMPORTANCE], status: [...THREAD_STATUSES] },
+    progressionRecordPatchSchema: progressionRecordPatchToolSchema(),
     emptyProjectExample: defaultProject(),
     retryProtocol: [...NOVEL_TOOL_RETRY_PROTOCOL],
     manuscriptFileProtocol: {
@@ -490,6 +580,52 @@ function validateThread(value, path, issues, { requireId = true } = {}) {
   if (Object.hasOwn(value, 'customFields')) validateCustomFields(value.customFields, `${path}.customFields`, issues)
 }
 
+function validateTiers(value, path, issues) {
+  if (!Array.isArray(value)) {
+    issues.push(`${path} must be an array; received ${receivedType(value)}`)
+    return
+  }
+  value.forEach((tier, index) => validateFlexibleRecord(tier, `${path}[${index}]`, TIER_KEYS, ['name'], issues))
+}
+
+function validateSystem(value, path, issues) {
+  if (!isPlainObject(value)) {
+    issues.push(`${path} must be an object; received ${receivedType(value)}`)
+    return
+  }
+  for (const key of Object.keys(value)) if (!PROGRESSION_SYSTEM_KEYS.includes(key)) issues.push(`${path}.${key} is not part of the canonical structure`)
+  if (!Object.hasOwn(value, 'name')) issues.push(`${path}.name is required`)
+  for (const key of ['id', 'name', 'notes']) {
+    if (Object.hasOwn(value, key) && typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
+  }
+  if (Object.hasOwn(value, 'tiers')) validateTiers(value.tiers, `${path}.tiers`, issues)
+}
+
+function validateProgression(value, path, issues) {
+  if (!isPlainObject(value)) {
+    issues.push(`${path} must be an object; received ${receivedType(value)}`)
+    return
+  }
+  for (const key of Object.keys(value)) if (!['enabled', 'systems', 'records'].includes(key)) issues.push(`${path}.${key} is not part of the canonical structure`)
+  if (Object.hasOwn(value, 'enabled') && typeof value.enabled !== 'boolean') issues.push(`${path}.enabled must be a boolean; received ${receivedType(value.enabled)}`)
+  if (Object.hasOwn(value, 'systems')) {
+    if (!Array.isArray(value.systems)) issues.push(`${path}.systems must be an array; received ${receivedType(value.systems)}`)
+    else value.systems.forEach((system, index) => validateSystem(system, `${path}.systems[${index}]`, issues))
+  }
+  if (Object.hasOwn(value, 'records')) {
+    if (!Array.isArray(value.records)) issues.push(`${path}.records must be an array; received ${receivedType(value.records)}`)
+    else value.records.forEach((record, index) => validateFlexibleRecord(record, `${path}.records[${index}]`, PROGRESSION_RECORD_KEYS, ['characterId', 'chapterId'], issues))
+  }
+}
+
+/** Report shape problems in a partial progression record before it is applied. */
+export function progressionRecordPatchIssues(value) {
+  const issues = []
+  validateFlexibleRecord(value, 'patch', PROGRESSION_RECORD_KEYS, [], issues)
+  if (isPlainObject(value) && Object.hasOwn(value, 'id')) issues.push('patch.id is not allowed; pass record_id instead')
+  return issues
+}
+
 /** Report shape problems in a partial thread patch before it is applied. */
 export function threadPatchIssues(value) {
   const issues = []
@@ -564,6 +700,7 @@ export function projectShapeIssues(value, { partial = false } = {}) {
     if (!Array.isArray(value.threads)) issues.push(`project.threads must be an array; received ${receivedType(value.threads)}`)
     else value.threads.forEach((thread, index) => validateThread(thread, `project.threads[${index}]`, issues))
   }
+  if (Object.hasOwn(value, 'progression')) validateProgression(value.progression, 'project.progression', issues)
   if (Object.hasOwn(value, 'world')) validateRecord(value.world, 'project.world', WORLD_KEYS, false, issues)
   if (Object.hasOwn(value, 'plot')) validateRecord(value.plot, 'project.plot', PLOT_KEYS, false, issues)
   if (Object.hasOwn(value, 'scene')) validateRecord(value.scene, 'project.scene', SCENE_KEYS, false, issues)
@@ -630,6 +767,7 @@ export function defaultProject() {
     relationships: [],
     volumes: [],
     threads: [],
+    progression: { enabled: false, systems: [], records: [] },
     world: {
       era: '',
       chronology: '',
@@ -903,6 +1041,84 @@ function normalizeThread(value, index, characterReferences) {
   }
 }
 
+function uniqueIds(items) {
+  const used = new Set()
+  items.forEach((item, index) => {
+    let candidate = item.id
+    while (used.has(candidate)) candidate = `${candidate}-${index + 1}`
+    item.id = candidate
+    used.add(candidate)
+  })
+  return items
+}
+
+function normalizeTier(value, index) {
+  const item = isPlainObject(value) ? value : {}
+  const name = text(item.name, MAX_SHORT)
+  return {
+    id: id(text(item.id, 100) || name, 'tier', index),
+    name,
+    stages: text(item.stages, MAX_SHORT),
+    advance: text(item.advance),
+    cost: text(item.cost),
+    gap: text(item.gap),
+    notes: text(item.notes),
+  }
+}
+
+function normalizeTierList(value, field) {
+  return uniqueIds(boundedArray(value, MAX_TIERS, field).map(normalizeTier))
+}
+
+function normalizeSystem(value, index) {
+  const item = isPlainObject(value) ? value : {}
+  const name = text(item.name, MAX_SHORT)
+  return {
+    id: id(text(item.id, 100) || name, 'system', index),
+    name,
+    notes: text(item.notes),
+    tiers: normalizeTierList(item.tiers, 'progression system tiers'),
+  }
+}
+
+/** Resolve an id-or-unique-name reference; unknown references are kept verbatim (as an id). */
+function namedReference(value, items, prefix) {
+  const raw = text(value, MAX_SHORT)
+  if (!raw) return ''
+  const byId = items.find(item => item.id === raw)
+  if (byId) return byId.id
+  const byName = items.filter(item => item.name === raw)
+  return byName.length === 1 ? byName[0].id : id(raw, prefix, 0)
+}
+
+function normalizeProgression(value, characterReferences) {
+  const input = isPlainObject(value) ? value : {}
+  const systems = uniqueIds(boundedArray(input.systems, MAX_SYSTEMS, 'progression.systems').map(normalizeSystem))
+  const records = uniqueIds(boundedArray(input.records, MAX_PROGRESSION_RECORDS, 'progression.records').map((record, index) => {
+    const item = isPlainObject(record) ? record : {}
+    const rawCharacter = text(item.characterId, MAX_SHORT)
+    const systemId = namedReference(item.systemId, systems, 'system')
+    const system = systems.find(candidate => candidate.id === systemId)
+    return {
+      id: id(item.id, 'record', index),
+      // A record keeps its references even after the character, system or
+      // tier is deleted, so the history stays readable; analysis flags them.
+      characterId: characterReferences.get(rawCharacter) || id(rawCharacter, 'character', 0),
+      chapterId: chapterReference(item.chapterId),
+      systemId,
+      tierId: namedReference(item.tierId, system ? system.tiers : [], 'tier'),
+      stage: text(item.stage, MAX_SHORT),
+      condition: text(item.condition),
+      holdings: text(item.holdings),
+      revealed: text(item.revealed),
+      gained: text(item.gained),
+      lost: text(item.lost),
+      note: text(item.note),
+    }
+  }))
+  return { enabled: input.enabled === true, systems, records }
+}
+
 export function normalizeProject(value) {
   const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   const base = defaultProject()
@@ -971,6 +1187,7 @@ export function normalizeProject(value) {
     volumes: boundedArray(input.volumes, MAX_VOLUMES, 'volumes')
       .map((volume, index) => normalizeVolume(volume, index, characterReferences)),
     threads,
+    progression: normalizeProgression(input.progression, characterReferences),
     world: Object.fromEntries(Object.keys(base.world).map(key => [key, text(world[key])])),
     plot: Object.fromEntries(Object.keys(base.plot).map(key => [key, text(plot[key])])),
     scene: {
@@ -1064,6 +1281,7 @@ export function mergeProject(currentValue, patchValue) {
   if (Object.hasOwn(patch, 'relationships')) next.relationships = patch.relationships
   if (Object.hasOwn(patch, 'volumes')) next.volumes = patch.volumes
   if (Object.hasOwn(patch, 'threads')) next.threads = patch.threads
+  if (isPlainObject(patch.progression)) next.progression = { ...current.progression, ...patch.progression }
   if (Object.hasOwn(patch, 'progress')) next.progress = patch.progress
   if (patch.world && typeof patch.world === 'object' && !Array.isArray(patch.world)) {
     next.world = { ...current.world, ...patch.world }
@@ -1380,6 +1598,355 @@ export function removeThread(projectValue, threadId) {
   const threads = project.threads.filter(thread => thread.id !== key)
   if (threads.length === project.threads.length) throw new Error(`unknown thread '${key}'`)
   return normalizeProject({ ...project, threads })
+}
+
+// ── progression systems ─────────────────────────────────────────────────
+
+function isProgressionProject(project) {
+  return project.progression.enabled || project.progression.systems.length > 0
+}
+
+/** Whether this book tracks progression: switched on, or a system exists. */
+export function progressionActive(projectValue) {
+  return isProgressionProject(normalizeProject(projectValue))
+}
+
+function uniqueCharacterResolver(project) {
+  const names = new Map()
+  for (const character of project.characters) if (character.name) names.set(character.name, [...(names.get(character.name) || []), character.id])
+  return raw => {
+    const key = text(raw, MAX_SHORT)
+    if (project.characters.some(character => character.id === key)) return key
+    return names.get(key)?.length === 1 ? names.get(key)[0] : ''
+  }
+}
+
+/** Strict id-or-unique-name lookup: '' for empty input, null for unknown. */
+function strictReference(raw, items) {
+  const key = text(raw, MAX_SHORT)
+  if (!key) return ''
+  const byId = items.find(item => item.id === key)
+  if (byId) return byId.id
+  const byName = items.filter(item => item.name === key)
+  return byName.length === 1 ? byName[0].id : null
+}
+
+function emptyProgressionState(characterId) {
+  return { characterId, standings: new Map(), condition: '', holdings: '', revealed: [], changes: [], lastChapterIndex: -1, records: 0 }
+}
+
+/**
+ * Fold the progression ledger in outline order. Warnings cover the whole
+ * ledger; states include only records up to `asOfChapterId` (default: the
+ * furthest chapter whose writing has begun, or every record when none has).
+ */
+export function analyzeProgression(projectValue, { asOfChapterId, characterIds } = {}) {
+  const project = normalizeProject(projectValue)
+  const chapters = chapterSequence(project)
+  const position = new Map(chapters.map(chapter => [chapter.id, chapter.index]))
+  let asOfIndex = currentChapterIndex(chapters)
+  const asOfKey = text(asOfChapterId, 100)
+  if (asOfKey) {
+    if (!position.has(asOfKey)) throw new Error(`unknown chapter '${asOfKey}'; call novel_outline_read for chapter ids`)
+    asOfIndex = position.get(asOfKey)
+  }
+  const limit = asOfIndex >= 0 ? asOfIndex : Infinity
+  const systems = project.progression.systems
+  const systemById = new Map(systems.map(system => [system.id, system]))
+  const rankIn = new Map(systems.map(system => [system.id, new Map(system.tiers.map((tier, index) => [tier.id, index]))]))
+  const rankOf = record => rankIn.get(record.systemId)?.get(record.tierId)
+  const characters = new Map(project.characters.map(character => [character.id, character]))
+  const label = index => (index >= 0 && chapters[index] ? chapterLabel(chapters[index]) : '')
+  const warnings = []
+  const entries = project.progression.records.map((record, order) => ({
+    record, order, index: position.has(record.chapterId) ? position.get(record.chapterId) : -1,
+  }))
+  for (const { record, index } of entries) {
+    const base = { recordId: record.id, characterId: record.characterId, chapterId: record.chapterId }
+    if (index < 0) warnings.push({ code: 'missing-chapter', ...base })
+    if (!characters.has(record.characterId)) warnings.push({ code: 'missing-character', ...base })
+    if (record.systemId && !systemById.has(record.systemId)) warnings.push({ code: 'missing-system', ...base, systemId: record.systemId })
+    else if (record.tierId && rankOf(record) === undefined) warnings.push({ code: 'missing-tier', ...base, systemId: record.systemId, tierId: record.tierId })
+    if (!record.systemId && (record.tierId || record.stage)) warnings.push({ code: 'tier-without-system', ...base })
+  }
+  const timeline = entries.filter(entry => entry.index >= 0).sort((a, b) => a.index - b.index || a.order - b.order)
+  const lastRank = new Map()
+  for (const { record, index } of timeline) {
+    const rank = rankOf(record)
+    if (rank === undefined) continue
+    const key = `${record.characterId}\u0000${record.systemId}`
+    const previous = lastRank.get(key)
+    lastRank.set(key, rank)
+    if (previous === undefined || record.note) continue
+    const tiers = systemById.get(record.systemId).tiers
+    const base = { recordId: record.id, characterId: record.characterId, chapterId: record.chapterId, chapter: label(index), systemId: record.systemId }
+    if (rank < previous) warnings.push({ code: 'tier-regression', ...base, from: tiers[previous].name, to: tiers[rank].name })
+    else if (rank > previous + 1) warnings.push({ code: 'tier-skip', ...base, from: tiers[previous].name, to: tiers[rank].name })
+  }
+  const states = new Map()
+  for (const { record, index } of timeline) {
+    if (index > limit) break
+    const state = states.get(record.characterId) || emptyProgressionState(record.characterId)
+    states.set(record.characterId, state)
+    if (record.systemId && record.tierId) {
+      state.standings.set(record.systemId, { tierId: record.tierId, stage: record.stage })
+    } else if (record.systemId && record.stage) {
+      const standing = state.standings.get(record.systemId) || { tierId: '', stage: '' }
+      state.standings.set(record.systemId, { ...standing, stage: record.stage })
+    }
+    if (record.condition) state.condition = record.condition
+    if (record.holdings) state.holdings = record.holdings
+    if (record.revealed) state.revealed.push({ chapterId: record.chapterId, chapter: label(index), text: record.revealed })
+    if (record.gained || record.lost || record.note) {
+      state.changes.push({ chapterId: record.chapterId, chapter: label(index), gained: record.gained, lost: record.lost, note: record.note })
+    }
+    state.lastChapterIndex = index
+    state.records += 1
+  }
+  const resolve = uniqueCharacterResolver(project)
+  const requested = Array.isArray(characterIds) ? characterIds.map(resolve).filter(Boolean) : []
+  const ids = requested.length > 0
+    ? [...new Set(requested)]
+    : [...states.values()].sort((a, b) => b.lastChapterIndex - a.lastChapterIndex).map(state => state.characterId)
+  const view = characterId => {
+    const state = states.get(characterId) || emptyProgressionState(characterId)
+    const standings = []
+    // Known systems in their own order, then standings in deleted systems.
+    const keys = [...systems.map(system => system.id).filter(systemId => state.standings.has(systemId)),
+      ...[...state.standings.keys()].filter(systemId => !systemById.has(systemId))]
+    for (const systemId of keys) {
+      const standing = state.standings.get(systemId)
+      const system = systemById.get(systemId)
+      const rank = rankIn.get(systemId)?.get(standing.tierId)
+      standings.push({
+        systemId,
+        system: system ? system.name : systemId,
+        tierId: standing.tierId,
+        tier: rank !== undefined ? system.tiers[rank].name : standing.tierId,
+        rank: rank !== undefined ? rank : -1,
+        stage: standing.stage,
+      })
+    }
+    return {
+      characterId,
+      name: characters.get(characterId)?.name || characterId,
+      standings,
+      condition: state.condition,
+      holdings: state.holdings,
+      revealed: state.revealed,
+      recentChanges: state.changes.slice(-5),
+      lastChapter: label(state.lastChapterIndex),
+      records: state.records,
+    }
+  }
+  const viewed = ids.map(view)
+  const gaps = []
+  if (requested.length >= 2) {
+    for (const system of systems) {
+      const ranked = viewed
+        .map(state => ({ characterId: state.characterId, standing: state.standings.find(item => item.systemId === system.id) }))
+        .filter(entry => entry.standing && entry.standing.rank >= 0)
+        .slice(0, 8)
+      for (let left = 0; left < ranked.length; left += 1) {
+        for (let right = left + 1; right < ranked.length; right += 1) {
+          gaps.push({
+            systemId: system.id, system: system.name,
+            from: ranked[left].characterId, to: ranked[right].characterId,
+            tiers: ranked[left].standing.rank - ranked[right].standing.rank,
+          })
+        }
+      }
+    }
+  }
+  return {
+    active: isProgressionProject(project),
+    asOf: asOfIndex >= 0 ? chapters[asOfIndex] : null,
+    systems: systems.map(system => ({ ...system, tiers: system.tiers.map((tier, index) => ({ ...tier, rank: index })) })),
+    states: viewed,
+    gaps,
+    warnings,
+    counts: { systems: systems.length, records: project.progression.records.length, warnings: warnings.length },
+  }
+}
+
+/**
+ * Create or patch one progression record. References must exist: the
+ * character, the outline chapter, and (when given) the system and its tier.
+ * @returns {{ project, recordId }}
+ */
+export function upsertProgressionRecord(projectValue, recordIdValue, patchValue) {
+  const project = normalizeProject(projectValue)
+  const patch = isPlainObject(patchValue) ? patchValue : {}
+  if (Object.keys(patch).length === 0) throw new Error('progression record patch must not be empty')
+  const issues = progressionRecordPatchIssues(patch)
+  if (issues.length > 0) throw threadArgumentError([...issues, 'Call novel_schema and rebuild the record patch, then retry once.'])
+  const records = [...project.progression.records]
+  const requestedId = text(recordIdValue, 100)
+  const index = requestedId ? records.findIndex(record => record.id === requestedId) : -1
+  if (requestedId && index < 0) throw new Error(`unknown progression record '${requestedId}'; omit record_id to create a new record`)
+  const current = index >= 0 ? records[index] : null
+  const next = {
+    ...(current || { id: '', characterId: '', chapterId: '', systemId: '', tierId: '', stage: '', condition: '', holdings: '', revealed: '', gained: '', lost: '', note: '' }),
+    ...patch,
+  }
+  const problems = []
+  const character = uniqueCharacterResolver(project)(next.characterId)
+  if (!character) problems.push(`characterId '${text(next.characterId, MAX_SHORT)}' does not identify a unique character; call novel_read for character ids`)
+  const chapterIds = new Set(chapterSequence(project).map(chapter => chapter.id))
+  const chapterId = chapterReference(next.chapterId)
+  if (!chapterId || !chapterIds.has(chapterId)) problems.push(`chapterId '${text(next.chapterId, 100)}' is not an outline chapter id; call novel_outline_read`)
+  const systemId = strictReference(next.systemId, project.progression.systems)
+  if (systemId === null) problems.push(`systemId '${text(next.systemId, MAX_SHORT)}' is not a progression system; add it to progression.systems with novel_patch first`)
+  const system = systemId ? project.progression.systems.find(item => item.id === systemId) : null
+  let tierId = ''
+  if (text(next.tierId, MAX_SHORT)) {
+    if (!systemId) problems.push('tierId needs systemId: say which progression system the tier belongs to')
+    else if (system) {
+      tierId = strictReference(next.tierId, system.tiers)
+      if (tierId === null) problems.push(`tierId '${text(next.tierId, MAX_SHORT)}' is not a tier of '${system.name}'`)
+    }
+  }
+  if (text(next.stage, MAX_SHORT) && !systemId && systemId !== null) problems.push('stage needs systemId: say which progression system the stage belongs to')
+  if (problems.length > 0) throw threadArgumentError(problems)
+  let recordId = current ? current.id : ''
+  if (!recordId) {
+    const used = new Set(records.map(record => record.id))
+    let counter = records.length + 1
+    while (used.has(`record-${counter}`)) counter += 1
+    recordId = `record-${counter}`
+  }
+  const record = { ...next, id: recordId, characterId: character, chapterId, systemId: systemId || '', tierId: tierId || '' }
+  if (index >= 0) records[index] = record
+  else records.push(record)
+  const candidate = { ...project, progression: { ...project.progression, records } }
+  assertProjectShape(candidate, { partial: false })
+  return { project: normalizeProject(candidate), recordId }
+}
+
+export function removeProgressionRecord(projectValue, recordIdValue) {
+  const project = normalizeProject(projectValue)
+  const key = text(recordIdValue, 100)
+  const records = project.progression.records.filter(record => record.id !== key)
+  if (records.length === project.progression.records.length) throw new Error(`unknown progression record '${key}'`)
+  return normalizeProject({ ...project, progression: { ...project.progression, records } })
+}
+
+// ── progression template library (shared by every book) ────────────────
+
+function stagedTiers(names, stages = '') {
+  return names.map(name => ({ id: name, name, stages, advance: '', cost: '', gap: '', notes: '' }))
+}
+
+/** Templates shipped with the plugin; users may edit, delete or restore them. */
+export function builtInProgressionTemplates() {
+  const fourStages = '初期、中期、后期、圆满'
+  return [
+    {
+      id: 'builtin-xiuxian', name: '修仙境界', builtIn: true, description: '经典修仙大境界，每境分初期、中期、后期、圆满。',
+      tiers: [{ id: '炼气', name: '炼气', stages: '一层至十三层', advance: '', cost: '', gap: '', notes: '' },
+        ...stagedTiers(['筑基', '金丹', '元婴', '化神', '炼虚', '合体', '大乘'], fourStages), ...stagedTiers(['渡劫'])],
+    },
+    {
+      id: 'builtin-wuxia', name: '武侠武学层次', builtIn: true, description: '江湖武者的实力层次。',
+      tiers: stagedTiers(['不入流', '三流', '二流', '一流', '绝顶高手', '宗师', '大宗师']),
+    },
+    {
+      id: 'builtin-magic', name: '西幻魔法位阶', builtIn: true, description: '法师的位阶体系。',
+      tiers: stagedTiers(['魔法学徒', '初级法师', '中级法师', '高级法师', '大魔导师', '圣阶', '传奇'], '初阶、中阶、高阶'),
+    },
+    {
+      id: 'builtin-esports', name: '网游段位', builtIn: true, description: '竞技游戏的段位，每段分若干小段。',
+      tiers: stagedTiers(['青铜', '白银', '黄金', '铂金', '钻石', '大师', '王者'], 'IV、III、II、I'),
+    },
+    {
+      id: 'builtin-harem', name: '后宫位分', builtIn: true, description: '清宫后妃位分，从低到高。',
+      tiers: stagedTiers(['答应', '常在', '贵人', '嫔', '妃', '贵妃', '皇贵妃', '皇后']),
+    },
+    {
+      id: 'builtin-military', name: '现代军衔', builtIn: true, description: '陆军军衔，从低到高。',
+      tiers: stagedTiers(['列兵', '上等兵', '下士', '中士', '上士', '少尉', '中尉', '上尉', '少校', '中校', '上校', '大校', '少将', '中将', '上将']),
+    },
+  ]
+}
+
+function normalizeTemplate(value, index) {
+  const item = isPlainObject(value) ? value : {}
+  const name = text(item.name, MAX_SHORT)
+  return {
+    id: id(item.id, 'template', index),
+    name,
+    description: text(item.description),
+    builtIn: item.builtIn === true,
+    tiers: normalizeTierList(item.tiers, 'template tiers'),
+  }
+}
+
+/** The shared template store; a missing store starts with the built-in templates. */
+export function normalizeProgressionTemplates(value) {
+  if (!isPlainObject(value) || !Array.isArray(value.templates)) {
+    return { version: PROGRESSION_TEMPLATE_STORE_VERSION, templates: builtInProgressionTemplates().map(normalizeTemplate) }
+  }
+  const templates = uniqueIds(boundedArray(value.templates, MAX_PROGRESSION_TEMPLATES, 'progression templates').map(normalizeTemplate))
+  return { version: PROGRESSION_TEMPLATE_STORE_VERSION, templates }
+}
+
+/** Create (no id) or replace (existing id) one template. */
+export function saveProgressionTemplate(libraryValue, input, { newId } = {}) {
+  const library = normalizeProgressionTemplates(libraryValue)
+  if (!isPlainObject(input)) throw new TypeError('template must be an object')
+  const name = text(input.name, MAX_SHORT)
+  if (!name) throw new Error('template name must not be empty')
+  if (Object.hasOwn(input, 'tiers')) {
+    const issues = []
+    validateTiers(input.tiers, 'template.tiers', issues)
+    if (issues.length > 0) throw new TypeError(issues.slice(0, 6).join('; '))
+  }
+  const templates = [...library.templates]
+  const key = text(input.id, 100)
+  const index = key ? templates.findIndex(template => template.id === key) : -1
+  if (key && index < 0) throw new Error(`unknown template '${key}'`)
+  if (index < 0 && templates.length >= MAX_PROGRESSION_TEMPLATES) throw new RangeError(`at most ${MAX_PROGRESSION_TEMPLATES} templates`)
+  const current = index >= 0 ? templates[index] : null
+  const template = normalizeTemplate({
+    id: current ? current.id : (text(newId, 100) || `template-${templates.length + 1}`),
+    name,
+    description: Object.hasOwn(input, 'description') ? input.description : current?.description,
+    builtIn: current ? current.builtIn : false,
+    tiers: Object.hasOwn(input, 'tiers') ? input.tiers : current?.tiers,
+  }, index < 0 ? templates.length : index)
+  if (index >= 0) templates[index] = template
+  else {
+    const used = new Set(templates.map(item => item.id))
+    while (used.has(template.id)) template.id = `${template.id}-x`
+    templates.push(template)
+  }
+  return { library: { version: PROGRESSION_TEMPLATE_STORE_VERSION, templates }, template }
+}
+
+export function deleteProgressionTemplate(libraryValue, templateId) {
+  const library = normalizeProgressionTemplates(libraryValue)
+  const key = text(templateId, 100)
+  const templates = library.templates.filter(template => template.id !== key)
+  if (templates.length === library.templates.length) throw new Error(`unknown template '${key}'`)
+  return { version: PROGRESSION_TEMPLATE_STORE_VERSION, templates }
+}
+
+/** Put every built-in template back to its shipped version; user templates are kept. */
+export function restoreBuiltInProgressionTemplates(libraryValue) {
+  const library = normalizeProgressionTemplates(libraryValue)
+  const builtIns = builtInProgressionTemplates().map(normalizeTemplate)
+  const builtInIds = new Set(builtIns.map(template => template.id))
+  const custom = library.templates.filter(template => !builtInIds.has(template.id))
+  return normalizeProgressionTemplates({ templates: [...builtIns, ...custom].slice(0, MAX_PROGRESSION_TEMPLATES) })
+}
+
+/** A new book system copied from a template, with an id unique among `existingSystems`. */
+export function systemFromTemplate(template, existingSystems = []) {
+  const source = normalizeTemplate(template, 0)
+  const used = new Set(existingSystems.map(system => system.id))
+  let systemId = id(source.name, 'system', existingSystems.length)
+  while (used.has(systemId)) systemId = `${systemId}-2`
+  return { id: systemId, name: source.name, notes: source.description, tiers: source.tiers.map(tier => ({ ...tier })) }
 }
 
 /** Locate one outline chapter; volumeId may be omitted when the chapter id is unique. */
@@ -1710,6 +2277,44 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
     }
     if (active.length > 24) lines.push('- [More active threads omitted; call novel_threads.]')
   }
+  if (isProgressionProject(project)) {
+    const clip = (value, limit = 90) => {
+      const rendered = compact(value)
+      return rendered.length > limit ? `${rendered.slice(0, limit - 3)}...` : rendered
+    }
+    const insight = analyzeProgression(project)
+    lines.push('', '## Progression systems (tier ladders and character state)')
+    if (insight.systems.length === 0) {
+      lines.push('- Progression tracking is on, but no system exists yet. Ask the user which systems the book uses (the panel offers templates) or propose one, then store it in progression.systems with novel_patch, lowest tier first.')
+    }
+    for (const system of insight.systems) {
+      lines.push(`- ${system.name} (${system.id})${system.notes ? ` — ${clip(system.notes)}` : ''}; lowest to highest:`)
+      for (const tier of system.tiers.slice(0, 30)) {
+        const details = [
+          tier.stages ? `stages ${clip(tier.stages, 40)}` : '',
+          tier.advance ? `advance: ${clip(tier.advance)}` : '',
+          tier.cost ? `cost: ${clip(tier.cost)}` : '',
+          tier.gap ? `gap: ${clip(tier.gap)}` : '',
+        ].filter(Boolean).join('; ')
+        lines.push(`  ${tier.rank + 1}. ${tier.name} (${tier.id})${details ? ` — ${details}` : ''}`)
+      }
+      if (system.tiers.length > 30) lines.push('  - [More tiers omitted; call novel_progression_read.]')
+    }
+    if (insight.states.length > 0) {
+      lines.push(`- Character state as of ${insight.asOf ? chapterLabel(insight.asOf) : 'the latest record'}:`)
+      for (const state of insight.states.slice(0, 24)) {
+        const details = [
+          ...state.standings.map(standing => `${standing.system} ${[standing.tier, standing.stage].filter(Boolean).join(' ') || '?'}`),
+          state.condition ? `condition: ${clip(state.condition, 60)}` : '',
+          state.holdings ? `holdings: ${clip(state.holdings)}` : '',
+          state.revealed.length ? `revealed: ${state.revealed.slice(-4).map(item => `${clip(item.text, 30)}${item.chapter ? ` (${item.chapter})` : ''}`).join(', ')}` : '',
+        ].filter(Boolean).join('; ')
+        lines.push(`  - ${state.name}: ${details || 'no state yet'}`)
+      }
+      if (insight.states.length > 24) lines.push('  - [More characters omitted; call novel_progression_read.]')
+    }
+    if (insight.warnings.length > 0) lines.push(`- Ledger warnings: ${insight.warnings.length} (tier drops or skips without a note, or broken references); call novel_progression_read to review.`)
+  }
   if (project.progress.length > 0) {
     lines.push('', '## Recent story progress')
     for (const entry of project.progress.slice(-12)) {
@@ -1728,6 +2333,11 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
     '- Never say a file was created or provide a path unless novel_save_chapter returned ok: true and verified: true. Report its exact returned path, bytes, and sha256.',
     '- Durable canon and story progress must be written back with the novel tools. Use outline/character/relationship tools for targeted changes instead of replacing arrays.',
     ...(project.threads.length > 0 ? ['- Threads: before a chapter call novel_threads(chapter_id); pay off due/overdue threads or move their payoff; never reveal a truth early. After it, novel_thread_upsert new setups, add_beat echoes, resolved + resolvedChapterId for payoffs.'] : []),
+    ...(isProgressionProject(project) ? [
+      '- Progression: before drafting a chapter call novel_progression_read(as_of_chapter_id, character_ids of the cast) and keep each character\'s tier and stage in every system, condition, holdings and already revealed hidden cards consistent. Beating someone a tier higher needs a cost, a setup or a stated counter; never reuse a revealed card as a surprise.',
+      '- After the chapter, call novel_progression_record for each change (rise or fall in a system, injury or recovery, hidden card revealed, something gained or spent). A tier drop or a skipped tier needs a note.',
+    ] : []),
+    '- Before reusing an earlier detail (what someone said, where an object is, an old promise or injury), call novel_search on the written chapters instead of relying on memory. The prose wins over the canon summary; fix the canon when they disagree.',
     '- Before every mutation, novel_read; pass its exact revision as expected_revision.',
     '- Object arguments are direct JSON objects, never strings, Markdown, or nested outer arguments.',
     '- Prefer novel_patch. novel_write is complete canon replacement and preserves progress unless replace_progress is true.',
@@ -1754,6 +2364,8 @@ const DIFF_LIST_LABELS = Object.freeze({
   volumes: item => item.title || item.id,
   chapters: item => [item.number ? `#${item.number}` : '', item.title || (item.number ? '' : item.id)].filter(Boolean).join(' '),
   threads: item => item.title || item.id,
+  progressionSystems: item => item.name || item.id,
+  progressionRecords: item => [item.characterId, item.chapterId].filter(Boolean).join(' @ ') || item.id,
   progress: item => item.chapter || compactSnippet(item.summary, 24),
 })
 
@@ -1804,6 +2416,8 @@ export function describeProjectDiff(beforeValue, afterValue, { detail = false } 
     volumes: [before.volumes, after.volumes],
     chapters: [flattenChapters(before), flattenChapters(after)],
     threads: [before.threads, after.threads],
+    progressionSystems: [before.progression.systems, after.progression.systems],
+    progressionRecords: [before.progression.records, after.progression.records],
     progress: [before.progress, after.progress],
   }
   for (const [key, [left, right]] of Object.entries(lists)) {
@@ -1817,7 +2431,7 @@ export function describeProjectDiff(beforeValue, afterValue, { detail = false } 
       .filter(item => leftById.has(item.id))
       .map(item => ({ item, fields: changedFields(leftById.get(item.id), item, ignore) }))
       .filter(entry => entry.fields.length > 0)
-    const moved = key === 'chapters' || key === 'volumes'
+    const moved = key === 'chapters' || key === 'volumes' || key === 'progressionSystems'
       ? JSON.stringify(left.map(item => item.id).filter(id => rightById.has(id))) !== JSON.stringify(right.map(item => item.id).filter(id => leftById.has(id)))
       : false
     if (added.length + removed.length + changed.length === 0 && !moved) continue

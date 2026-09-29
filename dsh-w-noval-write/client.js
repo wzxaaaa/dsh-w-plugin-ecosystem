@@ -43,6 +43,13 @@ window.__ModuleLoader__.load({
       ".dshwnw-card-head{display:flex;align-items:center;gap:6px;min-width:0}",
       ".dshwnw-card-title{flex:1;min-width:0;font-size:14px;font-weight:650;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
       ".dshwnw-card-subtitle{font-size:11.5px;color:var(--nw-fg3)}",
+      ".dshwnw-cstate{gap:6px}",
+      ".dshwnw-standings{display:flex;flex-wrap:wrap;gap:6px}",
+      ".dshwnw-template{gap:6px}",
+      ".dshwnw-toggle{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}",
+      ".dshwnw-toggle input{width:16px;height:16px;margin:0;accent-color:var(--nw-accent)}",
+      ".dshwnw-cstate-line{font-size:12px;line-height:18px;color:var(--nw-fg2)}",
+      ".dshwnw-cstate-line b{margin-right:6px;color:var(--nw-fg);font-weight:600}",
       ".dshwnw-warning{padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--nw-danger) 9%,transparent);color:var(--nw-danger);font-size:12px;line-height:18px}",
       ".dshwnw-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}",
       ".dshwnw-list-row{display:flex;align-items:center;gap:9px;width:100%;min-width:0;padding:7px 9px;border:1px solid var(--nw-border);border-radius:10px;background:var(--nw-surface);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s}",
@@ -365,6 +372,10 @@ window.__ModuleLoader__.load({
         descriptor("listHistory", [parameter("workspaceId")]),
         descriptor("compareSnapshot", [parameter("workspaceId"), parameter("revision")]),
         descriptor("restoreSnapshot", [parameter("workspaceId"), parameter("revision"), parameter("expectedRevision")]),
+        descriptor("getProgressionTemplates"),
+        descriptor("saveProgressionTemplate", [parameter("input")]),
+        descriptor("deleteProgressionTemplate", [parameter("templateId")]),
+        descriptor("restoreProgressionTemplates"),
       ],
     };
 
@@ -409,6 +420,7 @@ window.__ModuleLoader__.load({
       section_outline: ["M7.5 5.5h8", "M7.5 10h8", "M7.5 14.5h8", "M4.2 5.5h.1", "M4.2 10h.1", "M4.2 14.5h.1"],
       section_scene: ["M3.5 7.5h13v8a1 1 0 01-1 1h-11a1 1 0 01-1-1v-8z", "M3.5 7.5l1.2-3.3h11l-.7 3.3", "M8 4.2l-1 3.3", "M12.3 4.2l-1 3.3"],
       section_threads: ["M5 16.5V4", "M5 4.5h8.5l-1.8 3 1.8 3H5"],
+      section_progression: ["M3 16.5l4.8-8.3 3 5 2.2-3.4 4 6.7z", "M13.5 6.2a1.7 1.7 0 100-3.4 1.7 1.7 0 000 3.4z"],
       folder: ["M3 6.5V15a1 1 0 001 1h12a1 1 0 001-1V7.5a1 1 0 00-1-1h-6.5L8 4.5H4a1 1 0 00-1 1z"],
       section_settings: ["M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z", "M10 3v1.8", "M10 15.2V17", "M3 10h1.8", "M15.2 10H17", "M5 5l1.3 1.3", "M13.7 13.7L15 15", "M5 15l1.3-1.3", "M13.7 6.3L15 5"],
     };
@@ -799,7 +811,19 @@ window.__ModuleLoader__.load({
         React.createElement(FieldGroup, { title: props.t("genreProfileTitle") },
           React.createElement(InputField, { label: props.t("genreProfileType"), value: p.genreProfile.type, placeholder: props.t("genreProfilePlaceholder"), onChange: function (v) { props.setGenre("type", v); } })
         ),
-        React.createElement(CustomFieldsEditor, { t: props.t, value: p.genreProfile.customFields, onChange: props.setGenreFields })
+        React.createElement(CustomFieldsEditor, { t: props.t, value: p.genreProfile.customFields, onChange: props.setGenreFields }),
+        React.createElement(FieldGroup, { title: props.t("progressionGroup") },
+          React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, props.t("progressionGroupHint")),
+          React.createElement("label", { className: "dshwnw-toggle" },
+            React.createElement("input", {
+              type: "checkbox",
+              checked: progressionOn(p),
+              disabled: ((p.progression && p.progression.systems) || []).length > 0,
+              onChange: function (event) { props.setProgressionEnabled(event.target.checked); },
+            }),
+            React.createElement("span", null, ((p.progression && p.progression.systems) || []).length > 0 ? props.t("progressionOnBySystems") : props.t("progressionToggle"))
+          )
+        )
       );
     }
 
@@ -1768,8 +1792,452 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // ── progression systems ────────────────────────────────────────────
+    // Mirrors analyzeProgression() in noval-write-core.js: any number of
+    // systems per book, each an ordered tier ladder, plus a per-chapter
+    // ledger folded in outline order. Templates are shared by every book.
+    function progressionOn(project) {
+      var progression = project.progression || {};
+      return progression.enabled === true || (progression.systems || []).length > 0;
+    }
+
+    function emptyTier(name) {
+      return { id: makeId("tier"), name: name || "", stages: "", advance: "", cost: "", gap: "", notes: "" };
+    }
+
+    function emptyRecord() {
+      return { id: "", characterId: "", chapterId: "", systemId: "", tierId: "", stage: "", condition: "", holdings: "", revealed: "", gained: "", lost: "", note: "" };
+    }
+
+    function systemFromTemplateClient(template, systems) {
+      var used = {};
+      systems.forEach(function (system) { used[system.id] = true; });
+      var base = String(template.name || "").trim() || makeId("system");
+      var id = base;
+      var counter = 2;
+      while (used[id]) { id = base + "-" + counter; counter += 1; }
+      return {
+        id: id, name: template.name || "", notes: template.description || "",
+        tiers: (template.tiers || []).map(function (tier) { return Object.assign(emptyTier(), tier); }),
+      };
+    }
+
+    function analyzeProgressionView(project, asOfChapterId) {
+      var chapters = chapterSequenceOf(project);
+      var position = new Map(chapters.map(function (chapter) { return [chapter.id, chapter.index]; }));
+      var current = -1;
+      chapters.forEach(function (chapter, index) { if (!UNSTARTED_CHAPTER_STATUS.test(String(chapter.status || "").trim())) current = index; });
+      var asOfIndex = asOfChapterId && position.has(asOfChapterId) ? position.get(asOfChapterId) : current;
+      var limit = asOfIndex >= 0 ? asOfIndex : Infinity;
+      var progression = project.progression || { systems: [], records: [] };
+      var systems = progression.systems || [];
+      var systemById = new Map(systems.map(function (system) { return [system.id, system]; }));
+      var rankIn = new Map(systems.map(function (system) { return [system.id, new Map((system.tiers || []).map(function (tier, index) { return [tier.id, index]; }))]; }));
+      function rankOf(record) { var ranks = rankIn.get(record.systemId); return ranks ? ranks.get(record.tierId) : undefined; }
+      var characters = new Map((project.characters || []).map(function (character) { return [character.id, character]; }));
+      var warnings = [];
+      var entries = (progression.records || []).map(function (record, order) {
+        return { record: record, order: order, index: position.has(record.chapterId) ? position.get(record.chapterId) : -1 };
+      });
+      entries.forEach(function (entry) {
+        var record = entry.record;
+        if (entry.index < 0) warnings.push({ code: "missing-chapter", recordId: record.id });
+        if (!characters.has(record.characterId)) warnings.push({ code: "missing-character", recordId: record.id });
+        if (record.systemId && !systemById.has(record.systemId)) warnings.push({ code: "missing-system", recordId: record.id });
+        else if (record.tierId && rankOf(record) === undefined) warnings.push({ code: "missing-tier", recordId: record.id });
+        if (!record.systemId && (record.tierId || record.stage)) warnings.push({ code: "tier-without-system", recordId: record.id });
+      });
+      var timeline = entries.filter(function (entry) { return entry.index >= 0; }).sort(function (a, b) { return a.index - b.index || a.order - b.order; });
+      var lastRank = new Map();
+      timeline.forEach(function (entry) {
+        var record = entry.record;
+        var rank = rankOf(record);
+        if (rank === undefined) return;
+        var key = record.characterId + "\u0000" + record.systemId;
+        var previous = lastRank.get(key);
+        lastRank.set(key, rank);
+        if (previous === undefined || String(record.note || "").trim()) return;
+        if (rank < previous) warnings.push({ code: "tier-regression", recordId: record.id });
+        else if (rank > previous + 1) warnings.push({ code: "tier-skip", recordId: record.id });
+      });
+      var states = new Map();
+      timeline.forEach(function (entry) {
+        if (entry.index > limit) return;
+        var record = entry.record;
+        var state = states.get(record.characterId);
+        if (!state) { state = { characterId: record.characterId, standings: new Map(), condition: "", holdings: "", revealed: [], lastIndex: -1, records: 0 }; states.set(record.characterId, state); }
+        if (record.systemId && record.tierId) state.standings.set(record.systemId, { tierId: record.tierId, stage: record.stage });
+        else if (record.systemId && record.stage) state.standings.set(record.systemId, Object.assign({ tierId: "" }, state.standings.get(record.systemId) || {}, { stage: record.stage }));
+        if (record.condition) state.condition = record.condition;
+        if (record.holdings) state.holdings = record.holdings;
+        if (record.revealed) state.revealed.push({ chapter: chapters[entry.index], text: record.revealed });
+        state.lastIndex = entry.index;
+        state.records += 1;
+      });
+      var list = Array.from(states.values()).sort(function (a, b) { return b.lastIndex - a.lastIndex; }).map(function (state) {
+        var standings = [];
+        systems.forEach(function (system) {
+          var standing = state.standings.get(system.id);
+          if (!standing) return;
+          var rank = rankIn.get(system.id).get(standing.tierId);
+          standings.push({ systemId: system.id, system: system.name, tier: rank !== undefined ? system.tiers[rank].name : standing.tierId, stage: standing.stage, rank: rank !== undefined ? rank : -1 });
+        });
+        return Object.assign({}, state, {
+          name: characters.has(state.characterId) ? characters.get(state.characterId).name : state.characterId,
+          standings: standings,
+        });
+      });
+      var warnedRecords = {};
+      warnings.forEach(function (warning) { (warnedRecords[warning.recordId] = warnedRecords[warning.recordId] || []).push(warning.code); });
+      return { chapters: chapters, currentIndex: current, asOfIndex: asOfIndex, position: position, systemById: systemById, states: list, warnings: warnings, warnedRecords: warnedRecords };
+    }
+
+    function TierRow(props) {
+      var tier = props.tier;
+      var t = props.t;
+      function set(key, value) { props.onUpdate(function (item) { item[key] = value; }); }
+      return React.createElement("details", { className: "dshwnw-node" },
+        React.createElement("summary", null,
+          React.createElement(NwIcon, { name: "chevron", size: 14, className: "dshwnw-chevron" }),
+          React.createElement("span", { className: "dshwnw-node-copy" },
+            React.createElement("span", { className: "dshwnw-node-title", "data-empty": tier.name ? undefined : "true" }, (props.index + 1) + ". " + (tier.name || t("unnamedTier"))),
+            tier.stages ? React.createElement("span", { className: "dshwnw-card-subtitle" }, tier.stages) : null
+          ),
+          React.createElement(IconButton, { icon: "up", label: t("moveUp"), disabled: props.index === 0, onClick: function () { props.onMove(-1); } }),
+          React.createElement(IconButton, { icon: "down", label: t("moveDown"), disabled: props.last, onClick: function () { props.onMove(1); } }),
+          React.createElement(IconButton, { icon: "trash", danger: true, label: t("delete"), onClick: props.onDelete })
+        ),
+        React.createElement("div", { className: "dshwnw-node-body" },
+          React.createElement("div", { className: "dshwnw-grid" },
+            React.createElement(InputField, { label: t("tierName"), value: tier.name, onChange: function (v) { set("name", v); } }),
+            React.createElement(InputField, { label: t("tierStages"), value: tier.stages, placeholder: t("tierStagesPlaceholder"), onChange: function (v) { set("stages", v); } })
+          ),
+          React.createElement(TextField, { label: t("tierAdvance"), value: tier.advance, rows: 2, onChange: function (v) { set("advance", v); } }),
+          React.createElement(TextField, { label: t("tierCost"), value: tier.cost, rows: 2, onChange: function (v) { set("cost", v); } }),
+          React.createElement(TextField, { label: t("tierGap"), value: tier.gap, rows: 2, onChange: function (v) { set("gap", v); } }),
+          React.createElement(TextField, { label: t("tierNotes"), value: tier.notes, rows: 2, onChange: function (v) { set("notes", v); } })
+        )
+      );
+    }
+
+    // Edits one ordered tier ladder; `onChange` receives a mutator of the array.
+    function TierListEditor(props) {
+      var t = props.t;
+      var tiers = props.tiers || [];
+      return React.createElement(React.Fragment, null,
+        tiers.length === 0 ? React.createElement("div", { className: "dshwnw-empty" }, t("tiersEmpty")) : React.createElement("div", { className: "dshwnw-outline-list" }, tiers.map(function (tier, index) {
+          return React.createElement(TierRow, {
+            key: tier.id, tier: tier, index: index, last: index === tiers.length - 1, t: t,
+            onUpdate: function (mutate) { props.onChange(function (list) { var item = list.find(function (entry) { return entry.id === tier.id; }); if (item) mutate(item); }); },
+            onMove: function (delta) { props.onChange(function (list) { var from = list.findIndex(function (entry) { return entry.id === tier.id; }); var to = from + delta; if (from < 0 || to < 0 || to >= list.length) return; var moved = list.splice(from, 1)[0]; list.splice(to, 0, moved); }); },
+            onDelete: function () { props.onChange(function (list) { var at = list.findIndex(function (entry) { return entry.id === tier.id; }); if (at >= 0) list.splice(at, 1); }); },
+          });
+        })),
+        React.createElement(AddButton, { onClick: function () { props.onChange(function (list) { list.push(emptyTier()); }); } }, t("addTier"))
+      );
+    }
+
+    function SystemCard(props) {
+      var system = props.system;
+      var t = props.t;
+      function set(key, value) { props.onUpdate(function (item) { item[key] = value; }); }
+      return React.createElement("details", { className: "dshwnw-node", open: props.open, onToggle: function (event) { if (event.currentTarget.open !== props.open) props.onToggle(event.currentTarget.open); } },
+        React.createElement("summary", null,
+          React.createElement(NwIcon, { name: "chevron", size: 14, className: "dshwnw-chevron" }),
+          React.createElement("span", { className: "dshwnw-node-copy" },
+            React.createElement("span", { className: "dshwnw-node-title", "data-empty": system.name ? undefined : "true" }, system.name || t("unnamedSystem")),
+            React.createElement("span", { className: "dshwnw-card-subtitle" }, (system.tiers || []).length === 0 ? t("tiersEmpty") : (system.tiers || []).map(function (tier) { return tier.name || "?"; }).join(" → "))
+          ),
+          React.createElement(IconButton, { icon: "file", label: t("saveAsTemplate"), disabled: !props.canSaveTemplate || !system.name, onClick: props.onSaveTemplate }),
+          React.createElement(IconButton, { icon: "up", label: t("moveUp"), disabled: props.index === 0, onClick: function () { props.onMove(-1); } }),
+          React.createElement(IconButton, { icon: "down", label: t("moveDown"), disabled: props.last, onClick: function () { props.onMove(1); } }),
+          React.createElement(IconButton, { icon: "trash", danger: true, label: t("delete"), onClick: props.onDelete })
+        ),
+        props.open ? React.createElement("div", { className: "dshwnw-node-body" },
+          props.recordCount > 0 ? React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("systemInUse").replace("{n}", props.recordCount)) : null,
+          React.createElement(InputField, { label: t("systemName"), value: system.name, placeholder: t("systemNamePlaceholder"), onChange: function (v) { set("name", v); } }),
+          React.createElement(TextField, { label: t("systemNotes"), value: system.notes, rows: 2, onChange: function (v) { set("notes", v); } }),
+          React.createElement("div", { className: "dshwnw-divider" }, t("tiersTitle")),
+          React.createElement(TierListEditor, { tiers: system.tiers, t: t, onChange: function (mutate) { props.onUpdate(function (item) { item.tiers = item.tiers || []; mutate(item.tiers); }); } })
+        ) : null
+      );
+    }
+
+    // The shared template library. Edits go straight to the plugin's own
+    // template store (not to this book's draft), so they apply to every book.
+    function TemplateLibrary(props) {
+      var t = props.t;
+      var library = props.library;
+      var editSlot = React.useState(null);
+      var editing = editSlot[0];
+      var setEditing = editSlot[1];
+      var armedSlot = React.useState("");
+      var armed = armedSlot[0];
+      var setArmed = armedSlot[1];
+      if (library.status === "loading") return React.createElement("div", { className: "dshwnw-empty" }, t("loading"));
+      if (library.status === "error") return React.createElement("div", { className: "dshwnw-warning" }, t("templatesFailed") + ": " + library.error);
+      function startEdit(template) { setArmed(""); setEditing(clone(template)); }
+      function saveEdit() {
+        props.onSave(editing).then(function (ok) { if (ok) setEditing(null); });
+      }
+      var editor = editing ? React.createElement("div", { className: "dshwnw-card" },
+        React.createElement("div", { className: "dshwnw-section-title" }, editing.id ? t("editTemplate") : t("newTemplate")),
+        React.createElement(InputField, { label: t("templateName"), value: editing.name, onChange: function (v) { setEditing(Object.assign({}, editing, { name: v })); } }),
+        React.createElement(TextField, { label: t("templateDescription"), value: editing.description, rows: 2, onChange: function (v) { setEditing(Object.assign({}, editing, { description: v })); } }),
+        React.createElement("div", { className: "dshwnw-divider" }, t("tiersTitle")),
+        React.createElement(TierListEditor, { tiers: editing.tiers, t: t, onChange: function (mutate) { var next = clone(editing); next.tiers = next.tiers || []; mutate(next.tiers); setEditing(next); } }),
+        React.createElement("div", { className: "dshwnw-actions" },
+          React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: props.busy || !String(editing.name || "").trim(), onClick: saveEdit }, t("saveTemplate")),
+          React.createElement("button", { type: "button", className: "dshwnw-button", disabled: props.busy, onClick: function () { setEditing(null); } }, t("cancel"))
+        )
+      ) : null;
+      return React.createElement(React.Fragment, null,
+        React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("templatesHint")),
+        editor,
+        React.createElement("div", { className: "dshwnw-outline-list" }, library.templates.map(function (template) {
+          var isArmed = armed === template.id;
+          return React.createElement("div", { key: template.id, className: "dshwnw-card dshwnw-template" },
+            React.createElement("div", { className: "dshwnw-card-head" },
+              React.createElement("span", { className: "dshwnw-node-title" }, template.name || t("unnamedSystem")),
+              template.builtIn ? React.createElement("span", { className: "dshwnw-pill", "data-tone": "plain" }, t("builtIn")) : null
+            ),
+            template.description ? React.createElement("div", { className: "dshwnw-card-subtitle" }, template.description) : null,
+            React.createElement("div", { className: "dshwnw-cstate-line" }, (template.tiers || []).map(function (tier) { return tier.name; }).join(" → ") || t("tiersEmpty")),
+            isArmed ? React.createElement("div", { className: "dshwnw-warning" }, t("deleteTemplateConfirm").replace("{name}", template.name)) : null,
+            React.createElement("div", { className: "dshwnw-actions" },
+              props.onApply ? React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: props.busy, onClick: function () { props.onApply(template); } }, t("useTemplate")) : null,
+              React.createElement("button", { type: "button", className: "dshwnw-button", disabled: props.busy, onClick: function () { startEdit(template); } }, t("editTemplate")),
+              React.createElement("button", { type: "button", className: "dshwnw-danger", disabled: props.busy, onClick: function () {
+                if (!isArmed) { setArmed(template.id); return; }
+                setArmed("");
+                props.onDelete(template.id);
+              } }, isArmed ? t("confirmDelete") : t("delete")),
+              isArmed ? React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { setArmed(""); } }, t("cancel")) : null
+            )
+          );
+        })),
+        armed === "__restore__" ? React.createElement("div", { className: "dshwnw-warning" }, t("restoreTemplatesConfirm")) : null,
+        React.createElement("div", { className: "dshwnw-actions" },
+          React.createElement("button", { type: "button", className: "dshwnw-button", disabled: props.busy, onClick: function () { startEdit({ id: "", name: "", description: "", tiers: [] }); } }, t("newTemplate")),
+          React.createElement("button", { type: "button", className: "dshwnw-button", disabled: props.busy, onClick: function () {
+            if (armed !== "__restore__") { setArmed("__restore__"); return; }
+            setArmed("");
+            props.onRestore();
+          } }, armed === "__restore__" ? t("confirmRestore") : t("restoreTemplates")),
+          armed === "__restore__" ? React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { setArmed(""); } }, t("cancel")) : null
+        )
+      );
+    }
+
+    function RecordRow(props) {
+      var record = props.record;
+      var t = props.t;
+      var view = props.view;
+      var systems = props.systems;
+      function set(key, value) { props.onUpdate(function (item) { item[key] = value; }); }
+      var character = props.characters.find(function (item) { return item.id === record.characterId; });
+      var index = view.position.has(record.chapterId) ? view.position.get(record.chapterId) : -1;
+      var system = view.systemById.get(record.systemId);
+      var tier = system && record.tierId ? (system.tiers || []).find(function (item) { return item.id === record.tierId; }) : null;
+      var codes = view.warnedRecords[record.id] || [];
+      var summary = [
+        record.systemId && (record.tierId || record.stage) ? (system ? system.name : record.systemId) + " " + [tier ? tier.name : record.tierId, record.stage].filter(Boolean).join(" ") : "",
+        record.condition, record.revealed ? t("revealedShort") + record.revealed : "",
+      ].filter(Boolean).join(" · ");
+      return React.createElement("details", { className: "dshwnw-node", open: props.open, onToggle: function (event) { if (event.currentTarget.open !== props.open) props.onToggle(event.currentTarget.open); } },
+        React.createElement("summary", null,
+          React.createElement(NwIcon, { name: "chevron", size: 14, className: "dshwnw-chevron" }),
+          React.createElement("span", { className: "dshwnw-node-copy" },
+            React.createElement("span", { className: "dshwnw-node-title" }, (index >= 0 ? chapterShort(view.chapters[index]) : t("missingChapter")) + " · " + (character ? character.name || t("unnamedCharacter") : t("missingCharacter"))),
+            summary ? React.createElement("span", { className: "dshwnw-card-subtitle" }, summary) : null
+          ),
+          codes.length ? React.createElement("span", { className: "dshwnw-pill", "data-tone": "danger" }, t("pwarnBadge")) : null,
+          React.createElement(IconButton, { icon: "trash", danger: true, label: t("delete"), onClick: props.onDelete })
+        ),
+        props.open ? React.createElement("div", { className: "dshwnw-node-body" },
+          codes.length ? React.createElement("div", { className: "dshwnw-warning" }, codes.map(function (code) { return t("pwarn_" + code); }).join(" ")) : null,
+          React.createElement("div", { className: "dshwnw-grid" },
+            React.createElement(SelectField, { label: t("recordCharacter"), value: record.characterId, empty: t("chooseCharacter"), options: props.characters.map(function (item) { return { value: item.id, label: item.name || t("unnamedCharacter") }; }), onChange: function (v) { set("characterId", v); } }),
+            React.createElement(ChapterSelect, { label: t("recordChapter"), value: record.chapterId, chapters: view.chapters, currentIndex: view.currentIndex, t: t, onChange: function (v) { set("chapterId", v); } })
+          ),
+          React.createElement("div", { className: "dshwnw-grid dshwnw-grid-3" },
+            React.createElement(SelectField, { label: t("recordSystem"), value: record.systemId, empty: t("noSystemChange"), options: systems.map(function (item) { return { value: item.id, label: item.name || t("unnamedSystem") }; }), onChange: function (v) { props.onUpdate(function (item) { item.systemId = v; item.tierId = ""; item.stage = ""; }); } }),
+            React.createElement(SelectField, { label: t("recordTier"), value: record.tierId, empty: t("tierUnchanged"), options: (system ? system.tiers || [] : []).map(function (item) { return { value: item.id, label: item.name || t("unnamedTier") }; }), onChange: function (v) { set("tierId", v); } }),
+            React.createElement(InputField, { label: t("recordStage"), value: record.stage, onChange: function (v) { set("stage", v); } })
+          ),
+          React.createElement(TextField, { label: t("recordCondition"), value: record.condition, rows: 2, onChange: function (v) { set("condition", v); } }),
+          React.createElement(TextField, { label: t("recordHoldings"), value: record.holdings, rows: 2, onChange: function (v) { set("holdings", v); } }),
+          React.createElement(TextField, { label: t("recordRevealed"), value: record.revealed, rows: 2, onChange: function (v) { set("revealed", v); } }),
+          React.createElement("div", { className: "dshwnw-grid" },
+            React.createElement(TextField, { label: t("recordGained"), value: record.gained, rows: 2, onChange: function (v) { set("gained", v); } }),
+            React.createElement(TextField, { label: t("recordLost"), value: record.lost, rows: 2, onChange: function (v) { set("lost", v); } })
+          ),
+          React.createElement(TextField, { label: t("recordNote"), value: record.note, rows: 2, onChange: function (v) { set("note", v); } })
+        ) : null
+      );
+    }
+
+    function ProgressionTab(props) {
+      var t = props.t;
+      var project = props.project;
+      var writer = props.writer;
+      var progression = project.progression || { systems: [], records: [] };
+      var systems = progression.systems || [];
+      var records = progression.records || [];
+      var asOfSlot = React.useState("");
+      var asOf = asOfSlot[0];
+      var setAsOf = asOfSlot[1];
+      var filterSlot = React.useState("");
+      var filterCharacter = filterSlot[0];
+      var setFilterCharacter = filterSlot[1];
+      var openSlot = React.useState({});
+      var openIds = openSlot[0];
+      var setOpenIds = openSlot[1];
+      var librarySlot = React.useState({ status: "loading", templates: [], error: "" });
+      var library = librarySlot[0];
+      var setLibrary = librarySlot[1];
+      var busySlot = React.useState(false);
+      var libraryBusy = busySlot[0];
+      var setLibraryBusy = busySlot[1];
+      var hintSlot = React.useState(null);
+      var hint = hintSlot[0];
+      var setHint = hintSlot[1];
+      var aliveRef = React.useRef(true);
+      function setOpen(id, value) { setOpenIds(function (current) { var next = Object.assign({}, current); next[id] = value; return next; }); }
+      var canTemplates = Boolean(writer && typeof writer.getProgressionTemplates === "function");
+
+      React.useEffect(function () {
+        aliveRef.current = true;
+        if (!canTemplates) { setLibrary({ status: "error", templates: [], error: "unavailable" }); return function () { aliveRef.current = false; }; }
+        writer.getProgressionTemplates().then(
+          function (value) { if (aliveRef.current) setLibrary({ status: "ready", templates: value.templates || [], error: "" }); },
+          function (error) { if (aliveRef.current) setLibrary({ status: "error", templates: [], error: failureText(error) }); }
+        );
+        return function () { aliveRef.current = false; };
+      }, [writer]);
+
+      function libraryCall(run, successText) {
+        setLibraryBusy(true);
+        setHint(null);
+        return run().then(
+          function (value) {
+            if (!aliveRef.current) return false;
+            setLibraryBusy(false);
+            setLibrary({ status: "ready", templates: value.templates || [], error: "" });
+            setHint({ kind: "success", text: successText });
+            return true;
+          },
+          function (error) {
+            if (!aliveRef.current) return false;
+            setLibraryBusy(false);
+            setHint({ kind: "error", text: failureText(error) });
+            return false;
+          }
+        );
+      }
+
+      var view = analyzeProgressionView(project, asOf);
+      var asOfChapter = view.asOfIndex >= 0 ? view.chapters[view.asOfIndex] : null;
+      var characters = project.characters || [];
+      var recordCounts = {};
+      records.forEach(function (record) { recordCounts[record.systemId] = (recordCounts[record.systemId] || 0) + 1; });
+      var visibleRecords = records
+        .map(function (record, order) { return { record: record, order: order, index: view.position.has(record.chapterId) ? view.position.get(record.chapterId) : Infinity }; })
+        .filter(function (entry) { return !filterCharacter || entry.record.characterId === filterCharacter; })
+        .sort(function (a, b) { return a.index - b.index || a.order - b.order; });
+
+      function addSystem(system) {
+        props.onUpdate(function (next) { next.systems.push(system); });
+        setOpen(system.id, true);
+      }
+      function addRecord() {
+        var id = makeId("record");
+        var current = view.currentIndex >= 0 ? view.chapters[view.currentIndex] : view.chapters[0];
+        props.onUpdate(function (next) {
+          next.records.push(Object.assign(emptyRecord(), { id: id, characterId: filterCharacter || (characters[0] ? characters[0].id : ""), chapterId: current ? current.id : "" }));
+        });
+        setOpen(id, true);
+      }
+
+      return React.createElement("div", { className: "dshwnw-section" },
+        React.createElement("div", { className: "dshwnw-section-title" }, t("progressionTitle")),
+        React.createElement("div", { className: "dshwnw-section-hint" }, t("progressionHint")),
+        view.warnings.length > 0 ? React.createElement("div", { className: "dshwnw-warning" }, t("pwarnSummary").replace("{n}", view.warnings.length)) : null,
+        hint ? React.createElement("div", { className: hint.kind === "error" ? "dshwnw-warning" : "dshwnw-cursor" }, hint.text) : null,
+
+        React.createElement(FieldGroup, { title: t("systemsTitle"), count: systems.length || undefined },
+          systems.length === 0 ? React.createElement("div", { className: "dshwnw-empty" }, t("systemsEmpty")) : React.createElement("div", { className: "dshwnw-outline-list" }, systems.map(function (system, index) {
+            return React.createElement(SystemCard, {
+              key: system.id, system: system, index: index, last: index === systems.length - 1, t: t,
+              recordCount: recordCounts[system.id] || 0, canSaveTemplate: canTemplates && !libraryBusy,
+              open: Boolean(openIds[system.id]), onToggle: function (value) { setOpen(system.id, value); },
+              onUpdate: function (mutate) { props.onUpdate(function (next) { var item = next.systems.find(function (entry) { return entry.id === system.id; }); if (item) mutate(item); }); },
+              onMove: function (delta) { props.onUpdate(function (next) { var from = next.systems.findIndex(function (entry) { return entry.id === system.id; }); var to = from + delta; if (from < 0 || to < 0 || to >= next.systems.length) return; var moved = next.systems.splice(from, 1)[0]; next.systems.splice(to, 0, moved); }); },
+              onDelete: function () { props.onUpdate(function (next) { next.systems = next.systems.filter(function (entry) { return entry.id !== system.id; }); }); },
+              onSaveTemplate: function () {
+                libraryCall(function () { return writer.saveProgressionTemplate({ name: system.name, description: system.notes, tiers: system.tiers || [] }); }, t("templateSaved").replace("{name}", system.name));
+              },
+            });
+          })),
+          React.createElement(AddButton, { onClick: function () { addSystem(systemFromTemplateClient({ name: "", tiers: [] }, systems)); } }, t("addSystem"))
+        ),
+
+        React.createElement(FieldGroup, { title: t("templatesTitle"), count: library.templates.length || undefined, collapsed: systems.length > 0 },
+          React.createElement(TemplateLibrary, {
+            t: t, library: library, busy: libraryBusy,
+            onApply: function (template) { addSystem(systemFromTemplateClient(template, systems)); setHint({ kind: "success", text: t("templateApplied").replace("{name}", template.name) }); },
+            onSave: function (template) { return libraryCall(function () { return writer.saveProgressionTemplate(template); }, t("templateSaved").replace("{name}", template.name)); },
+            onDelete: function (id) { libraryCall(function () { return writer.deleteProgressionTemplate(id); }, t("templateDeleted")); },
+            onRestore: function () { libraryCall(function () { return writer.restoreProgressionTemplates(); }, t("templatesRestored")); },
+          })
+        ),
+
+        React.createElement(FieldGroup, { title: t("statesTitle"), count: view.states.length || undefined },
+          React.createElement(ChapterSelect, { label: t("statesAsOf"), value: asOf, chapters: view.chapters, currentIndex: view.currentIndex, t: t, onChange: setAsOf }),
+          React.createElement("div", { className: "dshwnw-cursor" }, asOfChapter ? t("statesAsOfLabel").replace("{chapter}", chapterLong(asOfChapter)) : t("statesAsOfAll")),
+          view.states.length === 0
+            ? React.createElement("div", { className: "dshwnw-empty" }, t("statesEmpty"))
+            : React.createElement("div", { className: "dshwnw-outline-list" }, view.states.map(function (state) {
+              return React.createElement("div", { key: state.characterId, className: "dshwnw-card dshwnw-cstate" },
+                React.createElement("div", { className: "dshwnw-card-head" },
+                  React.createElement("span", { className: "dshwnw-node-title" }, state.name || t("unnamedCharacter"))
+                ),
+                state.standings.length ? React.createElement("div", { className: "dshwnw-standings" }, state.standings.map(function (standing) {
+                  return React.createElement("span", { key: standing.systemId, className: "dshwnw-pill", "data-tone": standing.rank >= 0 ? "active" : "plain" }, standing.system + " · " + ([standing.tier, standing.stage].filter(Boolean).join(" ") || "?"));
+                })) : null,
+                state.condition ? React.createElement("div", { className: "dshwnw-cstate-line" }, React.createElement("b", null, t("recordCondition")), state.condition) : null,
+                state.holdings ? React.createElement("div", { className: "dshwnw-cstate-line" }, React.createElement("b", null, t("recordHoldings")), state.holdings) : null,
+                state.revealed.length ? React.createElement("div", { className: "dshwnw-cstate-line" }, React.createElement("b", null, t("recordRevealed")),
+                  state.revealed.map(function (item, index) { return (index ? "；" : "") + item.text + (item.chapter ? "（" + chapterShort(item.chapter) + "）" : ""); }).join("")) : null,
+                React.createElement("div", { className: "dshwnw-card-subtitle" }, t("statesLastChange").replace("{chapter}", state.lastIndex >= 0 ? chapterLong(view.chapters[state.lastIndex]) : "—").replace("{n}", state.records))
+              );
+            }))
+        ),
+
+        React.createElement(FieldGroup, { title: t("recordsTitle"), count: records.length || undefined },
+          React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("recordsHint")),
+          characters.length === 0 || view.chapters.length === 0
+            ? React.createElement("div", { className: "dshwnw-empty" }, t("recordsNeedSetup"))
+            : React.createElement(React.Fragment, null,
+              records.length > 0 ? React.createElement(SelectField, { label: t("recordsFilter"), value: filterCharacter, empty: t("recordsAll"), options: characters.map(function (item) { return { value: item.id, label: item.name || t("unnamedCharacter") }; }), onChange: setFilterCharacter }) : null,
+              visibleRecords.length === 0
+                ? React.createElement("div", { className: "dshwnw-empty" }, t("recordsEmpty"))
+                : React.createElement("div", { className: "dshwnw-outline-list" }, visibleRecords.map(function (entry) {
+                  var record = entry.record;
+                  return React.createElement(RecordRow, {
+                    key: record.id, record: record, view: view, systems: systems, characters: characters, t: t,
+                    open: Boolean(openIds[record.id]), onToggle: function (value) { setOpen(record.id, value); },
+                    onUpdate: function (mutate) { props.onUpdate(function (next) { var item = next.records.find(function (candidate) { return candidate.id === record.id; }); if (item) mutate(item); }); },
+                    onDelete: function () { props.onUpdate(function (next) { next.records = next.records.filter(function (candidate) { return candidate.id !== record.id; }); }); },
+                  });
+                })),
+              React.createElement(AddButton, { onClick: addRecord }, t("addRecord")))
+        )
+      );
+    }
+
     // ── version history ─────────────────────────────────────────────────
-    var SECTION_ORDER = ["project", "genreProfile", "characters", "relationships", "world", "plot", "volumes", "chapters", "threads", "scene", "progress"];
+    var SECTION_ORDER = ["project", "genreProfile", "characters", "relationships", "world", "plot", "volumes", "chapters", "threads", "progressionSystems", "progressionRecords", "scene", "progress"];
     var FIELD_LABEL_KEYS = {
       project: { title: "bookTitle", styleCorpusId: "corpusField" },
       scene: { time: "sceneTime", goal: "sceneGoal", conflict: "sceneConflict", outcome: "sceneOutcome", povCharacterId: "scenePov" },
@@ -2084,6 +2552,10 @@ window.__ModuleLoader__.load({
       if (name === "outline") return fill(t("metaOutline"), { v: (project.volumes || []).length, c: insight.chapters.length });
       if (name === "scene") return project.scene && project.scene.chapter ? project.scene.chapter : t("metaSceneEmpty");
       if (name === "threads") return insight.counts.total === 0 ? t("metaThreadsEmpty") : fill(t("metaThreads"), { n: insight.counts.active });
+      if (name === "progression") {
+        var progression = project.progression || { systems: [], records: [] };
+        return (progression.systems || []).length === 0 ? t("metaProgressionEmpty") : fill(t("metaProgression"), { r: progression.systems.length, n: (progression.records || []).length });
+      }
       return t("metaSettings");
     }
 
@@ -2564,7 +3036,8 @@ window.__ModuleLoader__.load({
         );
       }
 
-      var tabs = ["project", "characters", "relationships", "world", "plot", "outline", "scene", "threads", "settings"];
+      // The progression page appears only for progression books (genre or an existing tier ladder).
+      var tabs = ["project", "characters", "relationships", "world", "plot", "outline", "scene", "threads"].concat(progressionOn(draft) ? ["progression"] : [], ["settings"]);
       var content;
       if (tab === "project") {
         content = React.createElement(ProjectTab, {
@@ -2572,6 +3045,7 @@ window.__ModuleLoader__.load({
           set: function (key, value) { updateProject(function (next) { next[key] = value; }); },
           setGenre: function (key, value) { updateProject(function (next) { next.genreProfile[key] = value; }); },
           setGenreFields: function (value) { updateProject(function (next) { next.genreProfile.customFields = value; }); },
+          setProgressionEnabled: function (value) { updateProject(function (next) { next.progression = next.progression || { enabled: false, systems: [], records: [] }; next.progression.enabled = value; }); if (value) setTab("progression"); },
         });
       } else if (tab === "characters") {
         content = React.createElement(CharacterTab, {
@@ -2588,7 +3062,7 @@ window.__ModuleLoader__.load({
             setSelectedId(newId);
           },
           onPatch: function (id, key, value) { updateProject(function (next) { var item = next.characters.find(function (entry) { return entry.id === id; }); if (item) item[key] = value; }); },
-          onDelete: function (id) { updateProject(function (next) { next.characters = next.characters.filter(function (item) { return item.id !== id; }); next.relationships = next.relationships.filter(function (item) { return item.fromId !== id && item.toId !== id; }); if (next.scene.povCharacterId === id) next.scene.povCharacterId = ""; (next.threads || []).forEach(function (thread) { thread.characterIds = thread.characterIds.filter(function (item) { return item !== id; }); thread.knownByIds = thread.knownByIds.filter(function (item) { return item !== id; }); }); next.volumes.forEach(function (volume) { volume.chapters.forEach(function (chapter) { chapter.scenes.forEach(function (scene) { if (scene.povCharacterId === id) scene.povCharacterId = ""; }); }); }); }); setSelectedId(""); },
+          onDelete: function (id) { updateProject(function (next) { next.characters = next.characters.filter(function (item) { return item.id !== id; }); next.relationships = next.relationships.filter(function (item) { return item.fromId !== id && item.toId !== id; }); if (next.scene.povCharacterId === id) next.scene.povCharacterId = ""; if (next.progression && next.progression.records) next.progression.records = next.progression.records.filter(function (record) { return record.characterId !== id; }); (next.threads || []).forEach(function (thread) { thread.characterIds = thread.characterIds.filter(function (item) { return item !== id; }); thread.knownByIds = thread.knownByIds.filter(function (item) { return item !== id; }); }); next.volumes.forEach(function (volume) { volume.chapters.forEach(function (chapter) { chapter.scenes.forEach(function (scene) { if (scene.povCharacterId === id) scene.povCharacterId = ""; }); }); }); }); setSelectedId(""); },
         });
       } else if (tab === "relationships") {
         content = React.createElement(RelationshipsTab, {
@@ -2692,6 +3166,11 @@ window.__ModuleLoader__.load({
           onUpdate: function (id, mutate) { updateProject(function (next) { var item = (next.threads || []).find(function (entry) { return entry.id === id; }); if (item) mutate(item); }); },
           onDelete: function (id) { updateProject(function (next) { next.threads = (next.threads || []).filter(function (item) { return item.id !== id; }); }); },
         });
+      } else if (tab === "progression" && progressionOn(draft)) {
+        content = React.createElement(ProgressionTab, {
+          project: draft, t: t, writer: writer,
+          onUpdate: function (mutate) { updateProject(function (next) { next.progression = next.progression || { enabled: false, systems: [], records: [] }; next.progression.systems = next.progression.systems || []; next.progression.records = next.progression.records || []; mutate(next.progression); }); },
+        });
       } else if (tab === "scene") {
         content = React.createElement(SceneTab, {
           project: draft, t: t,
@@ -2776,6 +3255,35 @@ window.__ModuleLoader__.load({
     var NS = "dshWNovalWrite";
     var inject = ["slots", "locale", "remote", "uiConversation"];
     var zh = {
+      tab_progression: "体系", metaProgression: "{r} 套体系 · {n} 条记录", metaProgressionEmpty: "等级与成长",
+      section_progressionSystems: "成长体系", section_progressionRecords: "成长记录",
+      progressionGroup: "成长体系", progressionGroupHint: "追踪角色在各套等级体系里的位置和状态变化，例如修为境界、武学层次、魔法位阶、位分、军衔、段位。开启后工作台多出「体系」页。",
+      progressionToggle: "启用成长体系追踪", progressionOnBySystems: "已启用（这本书已有体系；删掉所有体系后才能关闭）",
+      progressionTitle: "成长体系与角色状态", progressionHint: "一本书可以有多套体系（比如修为境界 + 炼丹品级 + 宗门职位），每套从低到高排列。每一章谁升降、受伤、暴露底牌、得失东西，都记成一条记录；角色在任意一章的状态按大纲顺序自动算出来。AI 写章前会读取，写完会补记录。",
+      systemsTitle: "这本书的体系", systemsEmpty: "还没有体系。从下面的模板库挑一套，或新建一套空白体系。", addSystem: "新建空白体系",
+      unnamedSystem: "未命名体系", systemName: "体系名称", systemNamePlaceholder: "例如：修为境界、炼丹品级、宗门职位", systemNotes: "体系说明",
+      systemInUse: "有 {n} 条记录引用这套体系；删除体系后这些记录会被标为需复核。", saveAsTemplate: "另存为模板",
+      tiersTitle: "等级（从低到高，顺序即高低）", tiersEmpty: "还没有等级。", addTier: "新增等级", unnamedTier: "未命名等级",
+      tierName: "等级名称", tierStages: "小阶段", tierStagesPlaceholder: "例如：初期、中期、后期、圆满", tierAdvance: "晋升条件",
+      tierCost: "代价与瓶颈", tierGap: "与上一级的差距（越级需要什么）", tierNotes: "备注（寿元、特权、义务等）",
+      templatesTitle: "体系模板库（所有书共用）", templatesHint: "模板对所有小说通用。可以把模板用到这本书、修改内置模板、新建自己的模板；「恢复内置模板」会把六套内置模板还原，自建模板不受影响。",
+      templatesFailed: "读取模板库失败", builtIn: "内置", useTemplate: "用到这本书", editTemplate: "编辑模板", newTemplate: "新建模板",
+      templateName: "模板名称", templateDescription: "模板说明", saveTemplate: "保存模板", confirmDelete: "确认删除",
+      deleteTemplateConfirm: "确定删除模板「{name}」？已经用到书里的体系不受影响。再点一次红色按钮确认。",
+      restoreTemplates: "恢复内置模板", confirmRestore: "确认恢复", restoreTemplatesConfirm: "六套内置模板会还原成默认内容（你对它们的修改会丢失），自建模板保留。再点一次确认。",
+      templateSaved: "模板「{name}」已保存。", templateDeleted: "模板已删除。", templatesRestored: "内置模板已恢复。", templateApplied: "已把「{name}」加到这本书，记得保存。",
+      statesTitle: "角色当前状态", statesAsOf: "按哪一章结束时计算", statesAsOfLabel: "显示 {chapter} 结束时的状态。", statesAsOfAll: "还没有开始写的章节，显示全部记录汇总后的状态。",
+      statesEmpty: "还没有成长记录。", statesLastChange: "最后变化：{chapter} · 共 {n} 条记录",
+      recordsTitle: "成长记录", recordsHint: "一条记录 = 某个角色在某一章的变化。升降级时选体系和等级；伤势、持有物、底牌、得失是角色本身的，不分体系。持有物填本章结束后的完整清单。",
+      recordsNeedSetup: "先在「角色」里添加角色、在「大纲」里建好章节，才能记录。", recordsEmpty: "没有记录。", recordsFilter: "只看角色", recordsAll: "全部角色",
+      addRecord: "新增记录", recordCharacter: "角色", chooseCharacter: "选择角色", recordChapter: "章节",
+      recordSystem: "体系", noSystemChange: "不涉及等级", recordTier: "等级", tierUnchanged: "本章未变", recordStage: "小阶段",
+      recordCondition: "伤势 / 状态", recordHoldings: "持有物（完整快照）", recordRevealed: "暴露的底牌", recordGained: "获得", recordLost: "消耗 / 失去",
+      recordNote: "原因 / 备注（跌级、跳级必须写）", revealedShort: "暴露：", missingCharacter: "角色已删除",
+      pwarnBadge: "需复核", pwarnSummary: "成长账本有 {n} 处需要复核（跌级或跳级没写原因，或引用的章节、角色、体系、等级不存在）。",
+      "pwarn_tier-regression": "等级比这套体系的上一条记录低，却没写原因。", "pwarn_tier-skip": "一次跨过了不止一级，却没写原因。",
+      "pwarn_missing-chapter": "引用的章节不在大纲里。", "pwarn_missing-character": "引用的角色不存在。", "pwarn_missing-system": "引用的体系已不存在。",
+      "pwarn_missing-tier": "引用的等级不在这套体系里。", "pwarn_tier-without-system": "填了等级或小阶段，却没选体系。",
       title: "小说写作", rail: "打开小说写作工作台", cardDescription: "每本小说独立的角色、世界观、情节与连续性数据",
       writeActive: "小说写作", writeEdit: "编辑", writeClear: "解除", writeSave: "保存", writeCancel: "取消", writeObjectiveAria: "小说写作任务", writeCommandInput: "写作命令输入",
       loading: "正在载入小说项目…", loadFailed: "载入失败", retry: "重试", saveFailed: "保存失败", noWorkspace: "当前没有可用工作区。请先打开或创建一个工作区。", workspaceLabel: "共享工作区",
@@ -2855,6 +3363,35 @@ window.__ModuleLoader__.load({
       progressTitle: "写作进展", progressEmpty: "还没有推进记录。AI 可在写作后自动写入。", progressEntry: "进展", canonChanges: "设定变更", openThreads: "待续线索",
     };
     var en = {
+      tab_progression: "Systems", metaProgression: "{r} systems · {n} records", metaProgressionEmpty: "Ranks & growth",
+      section_progressionSystems: "Progression systems", section_progressionRecords: "Progression records",
+      progressionGroup: "Progression systems", progressionGroupHint: "Track where characters stand in each ranking system and how their state changes: cultivation realms, martial tiers, magic ranks, court ranks, military ranks, game tiers. Turning it on adds a Systems page.",
+      progressionToggle: "Track progression", progressionOnBySystems: "On (this book has systems; delete them all to turn it off)",
+      progressionTitle: "Progression systems and character state", progressionHint: "A book can have several systems (e.g. cultivation + alchemy grade + sect rank), each ordered lowest first. Every rise or fall, injury, revealed card or gain and loss is one record per chapter; a character's state at any chapter is folded in outline order. The AI reads it before a chapter and records changes after.",
+      systemsTitle: "This book's systems", systemsEmpty: "No systems yet. Pick a template below or add a blank system.", addSystem: "Add blank system",
+      unnamedSystem: "Unnamed system", systemName: "System name", systemNamePlaceholder: "e.g. Cultivation, Alchemy grade, Sect rank", systemNotes: "How it works",
+      systemInUse: "{n} records use this system; deleting it flags them for review.", saveAsTemplate: "Save as template",
+      tiersTitle: "Tiers (lowest first; order is rank)", tiersEmpty: "No tiers yet.", addTier: "Add tier", unnamedTier: "Unnamed tier",
+      tierName: "Tier", tierStages: "Sub-stages", tierStagesPlaceholder: "e.g. early, middle, late, peak", tierAdvance: "How to rise into it",
+      tierCost: "Cost and bottleneck", tierGap: "Gap from the previous tier", tierNotes: "Notes (lifespan, privileges, duties…)",
+      templatesTitle: "Template library (shared by every book)", templatesHint: "Templates work for every novel. Use one in this book, edit the built-ins, or create your own. Restore puts the six built-ins back to default and keeps your own templates.",
+      templatesFailed: "Could not load templates", builtIn: "Built-in", useTemplate: "Use in this book", editTemplate: "Edit", newTemplate: "New template",
+      templateName: "Template name", templateDescription: "Description", saveTemplate: "Save template", confirmDelete: "Confirm delete",
+      deleteTemplateConfirm: "Delete template \"{name}\"? Systems already copied into books are not affected. Click the red button again to confirm.",
+      restoreTemplates: "Restore built-ins", confirmRestore: "Confirm restore", restoreTemplatesConfirm: "The six built-in templates go back to default (your edits to them are lost); your own templates stay. Click again to confirm.",
+      templateSaved: "Template \"{name}\" saved.", templateDeleted: "Template deleted.", templatesRestored: "Built-in templates restored.", templateApplied: "Added \"{name}\" to this book. Remember to save.",
+      statesTitle: "Character state", statesAsOf: "As of the end of", statesAsOfLabel: "Showing state at the end of {chapter}.", statesAsOfAll: "No chapter has started; showing every record.",
+      statesEmpty: "No progression records yet.", statesLastChange: "Last change: {chapter} · {n} records",
+      recordsTitle: "Records", recordsHint: "One record = one character's change in one chapter. Pick a system and tier for a rise or fall; condition, holdings, revealed cards and gains belong to the character. Holdings is the full list after the chapter.",
+      recordsNeedSetup: "Add characters and outline chapters first.", recordsEmpty: "No records.", recordsFilter: "Character", recordsAll: "All characters",
+      addRecord: "Add record", recordCharacter: "Character", chooseCharacter: "Choose a character", recordChapter: "Chapter",
+      recordSystem: "System", noSystemChange: "No tier change", recordTier: "Tier", tierUnchanged: "Unchanged", recordStage: "Sub-stage",
+      recordCondition: "Injury / condition", recordHoldings: "Holdings (full snapshot)", recordRevealed: "Cards revealed", recordGained: "Gained", recordLost: "Spent / lost",
+      recordNote: "Why (required for a drop or a skip)", revealedShort: "Revealed: ", missingCharacter: "Deleted character",
+      pwarnBadge: "Review", pwarnSummary: "{n} progression records need review (a drop or skip without a note, or a missing chapter, character, system or tier).",
+      "pwarn_tier-regression": "Lower than the previous record in this system, with no note.", "pwarn_tier-skip": "Skips more than one tier, with no note.",
+      "pwarn_missing-chapter": "The chapter is not in the outline.", "pwarn_missing-character": "The character no longer exists.", "pwarn_missing-system": "The system no longer exists.",
+      "pwarn_missing-tier": "The tier is not in this system.", "pwarn_tier-without-system": "A tier or sub-stage is set without a system.",
       title: "Novel Writing", rail: "Open Novel Writing", cardDescription: "Characters, world, plot, and continuity for each novel",
       writeActive: "Novel Writing", writeEdit: "Edit", writeClear: "Unlink", writeSave: "Save", writeCancel: "Cancel", writeObjectiveAria: "Novel writing objective", writeCommandInput: "Writing command input",
       loading: "Loading novel project…", loadFailed: "Load failed", retry: "Retry", saveFailed: "Save failed", noWorkspace: "No workspace is available. Open or create a workspace first.", workspaceLabel: "Shared workspace",
@@ -2971,6 +3508,10 @@ window.__ModuleLoader__.load({
           listHistory: function (workspaceId) { return unwrap("listHistory", [workspaceId]); },
           compareSnapshot: function (workspaceId, revision) { return unwrap("compareSnapshot", [workspaceId, revision]); },
           restoreSnapshot: function (workspaceId, revision, expectedRevision) { return unwrap("restoreSnapshot", [workspaceId, revision, expectedRevision]); },
+          getProgressionTemplates: function () { return unwrap("getProgressionTemplates", []); },
+          saveProgressionTemplate: function (input) { return unwrap("saveProgressionTemplate", [input]); },
+          deleteProgressionTemplate: function (templateId) { return unwrap("deleteProgressionTemplate", [templateId]); },
+          restoreProgressionTemplates: function () { return unwrap("restoreProgressionTemplates", []); },
         } };
       }
       ctx.uiConversation.events.register(writeCommandInputDefinition);

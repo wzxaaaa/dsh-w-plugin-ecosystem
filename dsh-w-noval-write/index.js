@@ -9,7 +9,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, renameSync } from 'node:fs'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import Schema from '@deepseek-ai/schemastery'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -18,18 +18,23 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { dshHomePath, expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
   advanceProject,
+  analyzeProgression,
   analyzeThreads,
   assertProjectShape,
   compareThreadUrgency,
   chapterPatchToolSchema,
+  chapterSequence,
   characterPatchToolSchema,
+  progressionRecordPatchToolSchema,
   defaultProject,
   defaultState,
+  deleteProgressionTemplate,
   describeProjectDiff,
   findChapter,
   linkChapterManuscript,
   mergeProject,
   novelToolContract,
+  normalizeProgressionTemplates,
   normalizeProject,
   normalizeState,
   normalizeWriteLink,
@@ -41,6 +46,9 @@ import {
   projectPrompt,
   relationshipPatchToolSchema,
   removeChapter,
+  removeProgressionRecord,
+  restoreBuiltInProgressionTemplates,
+  saveProgressionTemplate,
   removeThread,
   reorderChapter,
   projectExportDocument,
@@ -50,12 +58,14 @@ import {
   threadsForChapter,
   updateWriteLinkStore,
   upsertChapter,
+  upsertProgressionRecord,
   upsertThread,
   upsertVolume,
   volumePatchToolSchema,
   writeLinkForSession,
 } from './noval-write-core.js'
 import { NovelMutationRoundGuard } from './noval-mutation-guard.js'
+import { searchManuscripts } from './noval-search-core.js'
 import {
   NOVEL_DIR,
   NOVEL_HISTORY_DIR,
@@ -251,6 +261,10 @@ let NovalWriterService = (() => {
   let _listHistory_decorators
   let _compareSnapshot_decorators
   let _restoreSnapshot_decorators
+  let _getProgressionTemplates_decorators
+  let _saveProgressionTemplate_decorators
+  let _deleteProgressionTemplate_decorators
+  let _restoreProgressionTemplates_decorators
   return class NovalWriterService extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0
@@ -354,6 +368,26 @@ let NovalWriterService = (() => {
         kind: 'method', name: 'restoreSnapshot', static: false, private: false,
         access: { has: obj => 'restoreSnapshot' in obj, get: obj => obj.restoreSnapshot }, metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _getProgressionTemplates_decorators = [Remote('getProgressionTemplates')]
+      __esDecorate(this, null, _getProgressionTemplates_decorators, {
+        kind: 'method', name: 'getProgressionTemplates', static: false, private: false,
+        access: { has: obj => 'getProgressionTemplates' in obj, get: obj => obj.getProgressionTemplates }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _saveProgressionTemplate_decorators = [Remote('saveProgressionTemplate')]
+      __esDecorate(this, null, _saveProgressionTemplate_decorators, {
+        kind: 'method', name: 'saveProgressionTemplate', static: false, private: false,
+        access: { has: obj => 'saveProgressionTemplate' in obj, get: obj => obj.saveProgressionTemplate }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _deleteProgressionTemplate_decorators = [Remote('deleteProgressionTemplate')]
+      __esDecorate(this, null, _deleteProgressionTemplate_decorators, {
+        kind: 'method', name: 'deleteProgressionTemplate', static: false, private: false,
+        access: { has: obj => 'deleteProgressionTemplate' in obj, get: obj => obj.deleteProgressionTemplate }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _restoreProgressionTemplates_decorators = [Remote('restoreProgressionTemplates')]
+      __esDecorate(this, null, _restoreProgressionTemplates_decorators, {
+        kind: 'method', name: 'restoreProgressionTemplates', static: false, private: false,
+        access: { has: obj => 'restoreProgressionTemplates' in obj, get: obj => obj.restoreProgressionTemplates }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
@@ -382,6 +416,11 @@ let NovalWriterService = (() => {
       // latest filename → words map per workspace for the prompt.
       this.manuscriptCache = new Map()
       this.manuscriptWords = new Map()
+      // Manuscript text for novel_search, keyed by path and reused while size and mtime match.
+      this.manuscriptTextCache = new Map()
+      // Progression system templates are shared by every book of this profile.
+      this.templatesPath = join(this.root, 'progression-templates.json')
+      this.templateTail = Promise.resolve()
 
       ctx.inject(['workspaceRegistry'], (scope) => {
         this.workspaceRegistry = scope.workspaceRegistry
@@ -879,6 +918,44 @@ let NovalWriterService = (() => {
     }
 
     /** Bring back a snapshot as a new revision, so the restore itself can be undone. */
+    async readProgressionTemplates() {
+      try {
+        return normalizeProgressionTemplates(JSON.parse(await readFile(this.templatesPath, 'utf8')))
+      } catch (error) {
+        if (error && error.code === 'ENOENT') return normalizeProgressionTemplates(undefined)
+        throw error
+      }
+    }
+
+    mutateProgressionTemplates(callback) {
+      const operation = this.templateTail.then(async () => {
+        const next = await callback(await this.readProgressionTemplates())
+        await writeAtomic(this.templatesPath, next.library)
+        return next
+      })
+      this.templateTail = operation.then(() => {}, () => {})
+      return operation
+    }
+
+    async getProgressionTemplates() {
+      return this.readProgressionTemplates()
+    }
+
+    async saveProgressionTemplate(input) {
+      const result = await this.mutateProgressionTemplates(library => saveProgressionTemplate(library, input, { newId: `template-${randomUUID().slice(0, 8)}` }))
+      return { ...result.library, saved: result.template }
+    }
+
+    async deleteProgressionTemplate(templateId) {
+      const result = await this.mutateProgressionTemplates(library => ({ library: deleteProgressionTemplate(library, templateId) }))
+      return result.library
+    }
+
+    async restoreProgressionTemplates() {
+      const result = await this.mutateProgressionTemplates(library => ({ library: restoreBuiltInProgressionTemplates(library) }))
+      return result.library
+    }
+
     async restoreSnapshot(workspaceId, revision, expectedRevision) {
       const workspace = this.workspaceRecord(workspaceId)
       const { project } = await this.readSnapshot(String(workspace.id), revision)
@@ -892,7 +969,14 @@ let NovalWriterService = (() => {
 
     async saveProject(workspaceId, input, expectedRevision) {
       assertProjectShape(input, { partial: false })
-      return this.mutateAs({ actor: 'user', operation: 'panel-save' }, workspaceId, expectedRevision, current => ({ ...current, project: normalizeProject(input) }))
+      // A draft saved by an older panel (restored from before 0.14) has no
+      // progression key; keep the stored ledger instead of wiping it.
+      const keepsProgression = !Object.hasOwn(input, 'progression')
+      return this.mutateAs({ actor: 'user', operation: 'panel-save' }, workspaceId, expectedRevision, current => {
+        const project = normalizeProject(input)
+        if (keepsProgression) project.progression = current.project.progression
+        return { ...current, project }
+      })
     }
 
     async exportProject(workspaceId) {
@@ -920,6 +1004,39 @@ let NovalWriterService = (() => {
       const workspace = this.workspaceRecord(workspaceId)
       const listing = await this.manuscriptStats(workspace)
       return { files: listing.files, truncated: listing.truncated }
+    }
+
+    /** Manuscript files of a novel with their outline chapter, text loaded for search. */
+    async searchableManuscripts(workspace, project) {
+      const listing = await this.manuscriptStats(workspace)
+      const sequence = chapterSequence(project)
+      const byFile = new Map()
+      for (const volume of project.volumes) {
+        for (const chapter of volume.chapters) {
+          if (!chapter.manuscriptFile) continue
+          const entry = sequence.find(item => item.id === chapter.id && item.volumeId === volume.id)
+          if (entry) byFile.set(chapter.manuscriptFile, entry)
+        }
+      }
+      const files = []
+      const seen = new Set()
+      for (const file of listing.files) {
+        if (file.words < 0) continue // larger than the counting limit; not a chapter
+        const path = join(listing.root, file.filename)
+        seen.add(path)
+        const info = await stat(path).catch(() => undefined)
+        if (!info?.isFile()) continue
+        let cached = this.manuscriptTextCache.get(path)
+        if (!cached || cached.size !== info.size || cached.mtimeMs !== info.mtimeMs) {
+          cached = { size: info.size, mtimeMs: info.mtimeMs, text: await readFile(path, 'utf8').catch(() => '') }
+          this.manuscriptTextCache.set(path, cached)
+        }
+        files.push({ filename: file.filename, text: cached.text, chapter: byFile.get(file.filename) || null })
+      }
+      for (const path of this.manuscriptTextCache.keys()) {
+        if (path.startsWith(listing.root) && !seen.has(path)) this.manuscriptTextCache.delete(path)
+      }
+      return { files, truncated: listing.truncated }
     }
 
     async readManuscript(workspaceId, filename) {
@@ -1183,6 +1300,137 @@ let NovalWriterService = (() => {
       }))
 
       this.ctx.tools.register(defineTool({
+        name: 'novel_search',
+        description: '在这本小说已写的正文里搜索原文（人物、物件、地点、台词、承诺、伤势等），按大纲的卷章顺序返回命中，每条带章节、行号和上下文。写新章要用到前文细节时先搜，不要凭记忆写；order: desc 可以先看最近一次出现。只搜这本书文件夹里的 .md/.txt 正文，未关联大纲的文件排在最后。',
+        parameters: {
+          query: { type: 'string', required: true, description: '要找的文字。match 为 any/all 时用空格分隔多个词。' },
+          match: { type: 'string', enum: ['phrase', 'any', 'all'], description: 'phrase（默认）整句匹配；any 任一词；all 同一行里包含全部词。' },
+          from_chapter_id: { type: 'string', description: '可选；只搜这一章及之后（大纲章节 id）。' },
+          to_chapter_id: { type: 'string', description: '可选；只搜到这一章为止（大纲章节 id）。' },
+          order: { type: 'string', enum: ['asc', 'desc'], description: 'asc（默认）从前往后；desc 从最近往前。' },
+          max_results: { type: 'integer', description: '返回的命中行数，默认 40，最多 200。' },
+          context_chars: { type: 'integer', description: '命中前后各带多少字，默认 60，最多 200。' },
+          case_sensitive: { type: 'boolean', description: '区分英文大小写，默认 false。' },
+        },
+        output: toolOutput('正文搜索完成', { includeValue: true }),
+        async execute(args, exec) {
+          const { workspace, state } = await self.modelState(exec)
+          const sequence = chapterSequence(state.project)
+          const indexOf = (value, field) => {
+            const key = typeof value === 'string' ? value.trim() : ''
+            if (!key) return undefined
+            const found = sequence.find(chapter => chapter.id === key)
+            if (!found) throw new Error(`${field} '${key}' is not an outline chapter id; call novel_outline_read`)
+            return found.index
+          }
+          const fromIndex = indexOf(args?.from_chapter_id, 'from_chapter_id')
+          const toIndex = indexOf(args?.to_chapter_id, 'to_chapter_id')
+          const { files, truncated } = await self.searchableManuscripts(workspace, state.project)
+          const result = searchManuscripts(files, {
+            query: args?.query,
+            match: args?.match,
+            order: args?.order,
+            maxResults: args?.max_results,
+            contextChars: args?.context_chars,
+            caseSensitive: args?.case_sensitive,
+            fromIndex,
+            toIndex,
+          })
+          return {
+            workspace: { id: String(workspace.id), title: workspace.title, folder: workspace.folder },
+            ...result,
+            ...(truncated ? { note: 'The novel folder has more files than the listing limit; some files were not searched.' } : {}),
+            ...(result.totalHits === 0 ? { hint: 'No hits. Try a shorter phrase, an alias, or match: any.' } : {}),
+          }
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_progression_read',
+        description: '成长体系：读取这本书的全部体系（如修为境界、炼丹品级、宗门职位、位分、军衔，每套都从低到高排列），以及角色在某一章结束时的状态：各体系里的等级和小阶段、伤势、持有物、已暴露的底牌、最近变化；另有账本警告（跌级/跳级没写原因、引用失效）。写一章前传 as_of_chapter_id 和出场角色的 character_ids；传两个以上角色时，按每套体系返回他们之间的等级差。',
+        parameters: {
+          as_of_chapter_id: { type: 'string', description: '可选；按这一章结束时的状态计算。默认是已开始写作的最后一章。' },
+          character_ids: { type: 'array', items: { type: 'string' }, description: '可选；角色 id 或唯一名字。省略时返回所有有记录的角色。' },
+          include_records: { type: 'boolean', description: '同时返回完整记录账本，默认 false。' },
+        },
+        output: toolOutput('成长体系与角色状态已读取', { includeValue: true }),
+        async execute(args, exec) {
+          const { workspace, state } = await self.modelState(exec)
+          const insight = analyzeProgression(state.project, {
+            asOfChapterId: args?.as_of_chapter_id,
+            characterIds: Array.isArray(args?.character_ids) ? args.character_ids : undefined,
+          })
+          return {
+            workspace: { id: String(workspace.id), title: workspace.title },
+            revision: state.revision,
+            ...insight,
+            ...(args?.include_records === true ? { records: state.project.progression.records } : {}),
+            guidance: insight.active
+              ? [
+                'Keep each character at the tier and stage shown for every system, and at the condition and holdings shown, unless this chapter changes them.',
+                'Beating someone a tier higher needs a cost, a setup or a stated counter. Never reuse an already revealed card as a surprise.',
+                'After the chapter, record every change with novel_progression_record (systemId + tierId for a rise or fall); a tier drop or skip needs a note.',
+                'Edit systems with novel_patch({ progression: { systems: [...] } }), tiers lowest first; novel_progression_templates lists reusable templates.',
+              ]
+              : ['This book does not track progression yet. If the user wants it, set progression.enabled or add a system with novel_patch (novel_progression_templates lists templates).'],
+          }
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_progression_templates',
+        description: '成长体系：列出可复用的体系模板（内置修仙境界、武侠武学层次、西幻魔法位阶、网游段位、后宫位分、现代军衔，以及用户自建的模板）。给新书建体系时，可以照模板写入 progression.systems。模板库由用户在面板里管理，这个工具只读。',
+        parameters: {},
+        output: toolOutput('体系模板已读取', { includeValue: true }),
+        async execute() {
+          return self.readProgressionTemplates()
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_progression_record',
+        description: '成长体系：记录某个角色在某一章的变化。某套体系里升级或降级时传 systemId + tierId（可加 stage）；伤势/状态、持有物、暴露的底牌、得失是角色本身的，不分体系。不传 record_id 就新建一条；传 record_id 就局部修改那一条。角色、章节、体系和等级都必须真实存在。holdings 是本章结束后的完整快照。先 novel_read 并复制 revision。',
+        parameters: {
+          record_id: { type: 'string', description: '可选；要修改的记录 id。' },
+          patch: progressionRecordPatchToolSchema({ required: true }),
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('成长记录已保存'),
+        finalizeContent: mutationFailureContent('progression record'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          let recordId
+          const result = await self.mutateAs({ actor: 'ai', operation: 'novel_progression_record' }, String(workspace.id), expectedRevision, current => {
+            const next = upsertProgressionRecord(current.project, args?.record_id, args?.patch)
+            recordId = next.recordId
+            return { ...current, project: next.project }
+          })
+          return concludeStoppedMutation({ ...result, recordId }, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_progression_remove',
+        description: '成长体系：删除一条成长记录。只在记录写错或用户要求删除时调用。',
+        parameters: {
+          record_id: { type: 'string', required: true },
+          expected_revision: { type: 'integer', required: true },
+        },
+        output: toolOutput('成长记录已删除'),
+        finalizeContent: mutationFailureContent('progression remove'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const expectedRevision = assertExpectedRevision(args?.expected_revision)
+          const result = await self.mutateAs({ actor: 'ai', operation: 'novel_progression_remove' }, String(workspace.id), expectedRevision, current => ({
+            ...current,
+            project: removeProgressionRecord(current.project, args?.record_id),
+          }))
+          return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
         name: 'novel_volume_upsert',
         description: '创建或局部更新一个卷。volume_id 是稳定 ID；不存在则创建，存在则只更新 patch 中提供的字段。',
         parameters: {
@@ -1380,12 +1628,14 @@ let NovalWriterService = (() => {
           }
           assertProjectShape(args?.project, { partial: false })
           const expectedRevision = assertExpectedRevision(args?.expected_revision)
-          // A complete rewrite that leaves threads out must not wipe the ledger.
+          // A complete rewrite that leaves threads or progression out must not wipe those ledgers.
           const keepsThreads = !Object.hasOwn(args.project, 'threads')
+          const keepsProgression = !Object.hasOwn(args.project, 'progression')
           const result = await self.mutateAs({ actor: 'ai', operation: 'novel_write' }, String(workspace.id), expectedRevision, current => {
             const project = normalizeProject(args?.project)
             if (args?.replace_progress !== true) project.progress = current.project.progress
             if (keepsThreads) project.threads = current.project.threads
+            if (keepsProgression) project.progression = current.project.progression
             return { ...current, project }
           })
           if (result.changed === true) self.mutationRoundGuard.record(exec?.agent, 'novel_write')

@@ -43,7 +43,7 @@ test('failed workspace load does not expose or save the previous workspace draft
   const ProjectTab = () => null
   const SectionNav = () => null
   const Panel = vm.runInNewContext(`(${source.slice(start, end).trim()})`, {
-    React, ProjectTab, SectionNav, clone: value => structuredClone(value), failureText: error => error.message,
+    React, ProjectTab, SectionNav, progressionOn: () => false, clone: value => structuredClone(value), failureText: error => error.message,
     window: { confirm: () => true },
   })
   let active = 'A'

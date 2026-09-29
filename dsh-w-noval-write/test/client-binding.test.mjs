@@ -21,7 +21,7 @@ function mountPanel(props) {
     useEffect(fn, deps) { const i = cursor++; if (!slots[i] || !equal(slots[i].deps, deps)) { const prev = slots[i]; slots[i] = { deps }; effects.push(() => { prev?.cleanup?.(); slots[i].cleanup = fn() }) } },
     createElement(type, p, ...children) { return { type, props: p || {}, children: children.flat() } },
   }
-  const stubs = { ProjectTab: () => null, SectionNav: () => null, NovelLibrary: () => null }
+  const stubs = { ProjectTab: () => null, SectionNav: () => null, NovelLibrary: () => null, progressionOn: () => false }
   const Panel = vm.runInNewContext(`(${source.slice(start, end).trim()})`, {
     React, ...stubs, clone: v => structuredClone(v), failureText: e => e.message,
     window: { confirm: () => true, setInterval: () => 0, clearInterval() {}, addEventListener() {}, removeEventListener() {} },

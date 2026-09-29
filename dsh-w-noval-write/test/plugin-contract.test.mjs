@@ -93,3 +93,23 @@ test('stores each novel in its own workspace folder, binds conversations, and ex
 test('the panel never calls a native dialog, which strands keyboard focus in Electron on Windows', () => {
   assert.doesNotMatch(client, /window\.(confirm|alert|prompt)\(\s*[^)\s]/)
 })
+
+test('registers chapter search and the progression tools, and ships the search module', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.ok(manifest.files.includes('noval-search-core.js'))
+  for (const name of ['novel_search', 'novel_progression_read', 'novel_progression_templates', 'novel_progression_record', 'novel_progression_remove']) {
+    assert.match(host, new RegExp(`name: '${name}'`))
+  }
+  assert.match(host, /import \{ searchManuscripts \} from '\.\/noval-search-core\.js'/)
+  // Progression templates are shared by every book and live in the plugin's
+  // own data folder, never in the hot-reloaded profile patch.
+  assert.match(host, /join\(this\.root, 'progression-templates\.json'\)/)
+  for (const method of ['getProgressionTemplates', 'saveProgressionTemplate', 'deleteProgressionTemplate', 'restoreProgressionTemplates']) {
+    assert.match(host, new RegExp(`Remote\\('${method}'\\)`))
+    assert.match(client, new RegExp(`descriptor\\("${method}"`))
+  }
+  // Complete rewrites and panel saves that omit progression keep the ledger.
+  assert.match(host, /const keepsProgression = !Object\.hasOwn\(args\.project, 'progression'\)/)
+  assert.match(host, /const keepsProgression = !Object\.hasOwn\(input, 'progression'\)/)
+  assert.match(client, /tab_progression: "体系"/)
+})
