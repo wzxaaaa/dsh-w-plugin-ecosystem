@@ -422,21 +422,26 @@ let NovalWriterService = (() => {
       this.templatesPath = join(this.root, 'progression-templates.json')
       this.templateTail = Promise.resolve()
 
+      // Both releases compare against the instance captured here: by the time
+      // a cleanup runs, scope.<service> is already undefined, so comparing
+      // against it never matched and a disposed service stayed referenced.
       ctx.inject(['workspaceRegistry'], (scope) => {
-        this.workspaceRegistry = scope.workspaceRegistry
+        const workspaceRegistry = scope.workspaceRegistry
+        this.workspaceRegistry = workspaceRegistry
         scope.effect(() => () => {
-          if (this.workspaceRegistry === scope.workspaceRegistry) this.workspaceRegistry = undefined
+          if (this.workspaceRegistry === workspaceRegistry) this.workspaceRegistry = undefined
         }, 'dsh-w-noval-write: release workspace registry')
       })
       ctx.inject(['knowledgeBase'], (scope) => {
-        this.knowledgeBase = scope.knowledgeBase
+        const knowledgeBase = scope.knowledgeBase
+        this.knowledgeBase = knowledgeBase
         // A conversation linked by /write writes with its book's style corpus,
         // without flipping the knowledge base for every other conversation.
         if (typeof scope.knowledgeBase.registerScopeResolver === 'function') {
           scope.effect(() => scope.knowledgeBase.registerScopeResolver(agent => this.corpusScopeForAgent(agent)), 'dsh-w-noval-write: style corpus binding')
         }
         scope.effect(() => () => {
-          if (this.knowledgeBase === scope.knowledgeBase) this.knowledgeBase = undefined
+          if (this.knowledgeBase === knowledgeBase) this.knowledgeBase = undefined
         }, 'dsh-w-noval-write: release knowledge-base integration')
       })
       ctx.inject(['workspaceRegistry', 'systemPrompt'], (scope) => {

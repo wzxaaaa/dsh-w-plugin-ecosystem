@@ -113,3 +113,13 @@ test('registers chapter search and the progression tools, and ships the search m
   assert.match(host, /const keepsProgression = !Object\.hasOwn\(input, 'progression'\)/)
   assert.match(client, /tab_progression: "体系"/)
 })
+
+test('optional service references are released when the service goes away', () => {
+  // By cleanup time scope.<service> is already undefined, so each release
+  // must compare against the instance captured when it was injected.
+  for (const name of ['workspaceRegistry', 'knowledgeBase']) {
+    assert.match(host, new RegExp(`const ${name} = scope\\.${name}\\r?\\n`))
+    assert.match(host, new RegExp(`if \\(this\\.${name} === ${name}\\) this\\.${name} = undefined`))
+  }
+  assert.doesNotMatch(host, /=== scope\.(workspaceRegistry|knowledgeBase)\)/)
+})

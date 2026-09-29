@@ -155,7 +155,7 @@ test('schema v3 projects migrate in memory to the current schema without losing 
   legacy.title = '旧项目'
   legacy.characters = [{ id: 'hero', name: '林岚', role: '主角' }]
   const state = normalizeState({ schemaVersion: 3, revision: 9, project: legacy })
-  assert.equal(state.schemaVersion, 6)
+  assert.equal(state.schemaVersion, 7)
   assert.deepEqual(state.project.threads, [])
   assert.equal(state.revision, 9)
   assert.equal(state.project.characters[0].role, '主角')
@@ -270,7 +270,7 @@ test('partial patches accept canonical fields and reject empty or schema-driftin
 
 test('schema discovery contract includes an example and automatic retry protocol', () => {
   const contract = novelToolContract()
-  assert.equal(contract.schemaVersion, 6)
+  assert.equal(contract.schemaVersion, 7)
   assert.equal(contract.chapterSchema.properties.events.type, 'array')
   assert.deepEqual(contract.emptyProjectExample, defaultProject())
   assert.ok(contract.retryProtocol.some(line => /novel_schema/.test(line)))

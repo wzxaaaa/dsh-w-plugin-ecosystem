@@ -40,7 +40,7 @@ test('v4 projects gain an empty ledger and threads normalize to canonical defaul
   const legacy = defaultProject()
   delete legacy.threads
   const state = normalizeState({ schemaVersion: 4, revision: 3, project: legacy })
-  assert.equal(state.schemaVersion, 6)
+  assert.equal(state.schemaVersion, 7)
   assert.deepEqual(state.project.threads, [])
 
   const project = normalizeProject({

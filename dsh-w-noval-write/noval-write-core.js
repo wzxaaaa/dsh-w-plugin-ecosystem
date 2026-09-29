@@ -16,7 +16,7 @@ const MAX_TIERS = 60
 const MAX_PROGRESSION_TEMPLATES = 100
 const MAX_PROGRESSION_RECORDS = 3000
 
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 export const PROJECT_EXPORT_FORMAT = 'dsh-w-noval-write/project'
 export const PROJECT_EXPORT_VERSION = 1
 export const WRITE_LINK_STORE_VERSION = 1
@@ -767,7 +767,7 @@ export function defaultProject() {
     relationships: [],
     volumes: [],
     threads: [],
-    progression: { enabled: false, systems: [], records: [] },
+    progression: { enabled: true, systems: [], records: [] },
     world: {
       era: '',
       chronology: '',
@@ -1116,7 +1116,8 @@ function normalizeProgression(value, characterReferences) {
       note: text(item.note),
     }
   }))
-  return { enabled: input.enabled === true, systems, records }
+  // On by default; only an explicit false switches tracking off.
+  return { enabled: input.enabled !== false, systems, records }
 }
 
 export function normalizeProject(value) {
@@ -1222,13 +1223,23 @@ export function defaultState(now = Date.now()) {
   }
 }
 
+/**
+ * Schema 6 wrote `enabled: false` for every book because tracking started
+ * off, so that false was never a choice. Data from before schema 7 turns
+ * tracking on; from schema 7 on, an explicit false is respected.
+ */
+function progressionOnForLegacy(project, schemaVersion) {
+  if (Number(schemaVersion) >= 7 || !isPlainObject(project) || !isPlainObject(project.progression)) return project
+  return { ...project, progression: { ...project.progression, enabled: true } }
+}
+
 export function normalizeState(value, now = Date.now()) {
   const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   return {
     schemaVersion: SCHEMA_VERSION,
     revision: Number.isSafeInteger(input.revision) && input.revision >= 0 ? input.revision : 0,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date(now).toISOString(),
-    project: normalizeProject(input.project),
+    project: normalizeProject(progressionOnForLegacy(input.project, input.schemaVersion)),
   }
 }
 
@@ -1253,7 +1264,7 @@ export function projectFromImportDocument(value) {
   if (Object.hasOwn(value, 'format') || Object.hasOwn(value, 'project')) {
     if (value.format !== PROJECT_EXPORT_FORMAT) throw new TypeError(`unsupported import format: ${String(value.format || '')}`)
     if (value.version !== PROJECT_EXPORT_VERSION) throw new TypeError(`unsupported import version: ${String(value.version)}`)
-    project = value.project
+    project = progressionOnForLegacy(value.project, value.schemaVersion)
   }
   assertProjectShape(project, { partial: false })
   return normalizeProject(project)
@@ -2285,7 +2296,7 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
     const insight = analyzeProgression(project)
     lines.push('', '## Progression systems (tier ladders and character state)')
     if (insight.systems.length === 0) {
-      lines.push('- Progression tracking is on, but no system exists yet. Ask the user which systems the book uses (the panel offers templates) or propose one, then store it in progression.systems with novel_patch, lowest tier first.')
+      lines.push('- No progression system is defined. If the story has ranks, realms or levels worth tracking, you may suggest one once (the panel offers templates); otherwise ignore this.')
     }
     for (const system of insight.systems) {
       lines.push(`- ${system.name} (${system.id})${system.notes ? ` — ${clip(system.notes)}` : ''}; lowest to highest:`)
@@ -2333,7 +2344,7 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
     '- Never say a file was created or provide a path unless novel_save_chapter returned ok: true and verified: true. Report its exact returned path, bytes, and sha256.',
     '- Durable canon and story progress must be written back with the novel tools. Use outline/character/relationship tools for targeted changes instead of replacing arrays.',
     ...(project.threads.length > 0 ? ['- Threads: before a chapter call novel_threads(chapter_id); pay off due/overdue threads or move their payoff; never reveal a truth early. After it, novel_thread_upsert new setups, add_beat echoes, resolved + resolvedChapterId for payoffs.'] : []),
-    ...(isProgressionProject(project) ? [
+    ...(isProgressionProject(project) && project.progression.systems.length > 0 ? [
       '- Progression: before drafting a chapter call novel_progression_read(as_of_chapter_id, character_ids of the cast) and keep each character\'s tier and stage in every system, condition, holdings and already revealed hidden cards consistent. Beating someone a tier higher needs a cost, a setup or a stated counter; never reuse a revealed card as a surprise.',
       '- After the chapter, call novel_progression_record for each change (rise or fall in a system, injury or recovery, hidden card revealed, something gained or spent). A tier drop or a skipped tier needs a note.',
     ] : []),

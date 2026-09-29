@@ -48,27 +48,46 @@ function record(project, patch, recordId = '') {
   return upsertProgressionRecord(project, recordId, patch)
 }
 
-test('old projects gain an empty, switched-off progression', () => {
+test('progression is on by default for new and old books', () => {
+  assert.deepEqual(defaultProject().progression, { enabled: true, systems: [], records: [] })
   const state = normalizeState({ schemaVersion: 5, revision: 3, project: { title: 'old' } })
-  assert.equal(state.schemaVersion, 6)
-  assert.deepEqual(state.project.progression, { enabled: false, systems: [], records: [] })
-  assert.deepEqual(defaultProject().progression, { enabled: false, systems: [], records: [] })
-  assert.equal(progressionActive(state.project), false)
-  assert.doesNotMatch(projectPrompt(state.project), /Progression systems/)
-  assert.doesNotMatch(projectPrompt(state.project), /novel_progression_read/)
+  assert.equal(state.schemaVersion, 7)
+  assert.deepEqual(state.project.progression, { enabled: true, systems: [], records: [] })
+  assert.equal(progressionActive(state.project), true)
 })
 
-test('tracking turns on by switch or by having a system, for any genre', () => {
-  const switched = normalizeProject({ genre: '都市', progression: { enabled: true } })
-  assert.equal(progressionActive(switched), true)
-  assert.match(projectPrompt(switched), /Progression tracking is on, but no system exists yet/)
+test('schema 6 wrote false only as its default, so it migrates to on; from schema 7 an explicit off sticks', () => {
+  const saved = { title: 'x', progression: { enabled: false, systems: [], records: [] } }
+  assert.equal(normalizeState({ schemaVersion: 6, project: saved }).project.progression.enabled, true)
+  assert.equal(normalizeState({ project: saved }).project.progression.enabled, true, 'no version is legacy')
+  assert.equal(normalizeState({ schemaVersion: 7, project: saved }).project.progression.enabled, false)
+  assert.equal(normalizeProject(saved).progression.enabled, false, 'a project object itself keeps an explicit off')
+  const v6Export = { format: 'dsh-w-noval-write/project', version: 1, schemaVersion: 6, project: { ...defaultProject(), progression: { enabled: false, systems: [], records: [] } } }
+  assert.equal(projectFromImportDocument(v6Export).progression.enabled, true)
+  const v7Export = { ...v6Export, schemaVersion: 7 }
+  assert.equal(projectFromImportDocument(v7Export).progression.enabled, false)
+})
+
+test('switched off hides progression entirely; on without systems only offers it once', () => {
+  const off = normalizeProject({ title: 'x', progression: { enabled: false } })
+  assert.equal(progressionActive(off), false)
+  assert.doesNotMatch(projectPrompt(off), /Progression systems/)
+  assert.doesNotMatch(projectPrompt(off), /novel_progression_read/)
+  const empty = normalizeProject({ title: 'x', genre: '都市言情' })
+  assert.match(projectPrompt(empty), /No progression system is defined\. If the story has ranks, realms or levels worth tracking, you may suggest one once/)
+  assert.doesNotMatch(projectPrompt(empty), /novel_progression_read\(as_of_chapter_id/, 'no per-chapter protocol until a system exists')
+})
+
+test('a book with systems gets the ladders and the per-chapter protocol, for any genre', () => {
   const withSystem = book()
-  assert.equal(withSystem.progression.enabled, false)
+  assert.equal(withSystem.progression.enabled, true)
   assert.equal(progressionActive(withSystem), true)
   const prompt = projectPrompt(withSystem)
   assert.match(prompt, /- 修为境界 \(xiuwei\); lowest to highest:/)
   assert.match(prompt, /- 炼丹品级 \(dan\); lowest to highest:/)
   assert.match(prompt, /novel_progression_read\(as_of_chapter_id, character_ids of the cast\)/)
+  const stillShown = normalizeProject({ ...withSystem, progression: { ...withSystem.progression, enabled: false } })
+  assert.equal(progressionActive(stillShown), true, 'existing systems keep it on')
 })
 
 test('tiers normalize with ids from names, unique within their system', () => {

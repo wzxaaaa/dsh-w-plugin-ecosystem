@@ -1798,7 +1798,8 @@ window.__ModuleLoader__.load({
     // ledger folded in outline order. Templates are shared by every book.
     function progressionOn(project) {
       var progression = project.progression || {};
-      return progression.enabled === true || (progression.systems || []).length > 0;
+      // On by default; only an explicit false hides the page.
+      return progression.enabled !== false || (progression.systems || []).length > 0;
     }
 
     function emptyTier(name) {
@@ -3045,7 +3046,7 @@ window.__ModuleLoader__.load({
           set: function (key, value) { updateProject(function (next) { next[key] = value; }); },
           setGenre: function (key, value) { updateProject(function (next) { next.genreProfile[key] = value; }); },
           setGenreFields: function (value) { updateProject(function (next) { next.genreProfile.customFields = value; }); },
-          setProgressionEnabled: function (value) { updateProject(function (next) { next.progression = next.progression || { enabled: false, systems: [], records: [] }; next.progression.enabled = value; }); if (value) setTab("progression"); },
+          setProgressionEnabled: function (value) { updateProject(function (next) { next.progression = next.progression || { enabled: true, systems: [], records: [] }; next.progression.enabled = value; }); if (value) setTab("progression"); },
         });
       } else if (tab === "characters") {
         content = React.createElement(CharacterTab, {
@@ -3169,7 +3170,7 @@ window.__ModuleLoader__.load({
       } else if (tab === "progression" && progressionOn(draft)) {
         content = React.createElement(ProgressionTab, {
           project: draft, t: t, writer: writer,
-          onUpdate: function (mutate) { updateProject(function (next) { next.progression = next.progression || { enabled: false, systems: [], records: [] }; next.progression.systems = next.progression.systems || []; next.progression.records = next.progression.records || []; mutate(next.progression); }); },
+          onUpdate: function (mutate) { updateProject(function (next) { next.progression = next.progression || { enabled: true, systems: [], records: [] }; next.progression.systems = next.progression.systems || []; next.progression.records = next.progression.records || []; mutate(next.progression); }); },
         });
       } else if (tab === "scene") {
         content = React.createElement(SceneTab, {
@@ -3257,8 +3258,8 @@ window.__ModuleLoader__.load({
     var zh = {
       tab_progression: "体系", metaProgression: "{r} 套体系 · {n} 条记录", metaProgressionEmpty: "等级与成长",
       section_progressionSystems: "成长体系", section_progressionRecords: "成长记录",
-      progressionGroup: "成长体系", progressionGroupHint: "追踪角色在各套等级体系里的位置和状态变化，例如修为境界、武学层次、魔法位阶、位分、军衔、段位。开启后工作台多出「体系」页。",
-      progressionToggle: "启用成长体系追踪", progressionOnBySystems: "已启用（这本书已有体系；删掉所有体系后才能关闭）",
+      progressionGroup: "成长体系", progressionGroupHint: "追踪角色在各套等级体系里的位置和状态变化，例如修为境界、武学层次、魔法位阶、位分、军衔、段位。默认开启，工作台里有「体系」页；不需要的书可以关掉，「体系」页就会隐藏。",
+      progressionToggle: "成长体系追踪（默认开启）", progressionOnBySystems: "已启用（这本书已有体系；删掉所有体系后才能关闭）",
       progressionTitle: "成长体系与角色状态", progressionHint: "一本书可以有多套体系（比如修为境界 + 炼丹品级 + 宗门职位），每套从低到高排列。每一章谁升降、受伤、暴露底牌、得失东西，都记成一条记录；角色在任意一章的状态按大纲顺序自动算出来。AI 写章前会读取，写完会补记录。",
       systemsTitle: "这本书的体系", systemsEmpty: "还没有体系。从下面的模板库挑一套，或新建一套空白体系。", addSystem: "新建空白体系",
       unnamedSystem: "未命名体系", systemName: "体系名称", systemNamePlaceholder: "例如：修为境界、炼丹品级、宗门职位", systemNotes: "体系说明",
@@ -3365,8 +3366,8 @@ window.__ModuleLoader__.load({
     var en = {
       tab_progression: "Systems", metaProgression: "{r} systems · {n} records", metaProgressionEmpty: "Ranks & growth",
       section_progressionSystems: "Progression systems", section_progressionRecords: "Progression records",
-      progressionGroup: "Progression systems", progressionGroupHint: "Track where characters stand in each ranking system and how their state changes: cultivation realms, martial tiers, magic ranks, court ranks, military ranks, game tiers. Turning it on adds a Systems page.",
-      progressionToggle: "Track progression", progressionOnBySystems: "On (this book has systems; delete them all to turn it off)",
+      progressionGroup: "Progression systems", progressionGroupHint: "Track where characters stand in each ranking system and how their state changes: cultivation realms, martial tiers, magic ranks, court ranks, military ranks, game tiers. On by default with a Systems page; turn it off for books that do not need it and the page hides.",
+      progressionToggle: "Track progression (on by default)", progressionOnBySystems: "On (this book has systems; delete them all to turn it off)",
       progressionTitle: "Progression systems and character state", progressionHint: "A book can have several systems (e.g. cultivation + alchemy grade + sect rank), each ordered lowest first. Every rise or fall, injury, revealed card or gain and loss is one record per chapter; a character's state at any chapter is folded in outline order. The AI reads it before a chapter and records changes after.",
       systemsTitle: "This book's systems", systemsEmpty: "No systems yet. Pick a template below or add a blank system.", addSystem: "Add blank system",
       unnamedSystem: "Unnamed system", systemName: "System name", systemNamePlaceholder: "e.g. Cultivation, Alchemy grade, Sect rank", systemNotes: "How it works",

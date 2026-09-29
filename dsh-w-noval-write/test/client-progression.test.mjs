@@ -67,7 +67,9 @@ test('the panel analyzer agrees with the core analyzer', () => {
     assert.deepEqual([...view.warnings.map(item => item.code)].sort(), core.warnings.map(item => item.code).sort())
   }
   assert.equal(client.progressionOn(project), true)
-  assert.equal(client.progressionOn(normalizeProject({})), false)
+  assert.equal(client.progressionOn(normalizeProject({})), true, "on by default")
+  assert.equal(client.progressionOn(normalizeProject({ progression: { enabled: false } })), false)
+  assert.equal(client.progressionOn({ characters: [] }), true, "a draft without the key is on")
   assert.equal(client.progressionOn(normalizeProject({ progression: { enabled: true } })), true)
 })
 
