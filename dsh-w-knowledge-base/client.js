@@ -1623,16 +1623,18 @@ window.__ModuleLoader__.load({
       ctx.effect(function () { return ctx.locale.register(NS, dicts); });
       var t = ctx.locale.bind(NS);
 
-      var unmount = await ctx.remote.$mount(TYPERT_REMOTE);
-      ctx.effect(function () { return unmount; }, "dsh-w-knowledge-base: remote");
-
-      // Namespace services are resolved with ctx.get(): dotted property access
-      // does not reliably cross the fiber that mounted them.
-      var knowledgeBase = ctx.get("remote.knowledgeBase");
-      if (!knowledgeBase) throw new Error("dsh-w-knowledge-base: remote.knowledgeBase did not mount");
+      var knowledgeBase;
+      var remoteReady = ctx.remote.$mount(TYPERT_REMOTE).then(function (unmount) {
+        ctx.effect(function () { return unmount; }, "dsh-w-knowledge-base: remote");
+        // Resolve the namespace only after mounting its service.
+        knowledgeBase = ctx.get("remote.knowledgeBase");
+        if (!knowledgeBase) throw new Error("dsh-w-knowledge-base: remote.knowledgeBase did not mount");
+      });
 
       function unwrap(method, args) {
-        return knowledgeBase[method].apply(knowledgeBase, args).then(function (result) {
+        return remoteReady.then(function () {
+          return knowledgeBase[method].apply(knowledgeBase, args);
+        }).then(function (result) {
           if (!result.ok) {
             // Keep the host's code so the panel can map known failures
             // (KB_IMPORT_BINARY, ...) to readable text instead of raw JSON.
@@ -1679,6 +1681,10 @@ window.__ModuleLoader__.load({
           inject: injected,
         }, SettingsSection);
       });
+
+      // Make Settings navigation available while the RPC connection is still
+      // loading. The panel's API awaits remoteReady; sidebar slots are optional.
+      await remoteReady;
 
       // The right sidebar host is optional: these three injections simply stay
       // dormant when dsh-w-right-sidebar is not installed.

@@ -101,6 +101,8 @@ window.__ModuleLoader__.load({
         descriptor("getState"),
         descriptor("requestTestCapture", [parameter("input")]),
         descriptor("submitSpeech", [parameter("input")]),
+        descriptor("createBrowserBridge"),
+        descriptor("stopBrowserBridge"),
       ],
     };
 
@@ -133,6 +135,7 @@ window.__ModuleLoader__.load({
         ? window.crypto.randomUUID()
         : "camera-" + Date.now() + "-" + Math.random().toString(36).slice(2);
       var stream = null;
+      var browserCamera = !!(window.location && window.location.protocol === "dsh-app:");
       var timer = null;
       var voiceRestartTimer = null;
       var voiceFlushTimer = null;
@@ -154,6 +157,7 @@ window.__ModuleLoader__.load({
       hiddenVideo.playsInline = true;
       var state = {
         status: "stopped",
+        browserCamera: browserCamera,
         error: "",
         bridgeError: "",
         deviceLabel: "",
@@ -204,7 +208,10 @@ window.__ModuleLoader__.load({
         if (!next) return;
         var previous = JSON.stringify(state.bridge);
         var value = Object.assign({}, state.bridge, next);
-        if (JSON.stringify(value) !== previous) patch({ bridge: value });
+        if (JSON.stringify(value) !== previous) {
+          if (browserCamera) patch({ bridge: value, status: value.cameraReady ? "ready" : state.status === "ready" ? "stopped" : state.status, deviceLabel: value.deviceLabel || "" });
+          else patch({ bridge: value });
+        }
       }
 
       function closeStream() {
@@ -224,6 +231,16 @@ window.__ModuleLoader__.load({
       }
 
       async function start(deviceId) {
+        if (browserCamera) {
+          patch({ status: "starting", error: "" });
+          try {
+            await api.stopBrowserBridge();
+            var bridge = await api.createBrowserBridge();
+            window.open(bridge.url, "_blank", "noopener,noreferrer");
+            patch({ status: "waiting", error: "" });
+          } catch (error) { patch({ status: "error", error: messageOf(error) }); throw error; }
+          return;
+        }
         var current = ++generation;
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
           patch({ status: "error", error: "当前页面无法使用 navigator.mediaDevices.getUserMedia；请通过 localhost/桌面版打开 DSH。" });
@@ -278,6 +295,7 @@ window.__ModuleLoader__.load({
 
       function stop() {
         closeStream();
+        if (browserCamera) api.stopBrowserBridge().catch(function (error) { patch({ error: messageOf(error) }); });
         patch({ status: "stopped", error: "", deviceLabel: "", streamRevision: state.streamRevision + 1 });
       }
 
@@ -688,7 +706,7 @@ window.__ModuleLoader__.load({
       }
 
       pollOnce();
-      if (state.autoStart) Promise.resolve().then(function () { return start(); }).catch(function () {});
+      if (state.autoStart && !browserCamera) Promise.resolve().then(function () { return start(); }).catch(function () {});
       return {
         snapshot: snapshot,
         subscribe: subscribe,
@@ -748,6 +766,7 @@ window.__ModuleLoader__.load({
       }
 
       var statusText = state.status === "ready" ? t("ready")
+        : state.status === "waiting" ? t("browserWaiting")
         : state.status === "starting" ? t("starting")
           : state.status === "error" ? t("errorStatus") : t("stopped");
       var voiceStatusText = !state.voiceSupported ? t("voiceUnsupported")
@@ -792,8 +811,8 @@ window.__ModuleLoader__.load({
               "div",
               { className: "dcw-preview" },
               React.createElement("video", { ref: videoRef, autoPlay: true, muted: true, playsInline: true }),
-              state.status !== "ready" ? React.createElement("div", { className: "dcw-preview-empty" }, t("previewEmpty")) : null,
-              state.status === "ready" ? React.createElement("span", { className: "dcw-live" }, React.createElement("i"), "LIVE") : null,
+              state.browserCamera || state.status !== "ready" ? React.createElement("div", { className: "dcw-preview-empty" }, state.browserCamera ? (state.bridge.cameraReady ? t("browserReady") : t("browserWaiting")) : t("previewEmpty")) : null,
+              !state.browserCamera && state.status === "ready" ? React.createElement("span", { className: "dcw-live" }, React.createElement("i"), "LIVE") : null,
             ),
             React.createElement(
               "div",
@@ -825,7 +844,7 @@ window.__ModuleLoader__.load({
               React.createElement("span", { className: "dcw-label" }, t("device")),
               React.createElement(
                 "select",
-                { className: "dcw-select", value: state.selectedDeviceId || "", disabled: busy, onChange: onDevice },
+                { className: "dcw-select", value: state.selectedDeviceId || "", disabled: busy || state.browserCamera, onChange: onDevice },
                 React.createElement("option", { value: "" }, t("defaultDevice")),
                 state.devices.map(function (device) { return React.createElement("option", { key: device.deviceId, value: device.deviceId }, device.label); }),
               ),
@@ -833,15 +852,15 @@ window.__ModuleLoader__.load({
             React.createElement(
               "div",
               { className: "dcw-actions" },
-              React.createElement("button", { type: "button", className: "dcw-button", "data-primary": "true", disabled: busy || state.status === "starting", onClick: onStart }, state.status === "ready" ? t("restart") : t("start")),
+              React.createElement("button", { type: "button", className: "dcw-button", "data-primary": "true", disabled: busy || state.status === "starting", onClick: onStart }, state.browserCamera ? t("browserOpen") : state.status === "ready" ? t("restart") : t("start")),
               React.createElement("button", { type: "button", className: "dcw-button", "data-danger": "true", disabled: state.status === "stopped", onClick: runtime.stop }, t("stop")),
             ),
-            React.createElement(
+            !state.browserCamera ? React.createElement(
               "label",
               { className: "dcw-toggle" },
               React.createElement("input", { type: "checkbox", checked: state.autoStart, onChange: function (event) { runtime.setAutoStart(event.currentTarget.checked); } }),
               React.createElement("span", null, React.createElement("strong", null, t("autoStart")), React.createElement("span", null, t("autoStartHint"))),
-            ),
+            ) : React.createElement("p", { className: "dcw-hint" }, t("browserHint")),
             React.createElement("p", { className: "dcw-hint" }, state.deviceLabel ? t("using") + state.deviceLabel : t("modelHint")),
             state.error ? React.createElement("p", { className: "dcw-error" }, state.error) : null,
             state.bridgeError ? React.createElement("p", { className: "dcw-error" }, t("bridgeError") + state.bridgeError) : null,
@@ -968,6 +987,10 @@ window.__ModuleLoader__.load({
         restart: "重新连接",
         stop: "停止",
         autoStart: "启动 DSH 时自动连接",
+        browserOpen: "打开浏览器授权",
+        browserWaiting: "等待浏览器摄像头连接",
+        browserReady: "摄像头已在浏览器中连接；点击测试可查看截图。",
+        browserHint: "官方桌面版暂未开放视频权限。点击上方按钮，在本机浏览器页面授权并保持页面打开；可在那里选择摄像头。启动 Harness 时不会自动打开浏览器。",
         autoStartHint: "浏览器记住许可后，插件会在页面加载时直接恢复摄像头。",
         using: "当前设备：",
         modelHint: "摄像头连接后，无需打开此设置页；模型仍可随时截图。",
@@ -1025,6 +1048,10 @@ window.__ModuleLoader__.load({
         restart: "Reconnect",
         stop: "Stop",
         autoStart: "Connect when DSH starts",
+        browserOpen: "Authorize in browser",
+        browserWaiting: "Waiting for the browser camera",
+        browserReady: "Camera connected in your browser. Test capture to view a snapshot.",
+        browserHint: "The official desktop shell does not allow video permissions yet. Open the local browser page, authorize and select your camera, and keep the page open. Harness startup will not open it automatically.",
         autoStartHint: "After the browser remembers permission, the plugin reconnects when the page loads.",
         using: "Current device: ",
         modelHint: "The settings page may be closed after connection; model captures remain available.",
@@ -1080,6 +1107,8 @@ window.__ModuleLoader__.load({
         submit: function (input) { return unwrap("submit", [input]); },
         fail: function (input) { return unwrap("fail", [input]); },
         submitSpeech: function (input) { return unwrap("submitSpeech", [input]); },
+        createBrowserBridge: function () { return unwrap("createBrowserBridge", []); },
+        stopBrowserBridge: function () { return unwrap("stopBrowserBridge", []); },
       }, ctx.sessions);
       ctx.effect(function () { return runtime.dispose; }, "dsh-w-camera-watch: camera runtime");
       var t = ctx.locale.bind(NS);

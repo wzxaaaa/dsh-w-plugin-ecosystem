@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-camera-watch",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Live webcam snapshots plus automatic Goal speech transcription and message relay for DeepSeek Harness.",
   "type": "module",
   "main": "index.js",
@@ -16,6 +16,9 @@
     "client.js",
     "camera-watch-core.js",
     "windows-speech.js",
+    "browser-camera-bridge.js",
+    "browser-camera.js",
+    "browser-camera.html",
     "cordis.patch.yml",
     "README.md"
   ],

@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-persona",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "DeepSeek Harness persona manager with reusable persona templates and an optional hidden four-message conversation preset.",
   "type": "module",
   "main": "index.js",
@@ -20,6 +20,7 @@
     "dialogue-preset-core.js",
     "persona-patch-core.js",
     "persona-template-core.js",
+    "persona-profile-migration.js",
     "cordis.patch.yml"
   ],
   "license": "MIT",

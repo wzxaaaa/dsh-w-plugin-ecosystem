@@ -2,7 +2,7 @@
 
 ## 官方 Harness 兼容
 
-`0.5.1` 已适配官方 Windows Harness `0.2.0-rc.2`。兼容官方严格 RPC 编解码器及独立 UI slots 服务，笔记创建、保存、读取和检索已验证。
+`0.5.2` 已适配官方 Windows Harness `0.2.0-rc.2`。在远程连接完成前注册独立的 **设置 → 知识库** 入口，面板加载会等待连接；不依赖 right-sidebar。右侧工具栏只是另一个可选入口。安装更新后请完全退出并重启 Harness，刷新已打开的设置导航。
 
 官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
 
@@ -100,7 +100,7 @@ id 用 UTC 时间生成，所以文件名天然按时间排序；标题只用于
 ```powershell
 npm test
 pnpm pack --config.ignore-scripts=true
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.5.1.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.5.2.tgz
 ```
 
 装好以后重启桌面版（或重新启动 `dsh web`）；重装同一个版本号之前记得先 `remove`，否则 pnpm 不会重新解包。

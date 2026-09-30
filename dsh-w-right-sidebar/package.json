@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-right-sidebar",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "A reusable right-side sidebar shell for DeepSeek Harness W-series features.",
   "type": "module",
   "main": "index.js",

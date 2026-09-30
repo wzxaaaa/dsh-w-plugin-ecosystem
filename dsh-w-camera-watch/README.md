@@ -2,7 +2,11 @@
 
 ## 官方 Harness 兼容
 
-`0.2.3` 已适配官方 Windows Harness `0.2.0-rc.2`。兼容官方当前会话选择，目标监督不会误绑定后台会话。摄像头截图已在官方 Host 中使用测试视频流验证；本机麦克风与 Windows 语音包仍依赖设备环境。
+`0.2.4` 支持官方 Windows Harness `0.2.0-rc.2` 的本机浏览器摄像头连接。该版官方桌面壳只授权音频，会拒绝视频权限；插件通过系统浏览器授权摄像头，并经仅监听 `127.0.0.1` 的临时连接交给原有 `camera_capture` 工具，无需改动官方程序。
+
+官方桌面版使用 **设置 → 摄像头监督 → 打开浏览器授权**，在新页面点击 **启动并授权**。浏览器页面可以选择设备，请保持页面打开。返回 Harness 后可以测试截图或让模型调用摄像头。浏览器关闭、Harness 停止连接或退出后，摄像头会关闭。启动 Harness 不会自动打开授权页。
+
+连接使用随机凭据并检查来源，请求有大小限制；截图只在 Harness 请求时传送，后续模型调用沿用 Harness 配置。本机麦克风与 Windows 语音包仍依赖设备环境。旧 Web 版保留页面内预览和自动连接。
 
 官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
 
@@ -37,7 +41,7 @@
 ## 安装
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-camera-watch-0.2.3.tgz
+dsh plugin --profile web add .\dsh-w-camera-watch-0.2.4.tgz
 ```
 
 安装后重启桌面版或重新启动当前 `dsh web` 服务。

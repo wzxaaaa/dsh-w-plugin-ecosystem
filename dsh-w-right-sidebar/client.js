@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
     var React = require("react");
 
     var CSS = [
-      ".dshwrs-root{position:fixed;top:0;right:0;bottom:0;z-index:2147482990;width:56px;box-sizing:border-box;overflow:hidden;pointer-events:none;color:var(--dsw-alias-label-primary,#1f2329);font-family:var(--dsw-font-ui,ui-sans-serif,system-ui,sans-serif);transition:width var(--ds-transition-duration-slow,240ms) var(--ds-ease-in-out,cubic-bezier(.2,.8,.2,1))}",
+      ".dshwrs-root{position:fixed;top:max(var(--dshwrs-top,0px),var(--dsh-frame-top-clearance,0px));right:0;bottom:var(--dshwrs-bottom,0px);z-index:40;width:56px;box-sizing:border-box;overflow:hidden;pointer-events:none;color:var(--dsw-alias-label-primary,#1f2329);font-family:var(--dsw-font-ui,ui-sans-serif,system-ui,sans-serif);transition:width var(--ds-transition-duration-slow,240ms) var(--ds-ease-in-out,cubic-bezier(.2,.8,.2,1))}",
       ".dshwrs-root[data-open]{width:356px}",
       "[data-dshwrs-right-sidebar]{width:max(0px,calc(100% - var(--dshwrs-right-sidebar-width,56px))) !important;box-sizing:border-box;transition:width var(--ds-transition-duration-slow,240ms) var(--ds-ease-in-out,cubic-bezier(.2,.8,.2,1))}",
       ".dshwrs-page{width:100%;min-width:0;height:100%;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;background:var(--dsw-alias-bg-layer-1,#fff);border-left:1px solid var(--dsw-alias-border-l2,#d7dbe2);box-shadow:-8px 0 28px rgba(0,0,0,.12);pointer-events:auto}",
@@ -272,24 +272,36 @@ window.__ModuleLoader__.load({
       requestBetterPanel(bridge, ctx, true, 8);
     }
 
-    function useFrameReservation(open) {
+    function useFrameReservation(open, rootRef) {
       React.useLayoutEffect(function () {
         if (typeof document === "undefined") return undefined;
         var overlay = document.querySelector("[data-shell-overlay]");
         var frame = overlay && overlay.parentElement;
         if (!frame) return undefined;
+        var updateBounds = function () {
+          if (!rootRef.current) return;
+          var rect = frame.getBoundingClientRect();
+          rootRef.current.style.setProperty("--dshwrs-top", Math.max(0, rect.top) + "px");
+          rootRef.current.style.setProperty("--dshwrs-bottom", Math.max(0, window.innerHeight - rect.bottom) + "px");
+        };
+        updateBounds();
+        var boundsObserver = typeof ResizeObserver === "function" ? new ResizeObserver(updateBounds) : null;
+        if (boundsObserver) boundsObserver.observe(frame);
+        window.addEventListener("resize", updateBounds);
         var previousAttribute = frame.getAttribute("data-dshwrs-right-sidebar");
         var previousWidth = frame.style.getPropertyValue("--dshwrs-right-sidebar-width");
         var previousPriority = frame.style.getPropertyPriority("--dshwrs-right-sidebar-width");
         frame.setAttribute("data-dshwrs-right-sidebar", open ? "open" : "closed");
         frame.style.setProperty("--dshwrs-right-sidebar-width", open ? "min(356px, calc(100vw - 56px))" : "56px");
         return function () {
+          if (boundsObserver) boundsObserver.disconnect();
+          window.removeEventListener("resize", updateBounds);
           if (previousAttribute === null) frame.removeAttribute("data-dshwrs-right-sidebar");
           else frame.setAttribute("data-dshwrs-right-sidebar", previousAttribute);
           if (previousWidth) frame.style.setProperty("--dshwrs-right-sidebar-width", previousWidth, previousPriority);
           else frame.style.removeProperty("--dshwrs-right-sidebar-width");
         };
-      }, [open]);
+      }, [open, rootRef]);
     }
 
     function RightSidebarHost(props) {
@@ -310,7 +322,8 @@ window.__ModuleLoader__.load({
       var activeTitle = titleSlot[0];
       var setActiveTitle = titleSlot[1];
       var better = useBetterSidebarBridge(props.ctx);
-      useFrameReservation(open);
+      var rootRef = React.useRef(null);
+      useFrameReservation(open, rootRef);
       React.useEffect(function () {
         if (open && better && better.panelOpen) requestBetterPanel(better, props.ctx, false, 4);
       }, [open, better && better.panelOpen, better && better.service, better && better.mode, props.ctx]);
@@ -395,7 +408,7 @@ window.__ModuleLoader__.load({
       ) : null;
       var headerBack = mode === "page" && origin === "list";
       var headerTitle = mode === "page" && activeTitle ? activeTitle : t("title");
-      return React.createElement("div", { className: "dshwrs-root", "data-open": open || undefined },
+      return React.createElement("div", { ref: rootRef, className: "dshwrs-root", "data-open": open || undefined },
         open ? React.createElement("section", { className: "dshwrs-page", "aria-label": t("title") },
           React.createElement("header", { className: "dshwrs-page-header" },
             React.createElement("button", {

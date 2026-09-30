@@ -5,12 +5,12 @@
 | 插件 | 适配版本 | 安装包 |
 | --- | --- | --- |
 | assistant-refresh | 0.2.6 | [安装包](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.6.tgz) |
-| camera-watch | 0.2.3 | [安装包](./dsh-w-camera-watch/dsh-w-camera-watch-0.2.3.tgz) |
+| camera-watch | 0.2.4 | [安装包](./dsh-w-camera-watch/dsh-w-camera-watch-0.2.4.tgz) |
 | deslop | 0.1.1 | [安装包](./dsh-w-deslop/dsh-w-deslop-0.1.1.tgz) |
-| knowledge-base | 0.5.1 | [安装包](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.5.1.tgz) |
+| knowledge-base | 0.5.2 | [安装包](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.5.2.tgz) |
 | noval-write | 0.14.2 | [安装包](./dsh-w-noval-write/dsh-w-noval-write-0.14.2.tgz) |
-| persona | 0.3.6 | [安装包](./dsh-w-persona/dsh-w-persona-0.3.6.tgz) |
-| right-sidebar | 0.8.2 | [安装包](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.8.2.tgz) |
+| persona | 0.3.7 | [安装包](./dsh-w-persona/dsh-w-persona-0.3.7.tgz) |
+| right-sidebar | 0.8.3 | [安装包](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.8.3.tgz) |
 | wallpaper | 0.2.1 | [安装包](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.1.tgz) |
 
 ## 安装
@@ -31,8 +31,15 @@
 - 人设隐藏对话预设的四条消息已在本地模型适配器中核对；壁纸图片与模糊程度也已验证页面重载后恢复。
 - 摄像头使用浏览器测试视频流，经过真实 Host 桥接验证截图。未启用用户真实摄像头或麦克风；Windows 本地语音识别仍需本机设备和语音包。
 
+2026-09-30 桌面窗口补充验证：
+
+- right-sidebar `0.8.3` 遵守官方标题栏留白，顶部按钮可点击，设置窗口覆盖工具栏。
+- persona `0.3.7` 在 desktop 首次读取时自动导入同一 Harness home 下旧 web 的缺失人设文件，保留原文件和备份；已有 desktop 数据、官方默认提示词和之后删除的模板均受保护。
+- knowledge-base `0.5.2` 在等待 RPC 连接时先注册独立设置入口；面板请求等待连接完成，右侧栏为可选入口。官方桌面 profile 移除 right-sidebar 后，设置中的知识库面板仍能正常打开。
+- camera-watch `0.2.4` 绕过桌面壳未开放的视频权限：用户主动打开本机浏览器授权页，画面经随机凭据保护的回环连接交给原截图工具。Windows 官方壳的视频请求实际返回 `NotAllowedError`；Edge 测试摄像头经过授权页、Host 和桌面设置完整返回 **1280×720 JPEG**，停止后关闭视频流。没有修改官方程序。
+
 测试没有使用用户的模型密钥，重答采用仅位于临时 profile 的本地模型适配器。该测试适配器不包含在任何插件安装包中。
 
-八个插件加管理器的单元测试共 **279 项通过**；所有受影响的 Host/Client 入口通过语法检查，`git diff --check` 通过。逐个解包核对安装包内容与最终源码一致。
+上一轮八个插件加管理器的单元测试共 **279 项通过**。本轮受影响的四个插件加管理器回归测试共 **150 项通过**；Host/Client 入口通过语法检查，`git diff --check` 通过。四个新版本经官方 CLI 在全新隔离 desktop profile 安装，并通过桌面窗口和浏览器桥接验证；逐个解包核对安装包内容与最终源码一致。
 
-用户正式 `desktop` profile 保持不变。通过管理器刷新仓库目录即可下载发布版本；安装完成后重启官方 Harness。
+通过管理器刷新仓库目录即可下载发布版本；安装完成后完全退出并重启官方 Harness。人设插件会自动导入同一 Harness home 下旧 web profile 的缺失人设文件并备份，无需手工复制模板。

@@ -1,6 +1,7 @@
 /** Host service and model-facing camera tool for dsh-w-camera-watch. */
 
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { createBrowserCameraBridge } from './browser-camera-bridge.js'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { randomUUID } from 'node:crypto'
@@ -180,6 +181,8 @@ let CameraWatchService = (() => {
       decorate('requestTestCapture', _requestTestCapture_decorators)
       _submitSpeech_decorators = [Remote('submitSpeech')]
       decorate('submitSpeech', _submitSpeech_decorators)
+      decorate('createBrowserBridge', [Remote('createBrowserBridge')])
+      decorate('stopBrowserBridge', [Remote('stopBrowserBridge')])
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
@@ -189,13 +192,16 @@ let CameraWatchService = (() => {
       super(ctx, 'cameraWatch')
       __runInitializers(this, _instanceExtraInitializers)
       this.broker = new CaptureBroker()
+      this.disposed = false
       this.acceptedSpeechIds = new Set()
       this.nativeSpeech = new Map()
       const nativeSpeechTimer = setInterval(() => this.pruneNativeSpeech(), 2_000)
       this.ctx.effect(() => () => {
+        this.disposed = true
         clearInterval(nativeSpeechTimer)
         for (const record of this.nativeSpeech.values()) record.recognizer.stop()
         this.nativeSpeech.clear()
+        this.browserBridge?.close()
         this.broker.dispose()
       }, 'dsh-w-camera-watch: dispose broker and speech recognizers')
       this.ctx.effect(() => this.ctx.systemPrompt.section({
@@ -237,6 +243,24 @@ let CameraWatchService = (() => {
 
     getState() {
       return this.broker.state()
+    }
+
+    async createBrowserBridge() {
+      // Serialize concurrent clicks, retaining one bridge per Host.
+      this.browserBridgePromise ??= createBrowserCameraBridge(this.broker).then(bridge => {
+        if (this.disposed) { bridge.close(); throw new Error('Camera Watch has been disposed') }
+        this.browserBridge = bridge
+        return bridge
+      }).catch(error => { this.browserBridgePromise = undefined; throw error })
+      return { url: (await this.browserBridgePromise).url }
+    }
+
+    async stopBrowserBridge() {
+      const bridge = await this.browserBridgePromise
+      bridge?.close()
+      this.browserBridge = undefined
+      this.browserBridgePromise = undefined
+      return { stopped: true }
     }
 
     async requestTestCapture(input) {

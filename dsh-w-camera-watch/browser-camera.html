@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Harness 摄像头连接</title>
+<style>body{margin:0;background:#f5f7fa;color:#202632;font:16px/1.6 system-ui,sans-serif}main{max-width:760px;margin:40px auto;padding:24px;background:white;border-radius:18px}h1{font-size:25px;margin:0 0 8px}p{color:#687181}video{width:100%;aspect-ratio:16/9;background:#131a24;border-radius:12px;margin:16px 0;object-fit:contain}button,select{font:inherit;padding:10px 16px;border:1px solid #dce1ea;border-radius:8px;margin:4px}button{cursor:pointer;background:#4275ef;color:white}button:disabled{opacity:.5;cursor:default}#stop{background:white;color:#c33}#status{white-space:pre-wrap}footer{font-size:14px;color:#687181}@media(max-width:800px){main{margin:12px;padding:20px}}</style>
+<script src="/camera.js" defer></script></head><body><main>
+<h1>Harness 摄像头连接</h1>
+<p>官方桌面版暂未开放视频权限。请在此浏览器页面授权摄像头，并保持页面打开。画面通过本机连接提供给 Harness 的摄像头工具。</p>
+<label for="device">视频来源</label><select id="device"><option value="">系统默认摄像头</option></select>
+<button id="start">启动并授权</button><button id="stop" disabled>停止</button>
+<div id="status" role="status">等待授权。此页面不申请麦克风权限。</div>
+<video id="preview" autoplay playsinline muted></video>
+<footer>仅在 Harness 请求截图时传送图片；后续模型调用沿用 Harness 的配置。停止连接或退出 Harness 后，摄像头将关闭。</footer>
+</main></body></html>

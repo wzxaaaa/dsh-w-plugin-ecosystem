@@ -50,6 +50,7 @@ import {
   savePersonaTemplate,
 } from './persona-template-core.js'
 import { personaFromConfig, rewritePersonaAssembly, updatePersonaPatch } from './persona-patch-core.js'
+import { migrateLegacyPersona } from './persona-profile-migration.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -336,6 +337,14 @@ let PersonaManagerGateway = (() => {
       return join(this.profileDir(), TEMPLATE_STATE_FILE)
     }
 
+    ensureLegacyState() {
+      this._legacyMigration ??= migrateLegacyPersona(this.profileDir()).catch(error => {
+        this._legacyMigration = undefined
+        throw error
+      })
+      return this._legacyMigration
+    }
+
     /** Find the loader entry of the `system-prompt` row (any expanded id form). */
     findPromptEntry() {
       for (const entry of this.ctx.loader.entries()) {
@@ -365,6 +374,7 @@ let PersonaManagerGateway = (() => {
 
     /** The override state file: undefined when absent, else `{ persona: string | null }`. */
     async readOverrideState() {
+      await this.ensureLegacyState()
       let raw
       try {
         raw = await readFile(this.overrideStatePath(), 'utf8')
@@ -440,6 +450,7 @@ let PersonaManagerGateway = (() => {
     }
 
     async readDialoguePreset() {
+      await this.ensureLegacyState()
       let raw
       try {
         raw = await readFile(this.dialogueStatePath(), 'utf8')
@@ -452,6 +463,7 @@ let PersonaManagerGateway = (() => {
     }
 
     async readTemplateLibrary() {
+      await this.ensureLegacyState()
       let raw
       try {
         raw = await readFile(this.templateStatePath(), 'utf8')

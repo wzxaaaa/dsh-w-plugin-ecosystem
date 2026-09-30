@@ -21,6 +21,7 @@ for (const name of ['assistant-refresh', 'camera-watch', 'deslop', 'knowledge-ba
     const mounted = new Error('stop after mounting the actual descriptors')
     await assert.rejects(plugin.apply({
       effect() {},
+      slots: { inject() {} },
       locale: { bind: () => () => '', register() {} },
       remote: { $mount: async value => { contribution = value; throw mounted } },
     }), error => error === mounted)
