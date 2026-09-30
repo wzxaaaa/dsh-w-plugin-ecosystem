@@ -40,6 +40,7 @@ window.__ModuleLoader__.load({
       ".dshwcp-row{display:flex;align-items:center;justify-content:space-between;gap:10px}",
       ".dshwcp-status{font-size:12px;color:var(--dsw-alias-label-secondary)}",
       ".dshwcp-hint{font-size:12px;color:var(--dsw-alias-label-tertiary);line-height:18px;margin:0}",
+      ".dshwcp-description{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
       ".dshwcp-hint-applied{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);border:1px solid color-mix(in srgb,var(--dsw-alias-state-success-primary) 25%,transparent);border-radius:8px;padding:8px 12px;color:var(--dsw-alias-state-success-primary);animation:dshwcp-fadeout 2s ease forwards}",
       ".dshwcp-empty{font-size:13px;color:var(--dsw-alias-label-tertiary);margin:0}",
       ".dshwcp-toggle{position:relative;width:40px;height:22px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);cursor:pointer;padding:0;flex:none}",
@@ -63,8 +64,13 @@ window.__ModuleLoader__.load({
 
     // ---- Remote contribution (client face of the Host `customPlugins` service) ----
     var passthrough = { parse: function (v) { return v; } };
+    // New Typert runtimes materialize schemas lazily through create(). Keep
+    // schema for the older runtime used by source installations.
+    function jsonCodec() {
+      return { mode: "strict", typeSymbol: "json", schema: passthrough, create: function () { return passthrough; } };
+    }
     function parameter(name) {
-      return { name: name, wire: name, source: "json", codec: { mode: "strict", typeSymbol: "json", schema: passthrough } };
+      return { name: name, wire: name, source: "json", codec: jsonCodec() };
     }
     function descriptor(method, parameters) {
       return {
@@ -74,7 +80,7 @@ window.__ModuleLoader__.load({
         method: method,
         invocation: { kind: "direct" },
         parameters: parameters || [],
-        result: { mode: "strict", typeSymbol: "json", schema: passthrough },
+        result: jsonCodec(),
       };
     }
     var TYPERT_REMOTE = {
@@ -83,6 +89,8 @@ window.__ModuleLoader__.load({
         descriptor("listCustom"),
         descriptor("setEnabled", [parameter("entryId"), parameter("enabled")]),
         descriptor("requestUpdate", [parameter("entryId")]),
+        descriptor("requestInstall", [parameter("moduleName")]),
+        descriptor("refreshRepository"),
         descriptor("beginInstall", [parameter("fileName"), parameter("size")]),
         descriptor("appendInstallChunk", [parameter("uploadId"), parameter("index"), parameter("base64")]),
         descriptor("cancelInstall", [parameter("uploadId")]),
@@ -141,10 +149,17 @@ window.__ModuleLoader__.load({
     }
 
     // ---- tab component ----
+    function DownloadIcon() {
+      return React.createElement("svg", { viewBox: "0 0 24 24", width: 15, height: 15, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
+        React.createElement("path", { d: "M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4" }));
+    }
+
     function CustomPluginsTab(props) {
       var list = props.list;
       var toggle = props.toggle;
       var requestUpdate = props.requestUpdate;
+      var requestInstall = props.requestInstall;
+      var refreshRepository = props.refreshRepository;
       var beginInstall = props.beginInstall;
       var appendInstallChunk = props.appendInstallChunk;
       var cancelInstall = props.cancelInstall;
@@ -157,6 +172,12 @@ window.__ModuleLoader__.load({
       var stateSlot = React.useState({ status: "loading", entries: [] });
       var state = stateSlot[0];
       var setState = stateSlot[1];
+      var repositorySlot = React.useState("");
+      var repositoryWarning = repositorySlot[0];
+      var setRepositoryWarning = repositorySlot[1];
+      var refreshingSlot = React.useState(false);
+      var refreshing = refreshingSlot[0];
+      var setRefreshing = refreshingSlot[1];
       var busySlot = React.useState({});
       var busy = busySlot[0];
       var setBusy = busySlot[1];
@@ -207,6 +228,7 @@ window.__ModuleLoader__.load({
           function (snapshot) {
             if (!mountedRef.current || requestId !== loadSeq.current) return;
             setState({ status: "ready", entries: snapshot.entries });
+            setRepositoryWarning(snapshot.repositoryWarning || "");
           },
           function (err) {
             if (!mountedRef.current || requestId !== loadSeq.current) return;
@@ -235,6 +257,21 @@ window.__ModuleLoader__.load({
       }, [cancelInstall]);
 
       React.useEffect(function () { load(false); }, [load]);
+
+      async function onRefreshRepository() {
+        if (refreshing || installBusyRef.current) return;
+        setRefreshing(true);
+        loadSeq.current += 1;
+        try {
+          var snapshot = await refreshRepository();
+          if (mountedRef.current) {
+            setState({ status: "ready", entries: snapshot.entries });
+            setRepositoryWarning(snapshot.repositoryWarning || "");
+          }
+        } catch (error) {
+          if (mountedRef.current) setRepositoryWarning(error.message || String(error));
+        } finally { if (mountedRef.current) setRefreshing(false); }
+      }
 
       function setBusyEntry(entryId, value) {
         busyEntries.current[entryId] = value;
@@ -305,7 +342,7 @@ window.__ModuleLoader__.load({
             setUpdateEntry(entry.entryId, {
               stage: "updated",
               kind: "success",
-              message: t("updateInstalled") + (updatedVersion ? " " + updatedVersion : "") + "。" + t("restartRequired"),
+              message: t("updateInstalled") + (updatedVersion ? " " + updatedVersion : "") + "。" + (result.requiresRestart ? t("restartRequired") : t("applied")) + (result.warnings && result.warnings.length ? "。" + t("activationWarning") : ""),
             });
             setState(function (prev) {
               return {
@@ -336,6 +373,23 @@ window.__ModuleLoader__.load({
           installBusyRef.current = false;
           updateBusyEntries.current[entry.entryId] = false;
         }
+      }
+
+      async function onRepositoryInstall(entry) {
+        if (installBusyRef.current) return;
+        installBusyRef.current = true;
+        setUpdateEntry(entry.entryId, { stage: "checking", kind: "", message: t("repositoryInstalling") });
+        try {
+          var result = await requestInstall(entry.moduleName);
+          if (!mountedRef.current) return;
+          var message = t("installed") + " " + entry.moduleName + "。" + (result.requiresRestart ? t("restartRequired") : t("applied"));
+          if (result.warnings && result.warnings.length) message += "。" + t("activationWarning");
+          setHint({ text: message, kind: "success" });
+          setUpdateEntry(entry.entryId, { stage: "installed", kind: "success", message: message });
+          load(true);
+        } catch (error) {
+          if (mountedRef.current) setUpdateEntry(entry.entryId, { stage: "error", kind: "error", message: t("repositoryInstallFailed") + " " + (error.message || String(error)) });
+        } finally { installBusyRef.current = false; }
       }
 
       async function installFile(file) {
@@ -385,7 +439,10 @@ window.__ModuleLoader__.load({
           tickerRef.current = undefined;
           if (!mountedRef.current) return;
           var label = result.version ? result.packageName + "@" + result.version : result.packageName;
-          setInstall({ stage: "success", percent: 100, fileName: file.name, message: t("installed") + " " + label + "\u3002" + t("restartRequired"), kind: "success" });
+          var message = t("installed") + " " + label + "。" + (result.requiresRestart ? t("restartRequired") : t("applied"));
+          if (result.warnings && result.warnings.length) message += "。" + t("activationWarning");
+          setInstall({ stage: "success", percent: 100, fileName: file.name, message: message, kind: "success" });
+          load(true);
         } catch (error) {
           if (tickerRef.current !== undefined) window.clearInterval(tickerRef.current);
           tickerRef.current = undefined;
@@ -478,6 +535,10 @@ window.__ModuleLoader__.load({
             )
           : null,
         state.status === "loading" ? React.createElement("p", { className: "dshwcp-empty" }, t("loading")) : null,
+        React.createElement("div", { className: "dshwcp-row" },
+          React.createElement("span", { className: "dshwcp-hint" }, t("repositoryTitle")),
+          React.createElement("button", { type: "button", className: "dshwcp-icon", title: t("repositoryRefresh"), "aria-label": t("repositoryRefresh"), disabled: refreshing || installBusy, onClick: function () { void onRefreshRepository(); } }, React.createElement(UpdateIcon, null))),
+        repositoryWarning ? React.createElement("p", { className: "dshwcp-hint", role: "status" }, t("repositoryUnavailable") + " " + repositoryWarning) : null,
         state.status === "error"
           ? React.createElement(
               "div",
@@ -506,7 +567,8 @@ window.__ModuleLoader__.load({
               { className: "dshwcp-list" },
               state.entries.map(function (entry) {
                 var on = entry.enabled;
-                var hasSettings = settingsByKey[entry.moduleName] !== undefined;
+                var installed = entry.installed !== false;
+                var hasSettings = installed && settingsByKey[entry.moduleName] !== undefined;
                 var isOpen = openKey === entry.moduleName;
                 var updateState = updates[entry.entryId];
                 var updateBusy = updateState && updateState.stage === "checking";
@@ -524,14 +586,14 @@ window.__ModuleLoader__.load({
                         "button",
                         {
                           type: "button",
-                          className: "dshwcp-icon dshwcp-update",
+                          className: "dshwcp-icon " + (installed ? "dshwcp-update" : "dshwcp-download"),
                           "data-busy": updateBusy ? "true" : "false",
-                          "aria-label": t("updateAria"),
-                          title: t("updateAria"),
-                          disabled: installBusy,
-                          onClick: function () { void onUpdate(entry); },
+                          "aria-label": t(installed ? "updateAria" : "downloadAria"),
+                          title: t(installed ? "updateAria" : entry.downloadable === false ? "archiveUnavailable" : "downloadAria"),
+                          disabled: installBusy || (!installed && entry.downloadable === false),
+                          onClick: function () { if (installed) void onUpdate(entry); else void onRepositoryInstall(entry); },
                         },
-                        React.createElement(UpdateIcon, null),
+                        React.createElement(installed ? UpdateIcon : DownloadIcon, null),
                       ),
                       hasSettings
                         ? React.createElement(
@@ -549,7 +611,8 @@ window.__ModuleLoader__.load({
                         : null,
                     ),
                   ),
-                  React.createElement("div", { className: "dshwcp-id" }, entry.entryId + (entry.version ? " · " + entry.version : "")),
+                  React.createElement("div", { className: "dshwcp-id" }, (installed ? entry.entryId : t("notInstalled")) + (entry.version ? " · " + entry.version : "")),
+                  !installed && entry.description ? React.createElement("p", { className: "dshwcp-hint dshwcp-description", title: entry.description }, entry.description) : null,
                   updateState
                     ? React.createElement(
                         "p",
@@ -562,7 +625,7 @@ window.__ModuleLoader__.load({
                         updateState.message,
                       )
                     : null,
-                  React.createElement(
+                  installed ? React.createElement(
                     "div",
                     { className: "dshwcp-row" },
                     React.createElement("span", { className: "dshwcp-status" }, on ? t("enabled") : t("disabled")),
@@ -573,13 +636,13 @@ window.__ModuleLoader__.load({
                         className: "dshwcp-toggle",
                         "data-on": on ? "true" : "false",
                         "aria-pressed": on,
-                        disabled: busy[entry.entryId] === true || installBusy,
+                        disabled: entry.protected === true || busy[entry.entryId] === true || installBusy,
                         "aria-label": on ? t("disableAria") : t("enableAria"),
                         onClick: function () { onToggle(entry); },
                       },
                       React.createElement("span", { className: "dshwcp-knob" }),
                     ),
-                  ),
+                  ) : null,
                   isOpen && hasSettings && typeof renderSlot === "function"
                     ? React.createElement(
                         "div",
@@ -600,6 +663,11 @@ window.__ModuleLoader__.load({
 
     var dicts = {
       zh: {
+        repositoryTitle: "W 系列插件仓库", repositoryRefresh: "刷新仓库插件列表",
+        repositoryUnavailable: "仓库暂时无法连接；显示缓存或随插件提供的目录，已安装插件仍可管理。",
+        downloadAria: "下载并安装此插件", notInstalled: "未安装", archiveUnavailable: "仓库尚未发布此版本的安装包",
+        repositoryInstalling: "正在下载并通过官方 Harness 安装…", repositoryInstallFailed: "安装失败：",
+        activationWarning: "安装已完成，但部分插件未成功加载，请查看官方插件页的错误。",
         tab: "\u81ea\u5b9a\u4e49\u63d2\u4ef6",
         loading: "\u6b63\u5728\u8bfb\u53d6\u81ea\u5b9a\u4e49\u63d2\u4ef6...",
         error: "\u64cd\u4f5c\u5931\u8d25\u3002",
@@ -627,6 +695,11 @@ window.__ModuleLoader__.load({
         archiveTypeError: "\u53ea\u652f\u6301 .tgz\u3001.tar.gz \u548c .zip \u63d2\u4ef6\u538b\u7f29\u5305\u3002",
       },
       en: {
+        repositoryTitle: "W plugin repository", repositoryRefresh: "Refresh repository plugins",
+        repositoryUnavailable: "Repository unavailable; showing the cached or bundled catalogue. Installed plugins remain manageable.",
+        downloadAria: "Download and install this plugin", notInstalled: "Not installed", archiveUnavailable: "No archive is published for this version",
+        repositoryInstalling: "Downloading and installing through Harness…", repositoryInstallFailed: "Installation failed:",
+        activationWarning: "Installation completed, but some plugins failed to load. Check the official plugin page.",
         tab: "Custom plugins",
         loading: "Reading custom plugins...",
         error: "Operation failed.",
@@ -676,6 +749,8 @@ window.__ModuleLoader__.load({
           list: function () { return unwrap("listCustom", []); },
           toggle: function (entryId, enabled) { return unwrap("setEnabled", [entryId, enabled]); },
           requestUpdate: function (entryId) { return unwrap("requestUpdate", [entryId]); },
+          requestInstall: function (moduleName) { return unwrap("requestInstall", [moduleName]); },
+          refreshRepository: function () { return unwrap("refreshRepository", []); },
           beginInstall: function (fileName, size) { return unwrap("beginInstall", [fileName, size]); },
           appendInstallChunk: function (uploadId, index, base64) { return unwrap("appendInstallChunk", [uploadId, index, base64]); },
           cancelInstall: function (uploadId) { return unwrap("cancelInstall", [uploadId]); },

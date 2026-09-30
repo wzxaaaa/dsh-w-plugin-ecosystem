@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-wallpaper",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Full-workspace image and video wallpaper plugin for DeepSeek Harness with persistent local media, configurable blur, and video speed.",
   "type": "module",
   "main": "index.js",
@@ -28,7 +28,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots"
       ],
       "platform": "web"
     }

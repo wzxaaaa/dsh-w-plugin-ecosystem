@@ -335,8 +335,12 @@ window.__ModuleLoader__.load({
     }
 
     var passthrough = { parse: function (value) { return value; } };
+    // Lazy schema factory for official Harness; schema keeps older source builds compatible.
+    function jsonCodec() {
+      return { mode: "strict", typeSymbol: "json", schema: passthrough, create: function () { return passthrough; } };
+    }
     function parameter(name) {
-      return { name: name, wire: name, source: "json", codec: { mode: "strict", typeSymbol: "json", schema: passthrough } };
+      return { name: name, wire: name, source: "json", codec: jsonCodec() };
     }
     function descriptor(method, parameters) {
       return {
@@ -346,7 +350,7 @@ window.__ModuleLoader__.load({
         method: method,
         invocation: { kind: "direct" },
         parameters: parameters || [],
-        result: { mode: "strict", typeSymbol: "json", schema: passthrough },
+        result: jsonCodec(),
       };
     }
     var TYPERT_REMOTE = {
@@ -2706,7 +2710,13 @@ window.__ModuleLoader__.load({
       var writer = props.writer;
       var useSessions = typeof props.useSessions === "function" ? props.useSessions : function (selector) { return selector({ current: null }); };
       var useWorkspaces = typeof props.useWorkspaces === "function" ? props.useWorkspaces : function (selector) { return selector({ items: [], recentWorkspaceId: null }); };
-      var sessionId = useSessions(function (value) { return value.current == null ? null : String(value.current); });
+      var sessionId = useSessions(function (value) {
+        if (value.current != null) return String(value.current);
+        var selected = Object.values(value.byId || {}).find(function (row) {
+          return row.retainedBy && row.retainedBy.mainView > 0;
+        });
+        return selected ? String(selected.id) : null;
+      });
       var workspace = useWorkspaces(function (value) {
         var items = Array.isArray(value.items) ? value.items : [];
         var current = sessionId ? items.find(function (item) {

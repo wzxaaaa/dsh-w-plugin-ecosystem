@@ -2,7 +2,10 @@
 
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { CaptureBroker, decodedBase64Bytes } from './camera-watch-core.js'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { randomUUID } from 'node:crypto'
+import { CaptureBroker, decodedBase64Bytes, normalizeNativeVoiceRequest, normalizeSpeechSubmission } from './camera-watch-core.js'
+import { WindowsSpeechRecognizer } from './windows-speech.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -157,6 +160,7 @@ let CameraWatchService = (() => {
   let _fail_decorators
   let _getState_decorators
   let _requestTestCapture_decorators
+  let _submitSpeech_decorators
   return class CameraWatchService extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0
@@ -174,16 +178,26 @@ let CameraWatchService = (() => {
       decorate('getState', _getState_decorators)
       _requestTestCapture_decorators = [Remote('requestTestCapture')]
       decorate('requestTestCapture', _requestTestCapture_decorators)
+      _submitSpeech_decorators = [Remote('submitSpeech')]
+      decorate('submitSpeech', _submitSpeech_decorators)
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
-    static inject = ['tools', 'systemPrompt']
+    static inject = ['tools', 'systemPrompt', 'goals', 'typert']
 
     constructor(ctx) {
       super(ctx, 'cameraWatch')
       __runInitializers(this, _instanceExtraInitializers)
       this.broker = new CaptureBroker()
-      this.ctx.effect(() => () => this.broker.dispose(), 'dsh-w-camera-watch: dispose broker')
+      this.acceptedSpeechIds = new Set()
+      this.nativeSpeech = new Map()
+      const nativeSpeechTimer = setInterval(() => this.pruneNativeSpeech(), 2_000)
+      this.ctx.effect(() => () => {
+        clearInterval(nativeSpeechTimer)
+        for (const record of this.nativeSpeech.values()) record.recognizer.stop()
+        this.nativeSpeech.clear()
+        this.broker.dispose()
+      }, 'dsh-w-camera-watch: dispose broker and speech recognizers')
       this.ctx.effect(() => this.ctx.systemPrompt.section({
         name: 'dsh-w-camera-watch:guidance',
         order: 158,
@@ -191,6 +205,7 @@ let CameraWatchService = (() => {
           '你可以使用 camera_capture 随时查看当前浏览器连接的摄像头画面。',
           '当用户要求监督学习、工作、动作或环境，并建立了 Goal 时，在每个需要核实真实进度的 Goal 轮次调用 camera_capture；不要只凭用户描述猜测，也不要在未调用工具时声称已经看到。',
           '截图是工具结果中的真实图片。根据画面给出简洁、具体的观察；无法看清时应再次截图或直接说明看不清。',
+          '活动 Goal 期间，浏览器还可能把用户现场说话的最终语音转写作为新的 user 消息自动送入当前会话；应把它视为用户刚刚说的话并据此调整监督过程。',
           '如果当前工具模式只允许直接调用 run_code，请在 run_code 中调用并等待 tools.camera_capture({ question: ... })。',
         ].join('\n'),
       }), 'dsh-w-camera-watch: prompt guidance')
@@ -199,8 +214,17 @@ let CameraWatchService = (() => {
       })
     }
 
-    poll(input) {
-      return this.broker.poll(input)
+    async poll(input) {
+      const result = this.broker.poll(input)
+      const clientId = String(input?.clientId || '').trim()
+      let nativeSpeech
+      try {
+        nativeSpeech = await this.syncNativeSpeech(clientId, input?.nativeVoice)
+      } catch (error) {
+        this.stopNativeSpeech(clientId)
+        nativeSpeech = { status: 'error', error: error.message || String(error), culture: input?.nativeVoice?.language || '' }
+      }
+      return { ...result, nativeSpeech }
     }
 
     submit(input) {
@@ -218,6 +242,120 @@ let CameraWatchService = (() => {
     async requestTestCapture(input) {
       const question = input && typeof input.question === 'string' ? input.question : '设置页测试截图'
       return await this.broker.request(question)
+    }
+
+    async resolveAgent(sessionId) {
+      const lookup = this.ctx.typert.lookups.get('agent')
+      if (!lookup) throw new Error('agent lookup is unavailable')
+      const agent = await lookup.resolve(sessionId)
+      if (!agent) throw new Error(`session "${sessionId}" is unavailable`)
+      return agent
+    }
+
+    nativeSpeechSnapshot(record) {
+      return record?.state ?? { status: 'stopped', error: '', culture: '' }
+    }
+
+    stopNativeSpeech(clientId) {
+      const record = this.nativeSpeech.get(clientId)
+      if (!record) return
+      this.nativeSpeech.delete(clientId)
+      record.recognizer.stop()
+    }
+
+    pruneNativeSpeech() {
+      const threshold = Date.now() - 5_000
+      for (const [clientId, record] of this.nativeSpeech) {
+        if (record.seenAt < threshold) this.stopNativeSpeech(clientId)
+      }
+    }
+
+    async syncNativeSpeech(clientId, input) {
+      const request = normalizeNativeVoiceRequest(input)
+      if (!request) {
+        this.stopNativeSpeech(clientId)
+        return this.nativeSpeechSnapshot()
+      }
+      const agent = await this.resolveAgent(request.sessionId)
+      const goal = this.ctx.goals.get(agent)
+      if (!goal || goal.phase !== 'active' || goal.id !== request.goalId) {
+        this.stopNativeSpeech(clientId)
+        return { status: 'stopped', error: '', culture: request.language }
+      }
+      const key = [request.sessionId, request.goalId, request.language, request.restartToken].join('\u0000')
+      const existing = this.nativeSpeech.get(clientId)
+      if (existing?.key === key) {
+        existing.seenAt = Date.now()
+        return this.nativeSpeechSnapshot(existing)
+      }
+      this.stopNativeSpeech(clientId)
+      const record = {
+        key,
+        request,
+        seenAt: Date.now(),
+        state: { status: 'starting', error: '', culture: request.language },
+        recognizer: null,
+      }
+      const recognizer = new WindowsSpeechRecognizer({
+        language: request.language,
+        onState: state => {
+          if (this.nativeSpeech.get(clientId) === record) record.state = state
+        },
+        onResult: result => {
+          if (this.nativeSpeech.get(clientId) !== record) return
+          void this.acceptSpeech({
+            sessionId: request.sessionId,
+            speechId: randomUUID(),
+            text: result.text,
+            language: result.culture,
+            recognizedAt: new Date().toISOString(),
+          }, { engine: 'windows-local', confidence: result.confidence, expectedGoalId: request.goalId }).catch(error => {
+            if (this.nativeSpeech.get(clientId) === record) record.state = { ...record.state, status: 'error', error: error.message || String(error) }
+          })
+        },
+      })
+      record.recognizer = recognizer
+      this.nativeSpeech.set(clientId, record)
+      recognizer.start()
+      return this.nativeSpeechSnapshot(record)
+    }
+
+    async acceptSpeech(speech, metadata = {}) {
+      if (this.acceptedSpeechIds.has(speech.speechId)) {
+        return { accepted: false, reason: 'duplicate', sessionId: speech.sessionId }
+      }
+      const agent = await this.resolveAgent(speech.sessionId)
+      const goal = this.ctx.goals.get(agent)
+      if (!goal || goal.phase !== 'active' || (metadata.expectedGoalId && goal.id !== metadata.expectedGoalId)) {
+        return { accepted: false, reason: 'no-active-goal', sessionId: speech.sessionId }
+      }
+      this.acceptedSpeechIds.add(speech.speechId)
+      while (this.acceptedSpeechIds.size > 512) {
+        const oldest = this.acceptedSpeechIds.values().next().value
+        if (oldest === undefined) break
+        this.acceptedSpeechIds.delete(oldest)
+      }
+      agent.followup(createUserMessage({
+        content: [{ type: 'text', text: speech.text }],
+        source: {
+          kind: 'user',
+          dshWCameraWatchSpeech: {
+            version: 2,
+            speechId: speech.speechId,
+            recognizedAt: speech.recognizedAt,
+            language: speech.language,
+            goalId: goal.id,
+            engine: metadata.engine || 'browser',
+            ...(Number.isFinite(metadata.confidence) ? { confidence: metadata.confidence } : {}),
+          },
+        },
+      }))
+      return { accepted: true, reason: '', sessionId: speech.sessionId }
+    }
+
+    async submitSpeech(input) {
+      const speech = normalizeSpeechSubmission(input)
+      return await this.acceptSpeech(speech, { engine: 'browser' })
     }
   }
 })()

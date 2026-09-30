@@ -5,7 +5,7 @@ window.__ModuleLoader__.load({
     var exports = module.exports;
     var React = require("react");
     var primitives = require("@deepseek-ai/dsh-client-ui-primitives");
-    var IconRefreshOutline16 = primitives.IconRefreshOutline16;
+    var IconRefresh = primitives.IconRefreshOutlineRegular || primitives.IconRefreshOutline16;
     var Tooltip = primitives.Tooltip;
 
     var NS = "assistantRefresh";
@@ -59,7 +59,12 @@ window.__ModuleLoader__.load({
     function currentSessionId() {
       if (appCtx === null) return undefined;
       var state = appCtx.sessions.list.getSnapshot();
-      return state === undefined ? undefined : state.current;
+      if (state === undefined) return undefined;
+      if (state.current != null) return state.current;
+      var selected = Object.values(state.byId || {}).find(function (row) {
+        return row.retainedBy && row.retainedBy.mainView > 0;
+      });
+      return selected ? selected.id : undefined;
     }
 
     function cssEscapeKey(key) {
@@ -99,8 +104,12 @@ window.__ModuleLoader__.load({
     }
 
     var passthrough = { parse: function (value) { return value; } };
+    // Lazy schema factory for official Harness; schema keeps older source builds compatible.
+    function jsonCodec() {
+      return { mode: "strict", typeSymbol: "json", schema: passthrough, create: function () { return passthrough; } };
+    }
     function parameter(name) {
-      return { name: name, wire: name, source: "json", codec: { mode: "strict", typeSymbol: "json", schema: passthrough } };
+      return { name: name, wire: name, source: "json", codec: jsonCodec() };
     }
     function descriptor(method, parameters) {
       return {
@@ -110,7 +119,7 @@ window.__ModuleLoader__.load({
         method: method,
         invocation: { kind: "direct" },
         parameters: parameters || [],
-        result: { mode: "strict", typeSymbol: "json", schema: passthrough },
+        result: jsonCodec(),
       };
     }
     var TYPERT_REMOTE = {
@@ -162,7 +171,7 @@ window.__ModuleLoader__.load({
             "aria-disabled": unavailable || undefined,
             "data-unavailable": unavailable || undefined,
             onClick: onClick,
-          }, React.createElement(IconRefreshOutline16))),
+          }, React.createElement(IconRefresh, { size: 16 }))),
         failure !== null && React.createElement("span", { className: "dshwar-live", "aria-live": "polite" }, props.t("failed")),
       );
     }

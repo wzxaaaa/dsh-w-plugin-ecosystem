@@ -50,8 +50,12 @@ window.__ModuleLoader__.load({
     }
 
     var passthrough = { parse: function (value) { return value; } };
+    // Lazy schema factory for official Harness; schema keeps older source builds compatible.
+    function jsonCodec() {
+      return { mode: "strict", typeSymbol: "json", schema: passthrough, create: function () { return passthrough; } };
+    }
     function parameter(name) {
-      return { name: name, wire: name, source: "json", codec: { mode: "strict", typeSymbol: "json", schema: passthrough } };
+      return { name: name, wire: name, source: "json", codec: jsonCodec() };
     }
     function descriptor(method, parameters) {
       return {
@@ -61,7 +65,7 @@ window.__ModuleLoader__.load({
         method: method,
         invocation: { kind: "direct" },
         parameters: parameters || [],
-        result: { mode: "strict", typeSymbol: "json", schema: passthrough },
+        result: jsonCodec(),
       };
     }
     var TYPERT_REMOTE = {

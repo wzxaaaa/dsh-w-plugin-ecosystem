@@ -1,5 +1,11 @@
 # dsh-w-wallpaper
 
+## 官方 Harness 兼容
+
+`0.2.1` 已适配官方 Windows Harness `0.2.0-rc.2`。显式加载官方独立 UI slots 服务，图片应用、模糊设置和配置页可用。
+
+官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
+
 DeepSeek Harness 全工作区壁纸插件。选择任意尺寸的本地图片或视频后，插件会以 `cover` 方式铺满整个 Harness 窗口，包括左侧工作区、对话区域和右侧详情区域。视频会静音、循环、自动播放，并支持 `0.25x` 到 `4x` 播放速度；图片和视频均支持 `0px` 到 `40px` 的可调模糊程度。
 
 ## 功能
@@ -35,7 +41,7 @@ DeepSeek Harness 全工作区壁纸插件。选择任意尺寸的本地图片或
 ```powershell
 npm test
 npm pack --ignore-scripts
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-wallpaper-0.2.0.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-wallpaper-0.2.1.tgz
 ```
 
 覆盖安装后重启 DeepSeek Harness Desktop。

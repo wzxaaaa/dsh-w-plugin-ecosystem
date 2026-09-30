@@ -1,5 +1,11 @@
 # dsh-w-noval-write
 
+## 官方 Harness 兼容
+
+`0.14.2` 已适配官方 Windows Harness `0.2.0-rc.2`。兼容官方会话、工作区和 UI slots 服务；工作台从当前会话解析所属工作区，创建绑定、保存与重载已验证。
+
+官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
+
 DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `noval` 拼写；界面名称为“小说写作 / Novel Writing”。
 
 ## 核心语义
@@ -168,7 +174,7 @@ $DSH_HOME/noval-write/session-links.json
 3. `dsh-w-noval-write`
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-noval-write-0.13.1.tgz
+dsh plugin --profile web add .\dsh-w-noval-write-0.14.2.tgz
 ```
 
 缺少知识库时，项目工作台与 AI 数据工具不受影响，`/write` 会明确报告知识库未挂载。

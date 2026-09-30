@@ -1,4 +1,5 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import * as sessionProtocol from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import {
   collectSessionHideKeys,
@@ -6,8 +7,9 @@ import {
   sessionEvents,
   PLUGIN_ID,
   TRIGGER_PROMPT,
-  TRIGGER_SUMMARY,
   triggerHideKey,
+  regenerationSource,
+  isRegenerationSource,
 } from './refresh-core.js'
 
 const PREPARE_TIMEOUT_MS = 60_000
@@ -22,9 +24,7 @@ function errorMessage(error) {
 
 function triggerMatches(message, record) {
   if (sameId(message?.id, record.triggerId)) return true
-  return message?.source?.kind === 'plugin'
-    && message.source.plugin === PLUGIN_ID
-    && message.source.summary === TRIGGER_SUMMARY
+  return isRegenerationSource(message?.source)
 }
 
 const remoteInitializers = []
@@ -94,12 +94,7 @@ class AssistantRefreshService extends TypertRemoteService {
 
     const trigger = createUserMessage({
       content: [{ type: 'text', text: TRIGGER_PROMPT }],
-      source: {
-        kind: 'plugin',
-        plugin: PLUGIN_ID,
-        form: 'notice',
-        summary: TRIGGER_SUMMARY,
-      },
+      source: regenerationSource(sessionProtocol.SESSION_FORMAT_VERSION),
     })
     const started = Promise.withResolvers()
     const record = {

@@ -1,5 +1,11 @@
 # dsh-w-persona
 
+## 官方 Harness 兼容
+
+`0.3.6` 已适配官方 Windows Harness `0.2.0-rc.2`。兼容官方严格 RPC 编解码器及 UI slots 服务；对话预设按当前会话格式使用消息来源，保存和重新进入设置已验证。
+
+官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
+
 DeepSeek Harness 人设（人格）管理插件：在「设置」左侧 **Agent预设** 下面新增一个「**人设**」页面。
 
 ## 功能
@@ -24,7 +30,7 @@ DeepSeek Harness 人设（人格）管理插件：在「设置」左侧 **Agent�
 
 ```powershell
 pnpm pack
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-persona-0.3.5.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-persona-0.3.6.tgz
 ```
 
 重启桌面版（或 `dsh web`）后，设置 → 左侧「人设」即可使用。

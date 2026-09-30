@@ -1,5 +1,11 @@
 # dsh-w-deslop
 
+## 官方 Harness 兼容
+
+`0.1.1` 已适配官方 Windows Harness `0.2.0-rc.2`。兼容官方严格 RPC 编解码器及独立 UI slots 服务，设置中的文本扫描可用。
+
+官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
+
 DeepSeek Harness 的「去 AI 味」插件，是 `dsh-w-noval-write`（小说写作）的配套插件。
 
 规则综合自几个公开的去 AI 味 skill：网文专用的 story-deslop（oh-story）、Humanizer-zh、de-ai-flavor。
@@ -58,7 +64,7 @@ DeepSeek Harness 的「去 AI 味」插件，是 `dsh-w-noval-write`（小说写
 
 ```powershell
 pnpm pack
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-deslop-0.1.0.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-deslop-0.1.1.tgz
 ```
 
 重启桌面版后生效。卸载：

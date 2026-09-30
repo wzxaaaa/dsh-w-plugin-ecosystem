@@ -1,6 +1,12 @@
 # dsh-w-right-sidebar
 
-`dsh-w-right-sidebar` 是 W 系列插件共用的右侧 Sidebar 宿主（当前版本 `0.8.1`）：
+## 官方 Harness 兼容
+
+`0.8.2` 已适配官方 Windows Harness `0.2.0-rc.2`。显式加载官方独立 UI slots 服务，右侧工具栏可打开小说工作台和知识库。
+
+官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
+
+`dsh-w-right-sidebar` 是 W 系列插件共用的右侧 Sidebar 宿主（当前版本 `0.8.2`）：
 
 - 点击顶部展开按钮时，先显示已挂载插件的工具卡片列表。
 - 点击工具卡片后进入对应功能页面，左上角返回按钮回到工具列表。
@@ -45,7 +51,7 @@ Better Sidebar 自身的标签页和布局仍按对话保存；兼容层不会�
 
 ```powershell
 pnpm pack
-dsh plugin --profile web add ./dsh-w-right-sidebar-0.8.1.tgz
+dsh plugin --profile web add ./dsh-w-right-sidebar-0.8.2.tgz
 ```
 
 建议先安装本插件，再安装依赖它的右侧功能插件。

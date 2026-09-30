@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-right-sidebar",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "A reusable right-side sidebar shell for DeepSeek Harness W-series features.",
   "type": "module",
   "main": "index.js",
@@ -26,7 +26,8 @@
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots"
       ],
       "platform": "web"
     }

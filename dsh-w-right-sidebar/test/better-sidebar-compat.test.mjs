@@ -6,7 +6,7 @@ const client = await readFile(new URL('../client.js', import.meta.url), 'utf8')
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 
 test('ships the 0.19 native-sidebar bridge without applying legacy panel CSS', () => {
-  assert.equal(manifest.version, '0.8.1')
+  assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-slots'))
   assert.match(client, /features\.indexOf\("fileIcons"\)/)
   assert.match(client, /ctx\.get\("sidebarRight"\)/)
   assert.match(client, /sidebar\.isExpanded\(\)/)

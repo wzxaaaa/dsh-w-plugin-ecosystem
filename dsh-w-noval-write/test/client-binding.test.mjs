@@ -39,7 +39,7 @@ const find = (node, predicate) => {
   return null
 }
 
-test('an unbound conversation sees only the novel library, a bound one its own novel', async () => {
+for (const mode of ['legacy', 'official']) test(`${mode}: an unbound conversation sees only the novel library, a bound one its own novel`, async () => {
   let binding = null
   const reads = []
   const writer = {
@@ -49,7 +49,10 @@ test('an unbound conversation sees only the novel library, a bound one its own n
   }
   const { render, stubs } = mountPanel({
     writer, t: key => key,
-    useSessions: select => select({ current: 's1' }),
+    useSessions: select => select(mode === 'legacy' ? { current: 's1' } : { byId: {
+      other: { id: 'other', retainedBy: { sidebar: 1 } },
+      s1: { id: 's1', retainedBy: { mainView: 1 } },
+    } }),
     useWorkspaces: select => select({ items: [{ workspaceId: 'w1', title: 'W', sessionIds: ['s1'] }] }),
   })
 

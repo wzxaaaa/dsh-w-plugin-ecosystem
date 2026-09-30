@@ -31,7 +31,7 @@ test('compares stable and prerelease plugin versions without downgrading', () =>
 
 test('publishes the per-card online update protocol on host and client', () => {
   assert.match(host, /Remote\('requestUpdate'\)/)
-  assert.match(host, /raw\.githubusercontent\.com\/wzxaaaa\/dsh-w-plugin-ecosystem\/main/)
+  assert.match(host, /downloadRepositoryArchive/)
   assert.match(host, /registry\.npmjs\.org/)
   assert.match(host, /installArchive/)
   assert.match(client, /descriptor\("requestUpdate"/)

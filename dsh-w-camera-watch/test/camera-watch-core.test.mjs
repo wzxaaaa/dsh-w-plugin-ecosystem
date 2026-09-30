@@ -5,7 +5,9 @@ import {
   CaptureBroker,
   decodedBase64Bytes,
   normalizeCapturePayload,
+  normalizeNativeVoiceRequest,
   normalizePollInput,
+  normalizeSpeechSubmission,
 } from '../camera-watch-core.js'
 
 const ONE_PIXEL_JPEG = '/9j/2Q=='
@@ -27,6 +29,39 @@ test('normalizes browser presence and capture payloads', () => {
   assert.equal(capture.mediaType, 'image/jpeg')
   assert.deepEqual(decodedBase64Bytes(capture.data), Buffer.from([0xff, 0xd8, 0xff, 0xd9]))
   assert.throws(() => normalizeCapturePayload({ data: 'not base64!', width: 1, height: 1 }), /canonical base64/)
+})
+
+test('normalizes durable goal speech submissions', () => {
+  assert.deepEqual(normalizeSpeechSubmission({
+    sessionId: ' session-1 ',
+    speechId: ' speech-1 ',
+    text: '  我已经写完第一题了  ',
+    language: ' zh-CN ',
+    recognizedAt: '2026-09-12T00:00:00.000Z',
+  }), {
+    sessionId: 'session-1',
+    speechId: 'speech-1',
+    text: '我已经写完第一题了',
+    language: 'zh-CN',
+    recognizedAt: '2026-09-12T00:00:00.000Z',
+  })
+  assert.throws(() => normalizeSpeechSubmission({ sessionId: 's', speechId: 'x', text: ' ' }), /non-empty/)
+})
+
+test('normalizes Windows native Goal voice heartbeats', () => {
+  assert.deepEqual(normalizeNativeVoiceRequest({
+    enabled: true,
+    sessionId: 'session-1',
+    goalId: 'goal-1',
+    language: 'zh-CN',
+    restartToken: 2,
+  }), {
+    sessionId: 'session-1',
+    goalId: 'goal-1',
+    language: 'zh-CN',
+    restartToken: 2,
+  })
+  assert.equal(normalizeNativeVoiceRequest({ enabled: false }), null)
 })
 
 test('rejects capture requests when no ready browser page exists', async () => {

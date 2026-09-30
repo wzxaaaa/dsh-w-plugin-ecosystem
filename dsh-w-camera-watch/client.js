@@ -43,6 +43,14 @@ window.__ModuleLoader__.load({
       ".dcw-toggle span{display:block;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:17px}",
       ".dcw-hint{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.6}",
       ".dcw-error{margin:0;padding:9px 10px;border-radius:9px;background:color-mix(in srgb,var(--dsw-alias-state-danger-primary,#d64545) 10%,transparent);color:var(--dsw-alias-state-danger-primary,#d64545);font-size:12px;line-height:1.5;word-break:break-word}",
+      ".dcw-voice{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,.55fr);gap:16px;align-items:start}",
+      ".dcw-voice-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}",
+      ".dcw-voice-copy{margin:4px 0 0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.6}",
+      ".dcw-voice-status{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:11px;font-weight:700;white-space:nowrap}",
+      ".dcw-voice-status i{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-label-quaternary,#aaa)}",
+      ".dcw-voice-status[data-live=true] i{background:#ff4d4f;box-shadow:0 0 0 4px rgba(255,77,79,.13)}",
+      ".dcw-transcript{min-height:52px;margin:12px 0 0;padding:11px 12px;border-radius:10px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.65}",
+      ".dcw-transcript b{display:block;margin-bottom:3px;color:var(--dsw-alias-label-primary);font-size:11px}",
       ".dcw-test{margin-top:14px;padding-top:14px;border-top:1px solid var(--dsw-alias-border-l2)}",
       ".dcw-test-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}",
       ".dcw-test-head span{color:var(--dsw-alias-label-secondary);font-size:12px}",
@@ -50,7 +58,7 @@ window.__ModuleLoader__.load({
       ".dcw-stat{padding:9px;border-radius:10px;background:var(--dsw-alias-bg-layer-2);text-align:center}",
       ".dcw-stat b{display:block;color:var(--dsw-alias-label-primary);font-size:15px}",
       ".dcw-stat span{display:block;margin-top:2px;color:var(--dsw-alias-label-tertiary);font-size:10px}",
-      "@media(max-width:760px){.dcw-grid{grid-template-columns:1fr}.dcw-title-row{flex-direction:column}.dcw-badge{align-self:flex-start}}",
+      "@media(max-width:760px){.dcw-grid,.dcw-voice{grid-template-columns:1fr}.dcw-title-row{flex-direction:column}.dcw-badge{align-self:flex-start}}",
     ].join("\n");
 
     var styleId = "dsh-w-camera-watch/styles";
@@ -66,8 +74,12 @@ window.__ModuleLoader__.load({
     }
 
     var passthrough = { parse: function (value) { return value; } };
+    // Lazy schema factory for official Harness; schema keeps older source builds compatible.
+    function jsonCodec() {
+      return { mode: "strict", typeSymbol: "json", schema: passthrough, create: function () { return passthrough; } };
+    }
     function parameter(name) {
-      return { name: name, wire: name, source: "json", codec: { mode: "strict", typeSymbol: "json", schema: passthrough } };
+      return { name: name, wire: name, source: "json", codec: jsonCodec() };
     }
     function descriptor(method, parameters) {
       return {
@@ -77,7 +89,7 @@ window.__ModuleLoader__.load({
         method: method,
         invocation: { kind: "direct" },
         parameters: parameters || [],
-        result: { mode: "strict", typeSymbol: "json", schema: passthrough },
+        result: jsonCodec(),
       };
     }
     var TYPERT_REMOTE = {
@@ -88,6 +100,7 @@ window.__ModuleLoader__.load({
         descriptor("fail", [parameter("input")]),
         descriptor("getState"),
         descriptor("requestTestCapture", [parameter("input")]),
+        descriptor("submitSpeech", [parameter("input")]),
       ],
     };
 
@@ -109,17 +122,32 @@ window.__ModuleLoader__.load({
       return String(error || "Unknown camera error");
     }
 
-    function createCameraRuntime(api) {
+    function createCameraRuntime(api, sessions) {
       var AUTO_KEY = "dsh-w-camera-watch/auto-start";
       var DEVICE_KEY = "dsh-w-camera-watch/device-id";
+      var VOICE_KEY = "dsh-w-camera-watch/goal-voice";
+      var VOICE_LANG_KEY = "dsh-w-camera-watch/voice-language";
+      var VOICE_ENGINE_KEY = "dsh-w-camera-watch/voice-engine";
       var listeners = new Set();
       var clientId = window.crypto && typeof window.crypto.randomUUID === "function"
         ? window.crypto.randomUUID()
         : "camera-" + Date.now() + "-" + Math.random().toString(36).slice(2);
       var stream = null;
       var timer = null;
+      var voiceRestartTimer = null;
+      var voiceFlushTimer = null;
+      var voiceGeneration = 0;
       var disposed = false;
       var generation = 0;
+      var speechRecognition = null;
+      var speechStarting = false;
+      var voiceBlocked = false;
+      var localVoiceReadyLanguage = "";
+      var nativeRestartToken = 0;
+      var microphonePermissionGranted = false;
+      var pendingSpeech = [];
+      var pendingSpeechTarget = null;
+      var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       var hiddenVideo = document.createElement("video");
       hiddenVideo.autoplay = true;
       hiddenVideo.muted = true;
@@ -132,6 +160,19 @@ window.__ModuleLoader__.load({
         devices: [],
         selectedDeviceId: safeStorageGet(DEVICE_KEY, ""),
         autoStart: safeStorageGet(AUTO_KEY, "true") !== "false",
+        voiceSupported: true,
+        browserVoiceSupported: typeof SpeechRecognition === "function",
+        voiceEnabled: safeStorageGet(VOICE_KEY, "true") !== "false",
+        voiceLanguage: safeStorageGet(VOICE_LANG_KEY, navigator.language || "zh-CN"),
+        voiceEngine: ["windows", "local", "cloud"].indexOf(safeStorageGet(VOICE_ENGINE_KEY, "windows")) >= 0 ? safeStorageGet(VOICE_ENGINE_KEY, "windows") : "windows",
+        voiceEngineStatus: "idle",
+        voiceListening: false,
+        goalActive: false,
+        goalObjective: "",
+        voiceError: "",
+        interimTranscript: "",
+        lastTranscript: "",
+        sentTranscripts: 0,
         streamRevision: 0,
         bridge: { connectedClients: 0, readyClients: 0, pendingCaptures: 0, cameraReady: false },
       };
@@ -246,6 +287,292 @@ window.__ModuleLoader__.load({
         patch({ autoStart: enabled });
       }
 
+      function currentGoalTarget() {
+        try {
+          var list = sessions.list.getSnapshot();
+          var selected = Object.values(list.byId || {}).find(function (row) {
+            return row.retainedBy && row.retainedBy.mainView > 0;
+          });
+          var current = list.current != null ? list.current : selected && selected.id;
+          if (!current) return null;
+          var binding = sessions.binding(current);
+          var face = binding && binding.session && binding.session.projections.faceOf("goal");
+          var projection = face && face.getSnapshot();
+          if (!projection || !projection.goal || projection.goal.phase !== "active") return null;
+          return { sessionId: current, goalId: projection.goal.id, objective: projection.goal.objective || "" };
+        } catch (_error) {
+          return null;
+        }
+      }
+
+      function newSpeechId() {
+        return window.crypto && typeof window.crypto.randomUUID === "function"
+          ? window.crypto.randomUUID()
+          : "speech-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+      }
+
+      function clearVoiceRestart() {
+        if (voiceRestartTimer !== null) window.clearTimeout(voiceRestartTimer);
+        voiceRestartTimer = null;
+      }
+
+      function stopVoiceRecognition(clearPending) {
+        voiceGeneration += 1;
+        clearVoiceRestart();
+        speechStarting = false;
+        var current = speechRecognition;
+        speechRecognition = null;
+        if (current) {
+          current.onend = null;
+          current.onerror = null;
+          current.onresult = null;
+          try { current.abort(); } catch (_error) {}
+        }
+        if (clearPending) {
+          if (voiceFlushTimer !== null) window.clearTimeout(voiceFlushTimer);
+          voiceFlushTimer = null;
+          pendingSpeech = [];
+          pendingSpeechTarget = null;
+          patch({ interimTranscript: "" });
+        }
+        patch({ voiceListening: false });
+      }
+
+      async function ensureMicrophonePermission() {
+        if (microphonePermissionGranted) return;
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") return;
+        var permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        permissionStream.getTracks().forEach(function (track) { track.stop(); });
+        microphonePermissionGranted = true;
+      }
+
+      async function flushSpeech() {
+        if (voiceFlushTimer !== null) window.clearTimeout(voiceFlushTimer);
+        voiceFlushTimer = null;
+        var target = pendingSpeechTarget;
+        var text = pendingSpeech.join(" ").replace(/\s+/g, " ").trim().slice(0, 5000);
+        pendingSpeech = [];
+        pendingSpeechTarget = null;
+        patch({ interimTranscript: "" });
+        if (!target || !text) return;
+        try {
+          var result = await api.submitSpeech({
+            sessionId: target.sessionId,
+            speechId: newSpeechId(),
+            text: text,
+            language: state.voiceLanguage,
+            recognizedAt: new Date().toISOString(),
+          });
+          if (result && result.accepted) {
+            patch({ lastTranscript: text, sentTranscripts: state.sentTranscripts + 1, voiceError: "" });
+          } else if (result && result.reason !== "no-active-goal") {
+            patch({ voiceError: "语音消息未被接收：" + String(result && result.reason || "unknown") });
+          }
+        } catch (error) {
+          patch({ voiceError: messageOf(error) });
+        }
+      }
+
+      function queueFinalSpeech(text, target) {
+        var clean = String(text || "").replace(/\s+/g, " ").trim();
+        if (!clean || !target) return;
+        if (pendingSpeechTarget && pendingSpeechTarget.sessionId !== target.sessionId) void flushSpeech();
+        pendingSpeechTarget = target;
+        pendingSpeech.push(clean);
+        if (voiceFlushTimer !== null) window.clearTimeout(voiceFlushTimer);
+        voiceFlushTimer = window.setTimeout(function () { void flushSpeech(); }, 850);
+      }
+
+      function scheduleVoiceRestart() {
+        clearVoiceRestart();
+        if (disposed || voiceBlocked || !state.voiceEnabled || !currentGoalTarget()) return;
+        voiceRestartTimer = window.setTimeout(function () {
+          voiceRestartTimer = null;
+          reconcileVoice();
+        }, 350);
+      }
+
+      function localSpeechOptions() {
+        return { langs: [state.voiceLanguage], processLocally: true };
+      }
+
+      async function prepareLocalSpeech() {
+        if (localVoiceReadyLanguage === state.voiceLanguage) return true;
+        if (!SpeechRecognition || typeof SpeechRecognition.available !== "function") {
+          throw new Error("当前浏览器没有设备端语音识别接口；请更新 DSH，或临时切换到在线识别。");
+        }
+        patch({ voiceEngineStatus: "checking", voiceError: "" });
+        var availability = await SpeechRecognition.available(localSpeechOptions());
+        if (availability === "available") {
+          localVoiceReadyLanguage = state.voiceLanguage;
+          patch({ voiceEngineStatus: "ready", voiceError: "" });
+          return true;
+        }
+        if (availability === "downloadable" || availability === "downloading") {
+          if (typeof SpeechRecognition.install !== "function") {
+            throw new Error("浏览器缺少本地语音包安装接口，请更新 DSH。");
+          }
+          patch({ voiceEngineStatus: "installing", voiceError: "" });
+          var installed = await SpeechRecognition.install(localSpeechOptions());
+          if (!installed) throw new Error("本地语音包安装失败；请点击“安装/检查本地语音包”后重试。");
+          localVoiceReadyLanguage = state.voiceLanguage;
+          patch({ voiceEngineStatus: "ready", voiceError: "" });
+          return true;
+        }
+        throw new Error("当前识别语言没有可用的本地语音包；可更换语言或临时切换到在线识别。");
+      }
+
+      function friendlyVoiceError(code, usingLocal) {
+        if (code === "network") {
+          return usingLocal
+            ? "设备端语音组件启动失败；请点击“安装/检查本地语音包”后重试。"
+            : "浏览器在线语音服务连接失败；请切换到“设备端识别”并安装本地语音包。";
+        }
+        if (code === "language-not-supported" || code === "language-unavailable") {
+          return "当前识别语言不可用；请安装对应的本地语音包或更换语言。";
+        }
+        if (code === "not-allowed" || code === "service-not-allowed") return "麦克风权限被拒绝，请在 DSH 的站点权限中允许麦克风。";
+        if (code === "audio-capture") return "没有找到可用麦克风，或麦克风正被其他程序独占。";
+        return code;
+      }
+
+      async function startVoiceRecognition() {
+        if (state.voiceEngine === "windows") return;
+        if (disposed || voiceBlocked || speechRecognition || speechStarting || !state.voiceEnabled || typeof SpeechRecognition !== "function") return;
+        if (!currentGoalTarget()) return;
+        var currentVoiceGeneration = voiceGeneration;
+        speechStarting = true;
+        patch({ voiceError: "" });
+        try {
+          await ensureMicrophonePermission();
+          if (currentVoiceGeneration !== voiceGeneration) return;
+          if (disposed || !state.voiceEnabled || !currentGoalTarget()) {
+            speechStarting = false;
+            return;
+          }
+          var usingLocal = state.voiceEngine === "local";
+          if (usingLocal) await prepareLocalSpeech();
+          else patch({ voiceEngineStatus: "cloud" });
+          if (currentVoiceGeneration !== voiceGeneration) return;
+          if (disposed || !state.voiceEnabled || !currentGoalTarget()) {
+            speechStarting = false;
+            return;
+          }
+          var recognition = new SpeechRecognition();
+          speechRecognition = recognition;
+          recognition.lang = state.voiceLanguage;
+          if (usingLocal && "processLocally" in recognition) recognition.processLocally = true;
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.maxAlternatives = 1;
+          recognition.onstart = function () {
+            speechStarting = false;
+            patch({ voiceListening: true, voiceError: "" });
+          };
+          recognition.onresult = function (event) {
+            var activeTarget = currentGoalTarget();
+            if (!activeTarget) return;
+            var interim = "";
+            for (var i = event.resultIndex || 0; i < event.results.length; i += 1) {
+              var result = event.results[i];
+              var transcript = result && result[0] ? result[0].transcript : "";
+              if (result && result.isFinal) queueFinalSpeech(transcript, activeTarget);
+              else interim += transcript;
+            }
+            patch({ interimTranscript: interim.trim() });
+          };
+          recognition.onerror = function (event) {
+            var code = event && event.error ? String(event.error) : "speech-recognition-error";
+            if (code === "not-allowed" || code === "service-not-allowed" || code === "audio-capture" || code === "network" || code === "language-not-supported" || code === "language-unavailable") {
+              voiceBlocked = true;
+              if (code === "not-allowed" || code === "service-not-allowed" || code === "audio-capture") microphonePermissionGranted = false;
+            }
+            if (code !== "no-speech" && code !== "aborted") patch({ voiceError: friendlyVoiceError(code, usingLocal), voiceEngineStatus: "error" });
+          };
+          recognition.onend = function () {
+            if (speechRecognition === recognition) speechRecognition = null;
+            speechStarting = false;
+            patch({ voiceListening: false, interimTranscript: "" });
+            scheduleVoiceRestart();
+          };
+          recognition.start();
+        } catch (error) {
+          if (currentVoiceGeneration !== voiceGeneration) return;
+          speechStarting = false;
+          speechRecognition = null;
+          if (error && (error.name === "NotAllowedError" || error.name === "NotFoundError")) voiceBlocked = true;
+          voiceBlocked = true;
+          patch({ voiceListening: false, voiceError: messageOf(error), voiceEngineStatus: "error" });
+          scheduleVoiceRestart();
+        }
+      }
+
+      function reconcileVoice() {
+        var target = currentGoalTarget();
+        patch({ goalActive: Boolean(target), goalObjective: target ? target.objective : "" });
+        if (state.voiceEngine === "windows") {
+          if (speechRecognition || speechStarting) stopVoiceRecognition(false);
+          return;
+        }
+        if (!state.voiceSupported || !state.voiceEnabled || !target) {
+          if (speechRecognition || speechStarting) stopVoiceRecognition(!target || !state.voiceEnabled);
+          return;
+        }
+        if (!voiceBlocked && !speechRecognition && !speechStarting) void startVoiceRecognition();
+      }
+
+      function setVoiceEnabled(value) {
+        var enabled = value === true;
+        if (enabled) voiceBlocked = false;
+        safeStorageSet(VOICE_KEY, enabled ? "true" : "false");
+        patch({ voiceEnabled: enabled, voiceError: "" });
+        if (!enabled) stopVoiceRecognition(true);
+        else reconcileVoice();
+      }
+
+      function setVoiceLanguage(language) {
+        var value = String(language || "").trim() || "zh-CN";
+        safeStorageSet(VOICE_LANG_KEY, value);
+        localVoiceReadyLanguage = "";
+        patch({ voiceLanguage: value, voiceError: "", voiceEngineStatus: "idle" });
+        voiceBlocked = false;
+        stopVoiceRecognition(false);
+        reconcileVoice();
+      }
+
+      function setVoiceEngine(engine) {
+        var value = ["windows", "local", "cloud"].indexOf(engine) >= 0 ? engine : "windows";
+        safeStorageSet(VOICE_ENGINE_KEY, value);
+        patch({ voiceEngine: value, voiceError: "", voiceEngineStatus: "idle" });
+        voiceBlocked = false;
+        stopVoiceRecognition(false);
+        reconcileVoice();
+      }
+
+      async function installLocalVoice() {
+        voiceBlocked = false;
+        localVoiceReadyLanguage = "";
+        stopVoiceRecognition(false);
+        try {
+          await prepareLocalSpeech();
+          reconcileVoice();
+        } catch (error) {
+          voiceBlocked = true;
+          patch({ voiceListening: false, voiceError: messageOf(error), voiceEngineStatus: "error" });
+        }
+      }
+
+      function restartVoice() {
+        voiceBlocked = false;
+        microphonePermissionGranted = false;
+        if (state.voiceEngine === "windows") {
+          nativeRestartToken += 1;
+          patch({ voiceListening: false, voiceError: "", voiceEngineStatus: "starting" });
+        }
+        stopVoiceRecognition(false);
+        reconcileVoice();
+      }
+
       function attachPreview(node) {
         if (!node) return function () {};
         node.srcObject = stream;
@@ -303,6 +630,8 @@ window.__ModuleLoader__.load({
 
       async function pollOnce() {
         if (disposed) return;
+        reconcileVoice();
+        var voiceTarget = currentGoalTarget();
         var delay = 650;
         try {
           var value = await api.poll({
@@ -310,9 +639,23 @@ window.__ModuleLoader__.load({
             ready: state.status === "ready" && Boolean(stream),
             deviceLabel: state.deviceLabel,
             error: state.error,
+            nativeVoice: state.voiceEnabled && state.voiceEngine === "windows" && voiceTarget ? {
+              enabled: true,
+              sessionId: voiceTarget.sessionId,
+              goalId: voiceTarget.goalId,
+              language: state.voiceLanguage,
+              restartToken: nativeRestartToken,
+            } : { enabled: false },
           });
           patch({ bridgeError: "" });
           setBridge(value && value.state);
+          if (state.voiceEngine === "windows" && value && value.nativeSpeech) {
+            patch({
+              voiceListening: value.nativeSpeech.status === "ready",
+              voiceEngineStatus: value.nativeSpeech.status || "idle",
+              voiceError: value.nativeSpeech.error || "",
+            });
+          }
           if (value && value.request) {
             delay = 40;
             try {
@@ -338,6 +681,8 @@ window.__ModuleLoader__.load({
       function dispose() {
         disposed = true;
         if (timer !== null) window.clearTimeout(timer);
+        if (voiceFlushTimer !== null) window.clearTimeout(voiceFlushTimer);
+        stopVoiceRecognition(true);
         closeStream();
         listeners.clear();
       }
@@ -350,6 +695,11 @@ window.__ModuleLoader__.load({
         start: start,
         stop: stop,
         setAutoStart: setAutoStart,
+        setVoiceEnabled: setVoiceEnabled,
+        setVoiceLanguage: setVoiceLanguage,
+        setVoiceEngine: setVoiceEngine,
+        installLocalVoice: installLocalVoice,
+        restartVoice: restartVoice,
         attachPreview: attachPreview,
         captureFrame: captureFrame,
         dispose: dispose,
@@ -400,6 +750,12 @@ window.__ModuleLoader__.load({
       var statusText = state.status === "ready" ? t("ready")
         : state.status === "starting" ? t("starting")
           : state.status === "error" ? t("errorStatus") : t("stopped");
+      var voiceStatusText = !state.voiceSupported ? t("voiceUnsupported")
+        : !state.voiceEnabled ? t("voiceDisabled")
+          : state.voiceListening ? t("voiceListening")
+            : state.voiceEngineStatus === "checking" ? t("voiceChecking")
+              : state.voiceEngineStatus === "installing" ? t("voiceInstalling")
+            : state.goalActive ? t("voiceStarting") : t("voiceWaitingGoal");
 
       return React.createElement(
         "section",
@@ -413,7 +769,7 @@ window.__ModuleLoader__.load({
             React.createElement(
               "div",
               null,
-              React.createElement("p", { className: "dcw-kicker" }, "CAMERA TOOL"),
+              React.createElement("p", { className: "dcw-kicker" }, "CAMERA + GOAL VOICE"),
               React.createElement("h2", { className: "dcw-title" }, t("title")),
               React.createElement("p", { className: "dcw-subtitle" }, t("subtitle")),
             ),
@@ -491,16 +847,107 @@ window.__ModuleLoader__.load({
             state.bridgeError ? React.createElement("p", { className: "dcw-error" }, t("bridgeError") + state.bridgeError) : null,
           ),
         ),
+        React.createElement(
+          "div",
+          { className: "dcw-card dcw-voice" },
+          React.createElement(
+            "div",
+            null,
+            React.createElement(
+              "div",
+              { className: "dcw-voice-head" },
+              React.createElement(
+                "div",
+                null,
+                React.createElement("h3", { className: "dcw-card-title" }, t("voiceTitle")),
+                React.createElement("p", { className: "dcw-voice-copy" }, t("voiceCopy")),
+              ),
+              React.createElement(
+                "span",
+                { className: "dcw-voice-status", "data-live": state.voiceListening ? "true" : "false" },
+                React.createElement("i"),
+                voiceStatusText,
+              ),
+            ),
+            React.createElement(
+              "div",
+              { className: "dcw-transcript" },
+              React.createElement("b", null, state.interimTranscript ? t("recognizing") : t("lastSpeech")),
+              state.interimTranscript || state.lastTranscript || t("noSpeech"),
+            ),
+          ),
+          React.createElement(
+            "div",
+            { className: "dcw-stack" },
+            React.createElement(
+              "label",
+              { className: "dcw-toggle" },
+              React.createElement("input", {
+                type: "checkbox",
+                checked: state.voiceEnabled,
+                disabled: !state.voiceSupported,
+                onChange: function (event) { runtime.setVoiceEnabled(event.currentTarget.checked); },
+              }),
+              React.createElement("span", null, React.createElement("strong", null, t("voiceAuto")), React.createElement("span", null, t("voiceAutoHint"))),
+            ),
+            React.createElement(
+              "label",
+              { className: "dcw-field" },
+              React.createElement("span", { className: "dcw-label" }, t("voiceEngine")),
+              React.createElement(
+                "select",
+                { className: "dcw-select", value: state.voiceEngine, disabled: !state.voiceSupported, onChange: function (event) { runtime.setVoiceEngine(event.currentTarget.value); } },
+                React.createElement("option", { value: "windows" }, t("voiceEngineWindows")),
+                React.createElement("option", { value: "local", disabled: !state.browserVoiceSupported }, t("voiceEngineLocal")),
+                React.createElement("option", { value: "cloud", disabled: !state.browserVoiceSupported }, t("voiceEngineCloud")),
+              ),
+            ),
+            React.createElement(
+              "label",
+              { className: "dcw-field" },
+              React.createElement("span", { className: "dcw-label" }, t("voiceLanguage")),
+              React.createElement(
+                "select",
+                { className: "dcw-select", value: state.voiceLanguage, disabled: !state.voiceSupported, onChange: function (event) { runtime.setVoiceLanguage(event.currentTarget.value); } },
+                React.createElement("option", { value: "zh-CN" }, "中文（普通话）"),
+                React.createElement("option", { value: "zh-TW" }, "中文（繁體）"),
+                React.createElement("option", { value: "en-US" }, "English (US)"),
+                React.createElement("option", { value: "ja-JP" }, "日本語"),
+                React.createElement("option", { value: "ko-KR" }, "한국어"),
+              ),
+            ),
+            React.createElement(
+              "div",
+              { className: "dcw-actions" },
+              state.voiceEngine === "local" ? React.createElement("button", {
+                type: "button",
+                className: "dcw-button",
+                disabled: !state.browserVoiceSupported || state.voiceEngineStatus === "checking" || state.voiceEngineStatus === "installing",
+                onClick: runtime.installLocalVoice,
+              }, state.voiceEngineStatus === "installing" ? t("voiceInstalling") : t("installLocalVoice")) : null,
+              React.createElement("button", {
+                type: "button",
+                className: "dcw-button",
+                disabled: !state.voiceSupported || !state.voiceEnabled || !state.goalActive,
+                onClick: runtime.restartVoice,
+              }, t("restartVoice")),
+            ),
+            React.createElement("p", { className: "dcw-hint" }, state.voiceEngine === "windows" ? t("windowsVoiceHint") : state.voiceEngine === "local" ? t("localVoiceHint") : t("cloudVoiceHint")),
+            React.createElement("p", { className: "dcw-hint" }, state.goalActive ? t("activeGoal") + state.goalObjective : t("waitingGoalHint")),
+            React.createElement("p", { className: "dcw-hint" }, t("sentSpeech") + String(state.sentTranscripts)),
+            state.voiceError ? React.createElement("p", { className: "dcw-error" }, t("voiceError") + state.voiceError) : null,
+          ),
+        ),
       );
     }
 
     var NS = "dshWCameraWatch";
-    var inject = ["slots", "locale", "remote"];
+    var inject = ["slots", "locale", "remote", "sessions"];
     var dicts = {
       zh: {
         nav: "摄像头监督",
         title: "摄像头监督",
-        subtitle: "连接后，模型可在普通对话和 Goal 中随时调用 camera_capture，获得此刻的真实画面并直接进行视觉判断。",
+        subtitle: "连接后，模型可随时调用 camera_capture 查看真实画面；活动 Goal 中还会持续识别你的讲话并自动发送。",
         ready: "摄像头已连接",
         starting: "正在连接",
         stopped: "摄像头已停止",
@@ -525,11 +972,39 @@ window.__ModuleLoader__.load({
         using: "当前设备：",
         modelHint: "摄像头连接后，无需打开此设置页；模型仍可随时截图。",
         bridgeError: "Host 桥接异常：",
+        voiceTitle: "Goal 自动收音",
+        voiceCopy: "活动 Goal 打开时持续监听。识别到一句完整讲话后，短暂停顿会触发发送，并作为真正的用户消息进入当前会话队列。",
+        voiceUnsupported: "浏览器不支持",
+        voiceDisabled: "已关闭",
+        voiceListening: "正在收音",
+        voiceStarting: "正在启动",
+        voiceChecking: "检查本地语音包",
+        voiceInstalling: "安装本地语音包中",
+        voiceWaitingGoal: "等待 Goal",
+        recognizing: "正在识别",
+        lastSpeech: "最近发送",
+        noSpeech: "还没有识别到讲话。",
+        voiceAuto: "Goal 期间自动收音并发送",
+        voiceAutoHint: "只要当前会话存在活动 Goal，就会启动浏览器连续语音识别。",
+        voiceEngine: "识别引擎",
+        voiceEngineWindows: "Windows 本地识别（推荐）",
+        voiceEngineLocal: "浏览器设备端识别",
+        voiceEngineCloud: "浏览器在线识别",
+        voiceLanguage: "识别语言",
+        installLocalVoice: "安装/检查本地语音包",
+        windowsVoiceHint: "直接使用 Windows 已安装的语音识别器和系统默认麦克风，不经过浏览器在线服务。",
+        localVoiceHint: "由浏览器在当前设备识别；首次使用需下载语言包，并非所有语言都有可用包。",
+        cloudVoiceHint: "在线识别依赖浏览器厂商服务，网络受限时可能出现 network 错误。",
+        restartVoice: "重新启动收音",
+        activeGoal: "当前 Goal：",
+        waitingGoalHint: "建立并启动 Goal 后，麦克风会自动开始工作。",
+        sentSpeech: "本页已发送语音：",
+        voiceError: "语音识别异常：",
       },
       en: {
         nav: "Camera Watch",
         title: "Camera Watch",
-        subtitle: "Once connected, the model can call camera_capture from chats or Goals and inspect the live frame as native image context.",
+        subtitle: "The model can inspect live frames with camera_capture, while active Goals continuously transcribe and send your speech.",
         ready: "Camera connected",
         starting: "Connecting",
         stopped: "Camera stopped",
@@ -554,6 +1029,34 @@ window.__ModuleLoader__.load({
         using: "Current device: ",
         modelHint: "The settings page may be closed after connection; model captures remain available.",
         bridgeError: "Host bridge error: ",
+        voiceTitle: "Goal voice relay",
+        voiceCopy: "While a Goal is active, final speech segments are merged after a short pause and sent as real user messages to the current session queue.",
+        voiceUnsupported: "Unsupported browser",
+        voiceDisabled: "Disabled",
+        voiceListening: "Listening",
+        voiceStarting: "Starting",
+        voiceChecking: "Checking local pack",
+        voiceInstalling: "Installing local pack",
+        voiceWaitingGoal: "Waiting for Goal",
+        recognizing: "Recognizing",
+        lastSpeech: "Last sent",
+        noSpeech: "No speech has been recognized yet.",
+        voiceAuto: "Listen and send during Goals",
+        voiceAutoHint: "Continuous browser speech recognition starts whenever the current session has an active Goal.",
+        voiceEngine: "Recognition engine",
+        voiceEngineWindows: "Windows local (recommended)",
+        voiceEngineLocal: "Browser on-device",
+        voiceEngineCloud: "Browser cloud service",
+        voiceLanguage: "Recognition language",
+        installLocalVoice: "Install/check local language pack",
+        windowsVoiceHint: "Uses the Windows speech recognizer and default system microphone without the browser cloud service.",
+        localVoiceHint: "Speech is recognized by the browser on this device. A language pack is required and may not exist for every language.",
+        cloudVoiceHint: "Cloud recognition depends on the browser vendor service and may fail with a network error on restricted networks.",
+        restartVoice: "Restart listening",
+        activeGoal: "Active Goal: ",
+        waitingGoalHint: "Create and start a Goal to activate the microphone automatically.",
+        sentSpeech: "Voice messages sent by this page: ",
+        voiceError: "Speech recognition error: ",
       },
     };
 
@@ -576,7 +1079,8 @@ window.__ModuleLoader__.load({
         poll: function (input) { return unwrap("poll", [input]); },
         submit: function (input) { return unwrap("submit", [input]); },
         fail: function (input) { return unwrap("fail", [input]); },
-      });
+        submitSpeech: function (input) { return unwrap("submitSpeech", [input]); },
+      }, ctx.sessions);
       ctx.effect(function () { return runtime.dispose; }, "dsh-w-camera-watch: camera runtime");
       var t = ctx.locale.bind(NS);
       ctx.slots.inject("settings.section", function () {

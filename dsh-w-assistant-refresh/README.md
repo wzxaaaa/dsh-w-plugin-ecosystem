@@ -1,5 +1,11 @@
 # dsh-w-assistant-refresh
 
+## 官方 Harness 兼容
+
+`0.2.6` 已适配官方 Windows Harness `0.2.0-rc.2`。兼容官方刷新图标和当前会话选择；按会话格式写入重答触发消息，重启或重载后仍隐藏已替换的旧回复。
+
+官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
+
 在每条已完成的 AI 回复操作栏中增加刷新按钮。刷新按钮位于分支图标之后、时间与 token 统计之前。
 
 ## 行为
@@ -20,7 +26,7 @@
 ## 安装
 
 ```powershell
-node C:\Users\25024\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js plugin --profile web add .\dsh-w-assistant-refresh-0.2.5.tgz
+node C:\Users\25024\.dsh\profiles\node_modules\@deepseek-ai\dsh\lib\bin.js plugin --profile web add .\dsh-w-assistant-refresh-0.2.6.tgz
 ```
 
 安装后重启 Web profile 并刷新页面。

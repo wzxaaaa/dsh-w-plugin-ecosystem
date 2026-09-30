@@ -1,0 +1,131 @@
+{
+  "repository": "wzxaaaa/dsh-w-plugin-ecosystem",
+  "entries": [
+    {
+      "moduleName": "dsh-w-archive-manager",
+      "version": "0.2.0",
+      "description": "Archived conversation management for DeepSeek Harness with restore, permanent deletion, bulk cleanup, and 30-day retention.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "b277c00c877a773e6a8927beff5eebeef94fe0c4"
+    },
+    {
+      "moduleName": "dsh-w-assistant-refresh",
+      "version": "0.2.5",
+      "description": "Regenerates an assistant reply inside the current DeepSeek Harness session without creating a new conversation.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "75b002c99154c404b7c5093714084f11b08d845e"
+    },
+    {
+      "moduleName": "dsh-w-camera-watch",
+      "version": "0.1.0",
+      "description": "Live browser webcam snapshots as a native DeepSeek Harness vision tool for conversations and goals.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "44c1ad74bf75636bff1605ac5c1006cbadef6c95"
+    },
+    {
+      "moduleName": "dsh-w-chatflow",
+      "version": "0.3.2",
+      "description": "DeepSeek Harness chat-flow performance plugin: optimize very long streamed assistant reasoning with optional off-screen rendering.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "a5a0c0173869e2973fcb2271c0a1509ab2d16ac4"
+    },
+    {
+      "moduleName": "dsh-w-computer-use",
+      "version": "0.3.2",
+      "description": "DeepSeek Harness computer use in physical virtual-desktop pixels, with reliable input, multi-monitor support, and a visible safety overlay.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "ecd37f6ef47c04dea2d35f80eb3ce4de66a897f5"
+    },
+    {
+      "moduleName": "dsh-w-custom-plugins",
+      "version": "0.4.1",
+      "description": "DeepSeek Harness plugin manager with enable/disable controls, safe archive installation, and online updates.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "607adcb0123e1ab172b49f7eda45cd2c018d66fa"
+    },
+    {
+      "moduleName": "dsh-w-deslop",
+      "version": "0.1.0",
+      "description": "去 AI 味 companion for dsh-w-noval-write: writing rules, a deterministic prose scanner and /deslop, active only in conversations linked to a novel with /write.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "39827a318d191b3eeb3b4e15f5f73a6903938e84"
+    },
+    {
+      "moduleName": "dsh-w-easy-upload",
+      "version": "0.2.0",
+      "description": "DeepSeek Harness transparent image upload bridge: keep the original image in the transcript while dsh-w-vision supplies text context to non-vision models.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "df281338accf7a802f25c1cd53e36ae130eb3d1e"
+    },
+    {
+      "moduleName": "dsh-w-knowledge-base",
+      "version": "0.5.0",
+      "description": "A durable cross-session Markdown knowledge base for DeepSeek Harness agents with two switchable modes: an assistant memory (kb_save/kb_search/kb_read/kb_list/kb_delete/kb_import), and a writing mode that turns the same store into a human-prose style corpus (feed reference novels, retrieve passages for texture) with an anti-AI-flavour prompt and an editable banned-cliché list. Encoding-aware import splits Markdown on headings and Chinese novel .txt on chapters; a browser panel drives both modes.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "541567f35ee69d9f525be17b05fa7875c90e66dd"
+    },
+    {
+      "moduleName": "dsh-w-noval-write",
+      "version": "0.14.1",
+      "description": "Several novels per workspace, one folder each, with conversations bound to a novel; novel canon with schema-v5 genre extensions, structured volume/chapter outlines, a foreshadowing and payoff ledger, manuscripts linked to outline chapters with live word counts, a per-book knowledge-base style library, version history with compare and restore, live panel sync, targeted AI tools, verified manuscript export, and a persistent /write task.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "d44255d9d8ee4610bef332f6479485736e1b4626"
+    },
+    {
+      "moduleName": "dsh-w-persona",
+      "version": "0.3.5",
+      "description": "DeepSeek Harness persona manager with reusable persona templates and an optional hidden four-message conversation preset.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "aa48be642167bbbd9fbfba51b3bfddbf5a47e4f4"
+    },
+    {
+      "moduleName": "dsh-w-reasoning-bridge",
+      "version": "0.2.2",
+      "description": "Connect relay and custom-provider models to DeepSeek Harness's native reasoning-effort selector.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "212890357c9d3f1cdf56ce1cddf0cd8d4206e081"
+    },
+    {
+      "moduleName": "dsh-w-right-sidebar",
+      "version": "0.8.1",
+      "description": "A reusable right-side sidebar shell for DeepSeek Harness W-series features.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "4c1dd8617cc4062157951ec59ace20f192fa4ee2"
+    },
+    {
+      "moduleName": "dsh-w-route-primer",
+      "version": "0.3.0",
+      "description": "Routing-suite-compatible DeepSeek Harness preset with task routing, near-field guidance, mode tools, and a live w-persona second prompt.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "274b2d03eacc3e1e758c94b4790c80506022b521"
+    },
+    {
+      "moduleName": "dsh-w-teacher-help-me",
+      "version": "0.2.0",
+      "description": "DeepSeek Harness advisory teacher model with bounded read-only workspace investigation for diagnosing blocked tasks.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "0508cd2f045cf36c5b8600e3709f1f96682e66c1"
+    },
+    {
+      "moduleName": "dsh-w-vision",
+      "version": "0.3.2",
+      "description": "DeepSeek Harness vision relay for screen capture, local image files, and safe user-upload analysis.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "f758726217d3d6894b766f98ba98f033e708a820"
+    },
+    {
+      "moduleName": "dsh-w-wallpaper",
+      "version": "0.2.0",
+      "description": "Full-workspace image and video wallpaper plugin for DeepSeek Harness with persistent local media, configurable blur, and video speed.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "2eb9a33563b89954c60304bb8e00ee20be691e82"
+    },
+    {
+      "moduleName": "dsh-w-whale-tail",
+      "version": "0.5.0",
+      "description": "A whale-girl feature page mounted in dsh-w-right-sidebar for DeepSeek Harness: a supplied transparent whale-girl illustration with expressive idle motion, a pixel heart filled with flowing red liquid measuring this conversation's lewdness, and a per-conversation memory window.",
+      "ref": "4ab58c9104b6234fedb474e3187443a0ba03e00c",
+      "archiveSha": "b816d5a96ed075acc8242e5a9aa914cf2ff03a12"
+    }
+  ]
+}

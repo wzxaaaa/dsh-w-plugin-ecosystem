@@ -24,6 +24,8 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as yaml from 'js-yaml'
 import { compareSemver, isCustomModule } from './custom-plugin-core.js'
+import { RepositoryCatalog, downloadRepositoryArchive, mergeCatalog } from './repository-catalog.js'
+import { installWithHarness } from './harness-install.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -182,7 +184,6 @@ const UPLOAD_SWEEP_MS = 5 * 60 * 1000
 const MANIFEST_TIMEOUT_MS = 30 * 1000
 const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000
 const MAX_REMOTE_MANIFEST_BYTES = 1024 * 1024
-const W_ECOSYSTEM_RAW = 'https://raw.githubusercontent.com/wzxaaaa/dsh-w-plugin-ecosystem/main'
 
 function assertTrustedHttpsUrl(value, hosts) {
   let url
@@ -476,6 +477,8 @@ let CustomPluginsGateway = (() => {
   let _listCustom_decorators
   let _setEnabled_decorators
   let _requestUpdate_decorators
+  let _requestInstall_decorators
+  let _refreshRepository_decorators
   let _beginInstall_decorators
   let _appendInstallChunk_decorators
   let _cancelInstall_decorators
@@ -502,6 +505,16 @@ let CustomPluginsGateway = (() => {
         metadata: _metadata,
       }, null, _instanceExtraInitializers)
       _beginInstall_decorators = [Remote('beginInstall')]
+      _requestInstall_decorators = [Remote('requestInstall')]
+      __esDecorate(this, null, _requestInstall_decorators, {
+        kind: 'method', name: 'requestInstall', static: false, private: false,
+        access: { has: (obj) => 'requestInstall' in obj, get: (obj) => obj.requestInstall }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _refreshRepository_decorators = [Remote('refreshRepository')]
+      __esDecorate(this, null, _refreshRepository_decorators, {
+        kind: 'method', name: 'refreshRepository', static: false, private: false,
+        access: { has: (obj) => 'refreshRepository' in obj, get: (obj) => obj.refreshRepository }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       __esDecorate(this, null, _beginInstall_decorators, {
         kind: 'method', name: 'beginInstall', static: false, private: false,
         access: { has: (obj) => 'beginInstall' in obj, get: (obj) => obj.beginInstall },
@@ -535,6 +548,7 @@ let CustomPluginsGateway = (() => {
       __runInitializers(this, _instanceExtraInitializers)
       this.uploads = new Map()
       this.installBusy = false
+      this.catalog = new RepositoryCatalog(join(this.profileDir(), '.dsh-w-custom-plugins-catalog.json'))
       const cleanupTimer = setInterval(() => this.cleanupExpiredUploads(), UPLOAD_SWEEP_MS)
       cleanupTimer.unref?.()
       this.ctx.effect(() => () => {
@@ -566,8 +580,6 @@ let CustomPluginsGateway = (() => {
       const entries = []
       for (const entry of this.ctx.loader.entries()) {
         if (entry.options.group) continue
-        if (entry.fiber === this.ctx.fiber) continue
-        if (entry.options.name === MANAGER_PACKAGE) continue
         if (!isCustomModule(entry.options.name)) continue
         const persistedId = profileEntryId(entry.id)
         const manifest = await this.readInstalledManifest(entry.options.name)
@@ -576,14 +588,58 @@ let CustomPluginsGateway = (() => {
           moduleName: entry.options.name,
           enabled: !disabledIds.has(persistedId),
           version: typeof manifest?.version === 'string' ? manifest.version : '',
+          protected: entry.fiber === this.ctx.fiber || entry.options.name === MANAGER_PACKAGE,
         })
       }
-      return { entries }
+      const manager = this.ctx.get?.('pluginManager')
+      if (typeof manager?.listBundles === 'function') {
+        for (const bundle of await manager.listBundles()) {
+          if (!bundle.installed || !isCustomModule(bundle.name) || entries.some(entry => entry.moduleName === bundle.name)) continue
+          entries.push({ entryId: `bundle:${bundle.name}`, moduleName: bundle.name, bundleName: bundle.name,
+            version: bundle.version ?? '', enabled: bundle.enabled, protected: bundle.name === MANAGER_PACKAGE })
+        }
+      }
+      const catalog = await this.catalog.snapshot()
+      return { entries: mergeCatalog(entries, catalog.entries), repositoryWarning: catalog.warning }
+    }
+
+    async refreshRepository() {
+      const catalog = await this.catalog.snapshot(true)
+      const snapshot = await this.listCustom()
+      return { ...snapshot, repositoryWarning: catalog.warning }
+    }
+
+    async requestInstall(moduleName) {
+      if (this.installBusy || this.uploads.size > 0) throw new Error('Another plugin installation is already in progress')
+      this.installBusy = true
+      let root
+      try {
+        const snapshot = await this.catalog.snapshot()
+        const entry = snapshot.entries.find(item => item.moduleName === moduleName)
+        if (!entry) throw new Error('Plugin is not listed in the W repository: ' + String(moduleName))
+        if (await this.readInstalledManifest(moduleName)) return { status: 'already-installed', packageName: moduleName }
+        root = await mkdtemp(join(tmpdir(), 'dsh-plugin-repository-'))
+        const archivePath = join(root, `${moduleName}-${entry.version}.tgz`)
+        await retryRemote(() => downloadRepositoryArchive(entry, archivePath))
+        return { status: 'installed', ...await this.installArchive(root, archivePath, 'tgz', { packageName: moduleName, version: entry.version }) }
+      } finally {
+        this.installBusy = false
+        if (root !== undefined) await rm(root, { recursive: true, force: true })
+      }
     }
 
     async setEnabled(entryId, enabled) {
       if (typeof entryId !== 'string' || entryId.length === 0) throw new Error('entryId must be a non-empty string')
       if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean')
+      if (entryId.startsWith('bundle:')) {
+        const moduleName = entryId.slice(7)
+        if (!isCustomModule(moduleName) || moduleName === MANAGER_PACKAGE || !(await this.readInstalledManifest(moduleName))) throw new Error('Custom plugin bundle not found')
+        const manager = this.ctx.get?.('pluginManager')
+        if (typeof manager?.setBundleEnabled !== 'function') throw new Error('Bundle enablement is unavailable')
+        const result = await manager.setBundleEnabled(moduleName, enabled)
+        if (result.error || result.application === 'failed') throw new Error(result.error?.diagnostic || result.error?.code || 'Bundle enablement failed')
+        return { entryId, enabled }
+      }
       let target
       for (const entry of this.ctx.loader.entries()) {
         if (entry.options.group || entry.id !== entryId) continue
@@ -629,20 +685,10 @@ let CustomPluginsGateway = (() => {
 
     async resolveUpdateSource(moduleName) {
       if (moduleName.startsWith('dsh-w-')) {
-        const segment = encodeURIComponent(moduleName)
-        const hosts = new Set(['raw.githubusercontent.com'])
-        const manifest = await retryRemote(() => fetchRemoteJson(`${W_ECOSYSTEM_RAW}/${segment}/package.json`, hosts, true))
-        if (manifest === undefined) return undefined
-        if (manifest?.name !== moduleName || typeof manifest?.version !== 'string') {
-          throw new Error('W plugin update manifest does not match the installed package')
-        }
-        const version = manifest.version
-        return {
-          version,
-          url: `${W_ECOSYSTEM_RAW}/${segment}/${segment}-${encodeURIComponent(version)}.tgz`,
-          hosts,
-          source: 'w-ecosystem',
-        }
+        const snapshot = await this.catalog.snapshot()
+        const entry = snapshot.entries.find(item => item.moduleName === moduleName)
+        if (!entry || entry.archiveSha === null) return undefined
+        return { version: entry.version, catalogEntry: entry, source: 'w-ecosystem' }
       }
 
       const hosts = new Set(['registry.npmjs.org'])
@@ -690,7 +736,6 @@ let CustomPluginsGateway = (() => {
         installPath = join(packed, tarballs[0])
       }
       const profileDir = this.profileDir()
-      const profileName = basename(profileDir)
       const digest = (await sha256File(installPath)).slice(0, 12)
       const archiveDir = join(profileDir, '.plugin-archives')
       await mkdir(archiveDir, { recursive: true })
@@ -702,20 +747,21 @@ let CustomPluginsGateway = (() => {
         : '0.0.0'
       const durableArchive = join(archiveDir, `${packageKey}-${safeVersion}-${digest}.tgz`)
       await copyFile(installPath, durableArchive)
-      const dshEntry = process.argv[1]
-      if (typeof dshEntry !== 'string' || !dshEntry) throw new Error('Unable to locate the running dsh CLI entry')
       let result
       try {
-        result = await runCommand(process.execPath, [
-          dshEntry,
+        result = await installWithHarness(this.ctx, durableArchive, async () => {
+          const dshEntry = process.argv[1]
+          if (typeof dshEntry !== 'string' || !dshEntry) throw new Error('Unable to locate the running dsh CLI entry')
+          return runCommand(process.execPath, [dshEntry,
           'plugin',
           '--profile',
-          profileName,
+          basename(profileDir),
           'add',
           durableArchive,
-        ], { cwd: profileDir })
+          ], { cwd: profileDir })
+        }, candidate.manifest.name)
       } catch (error) {
-        await rm(durableArchive, { force: true })
+        // Activation can fail after installation; retain a referenced file: archive.
         throw error
       }
       for (const oldName of await readdir(archiveDir)) {
@@ -727,8 +773,8 @@ let CustomPluginsGateway = (() => {
       return {
         packageName: candidate.manifest.name,
         version: typeof candidate.manifest.version === 'string' ? candidate.manifest.version : '',
-        requiresRestart: true,
-        output: `${result.stdout}\n${result.stderr}`.trim().slice(-4000),
+        ...result,
+        output: result.output.slice(-4000),
       }
     }
 
@@ -742,15 +788,15 @@ let CustomPluginsGateway = (() => {
           break
         }
       }
-      if (!target || target.fiber === this.ctx.fiber || target.options.name === MANAGER_PACKAGE
-        || !isCustomModule(target.options.name)) {
+      const moduleName = target?.options.name ?? (entryId.startsWith('bundle:') ? entryId.slice(7) : undefined)
+      if (!isCustomModule(moduleName)) {
         throw new Error('Custom plugin entry not found: ' + entryId)
       }
       this.installBusy = true
       let root
       try {
-        const moduleName = target.options.name
         const installed = await this.readInstalledManifest(moduleName)
+        if (!installed) throw new Error('Custom plugin entry not found: ' + entryId)
         const installedVersion = typeof installed?.version === 'string' ? installed.version : ''
         const source = await this.resolveUpdateSource(moduleName)
         if (source === undefined) return { status: 'unavailable', packageName: moduleName, installedVersion }
@@ -766,7 +812,9 @@ let CustomPluginsGateway = (() => {
         }
         root = await mkdtemp(join(tmpdir(), 'dsh-plugin-update-'))
         const archivePath = join(root, `${moduleName.replace(/[^A-Za-z0-9._-]/gu, '_')}-${source.version.replace(/[^A-Za-z0-9._-]/gu, '_')}.tgz`)
-        await retryRemote(() => downloadRemoteArchive(source.url, archivePath, source.hosts))
+        await retryRemote(() => source.catalogEntry
+          ? downloadRepositoryArchive(source.catalogEntry, archivePath)
+          : downloadRemoteArchive(source.url, archivePath, source.hosts))
         const result = await this.installArchive(root, archivePath, 'tgz', {
           packageName: moduleName,
           version: source.version,

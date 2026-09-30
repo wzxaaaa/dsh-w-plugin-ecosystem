@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-deslop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "去 AI 味 companion for dsh-w-noval-write: writing rules, a deterministic prose scanner and /deslop, active only in conversations linked to a novel with /write.",
   "type": "module",
   "main": "index.js",
@@ -28,7 +28,9 @@
     "dsh-w-noval-write": ">=0.13.0"
   },
   "peerDependenciesMeta": {
-    "dsh-w-noval-write": { "optional": true }
+    "dsh-w-noval-write": {
+      "optional": true
+    }
   },
   "dsh": {
     "bundle": {
@@ -38,7 +40,8 @@
       "inject": [
         "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots"
       ],
       "platform": "web"
     }

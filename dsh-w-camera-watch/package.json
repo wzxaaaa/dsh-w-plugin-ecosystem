@@ -1,19 +1,21 @@
 {
   "name": "dsh-w-camera-watch",
-  "version": "0.1.0",
-  "description": "Live browser webcam snapshots as a native DeepSeek Harness vision tool for conversations and goals.",
+  "version": "0.2.3",
+  "description": "Live webcam snapshots plus automatic Goal speech transcription and message relay for DeepSeek Harness.",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
     "./camera-watch-core": "./camera-watch-core.js",
+    "./windows-speech": "./windows-speech.js",
     "./package.json": "./package.json"
   },
   "files": [
     "index.js",
     "client.js",
     "camera-watch-core.js",
+    "windows-speech.js",
     "cordis.patch.yml",
     "README.md"
   ],
@@ -22,6 +24,7 @@
   },
   "license": "MIT",
   "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "*",
     "@deepseek-ai/dsh-tools": "*",
     "@deepseek-ai/dsh-typert-protocol": "*"
   },
@@ -32,9 +35,12 @@
     "client": {
       "inject": [
         "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-session"
       ],
       "platform": "web"
     }

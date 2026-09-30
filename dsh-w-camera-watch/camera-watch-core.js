@@ -54,6 +54,28 @@ export function decodedBase64Bytes(data) {
   return Buffer.from(data, 'base64')
 }
 
+export function normalizeSpeechSubmission(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('speech submission must be an object')
+  return {
+    sessionId: requiredString(input.sessionId, 'sessionId', 300),
+    speechId: requiredString(input.speechId, 'speechId', 300),
+    text: requiredString(input.text, 'text', 5000),
+    language: optionalString(input.language, 'language', 50),
+    recognizedAt: optionalString(input.recognizedAt, 'recognizedAt', 100) || new Date().toISOString(),
+  }
+}
+
+export function normalizeNativeVoiceRequest(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || input.enabled !== true) return null
+  const restartToken = Number.isInteger(input.restartToken) && input.restartToken >= 0 ? input.restartToken : 0
+  return {
+    sessionId: requiredString(input.sessionId, 'sessionId', 300),
+    goalId: requiredString(input.goalId, 'goalId', 300),
+    language: optionalString(input.language, 'language', 50) || 'zh-CN',
+    restartToken,
+  }
+}
+
 /** Coordinates explicit Host capture requests with one or more live browser clients. */
 export class CaptureBroker {
   constructor(options = {}) {

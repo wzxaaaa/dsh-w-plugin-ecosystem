@@ -2,6 +2,19 @@
 
 export const PLUGIN_ID = 'dsh-w-assistant-refresh'
 export const TRIGGER_SUMMARY = 'dsh-w-assistant-refresh/internal-regenerate'
+/** V4 records the producer directly; V3 uses the legacy plugin wrapper. */
+export function regenerationSource(formatVersion) {
+  return Number(formatVersion) >= 4
+    ? { kind: PLUGIN_ID, form: 'notice', summary: TRIGGER_SUMMARY }
+    : { kind: 'plugin', plugin: PLUGIN_ID, form: 'notice', summary: TRIGGER_SUMMARY }
+}
+
+export function isRegenerationSource(source) {
+  return source?.summary === TRIGGER_SUMMARY && (
+    source.kind === PLUGIN_ID || source.kind === `plugin:${PLUGIN_ID}`
+    || (source.kind === 'plugin' && source.plugin === PLUGIN_ID)
+  )
+}
 /** Current Harness exposes immutable snapshots; older releases expose events. */
 export function sessionEvents(session) {
   const events = typeof session?.snapshotEvents === 'function'
@@ -77,9 +90,7 @@ export function chatRowKey(kind, id) {
 function isPluginTrigger(event) {
   return event?.type === 'user/message'
     && event?.surfaceOp === 'append'
-    && event.data?.source?.kind === 'plugin'
-    && event.data.source.plugin === PLUGIN_ID
-    && event.data.source.summary === TRIGGER_SUMMARY
+    && isRegenerationSource(event.data?.source)
 }
 
 /**

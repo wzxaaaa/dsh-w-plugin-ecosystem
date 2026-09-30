@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-custom-plugins",
-  "version": "0.4.1",
+  "version": "0.5.1",
   "description": "DeepSeek Harness plugin manager with enable/disable controls, safe archive installation, and online updates.",
   "type": "module",
   "main": "index.js",
@@ -13,6 +13,9 @@
     "index.js",
     "client.js",
     "custom-plugin-core.js",
+    "repository-catalog.js",
+    "repository-seed.json",
+    "harness-install.js",
     "cordis.patch.yml"
   ],
   "scripts": {
@@ -33,6 +36,7 @@
       "inject": [
         "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-locale"
       ],

@@ -1,5 +1,11 @@
 # dsh-w-knowledge-base
 
+## 官方 Harness 兼容
+
+`0.5.1` 已适配官方 Windows Harness `0.2.0-rc.2`。兼容官方严格 RPC 编解码器及独立 UI slots 服务，笔记创建、保存、读取和检索已验证。
+
+官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
+
 给 DeepSeek Harness 里的 AI 自己用的**跨会话知识库**插件。
 
 会话结束、上下文压缩、桌面版重启都会清空 AI 的记忆；这个插件在 Harness home 下维护一批 Markdown 笔记，AI 用五个工具读写它们，并且每一轮都能在运行上下文里看到「我现在记住了什么」的简表——不用先花一次工具调用去确认知识库里有什么。
@@ -94,7 +100,7 @@ id 用 UTC 时间生成，所以文件名天然按时间排序；标题只用于
 ```powershell
 npm test
 pnpm pack --config.ignore-scripts=true
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.5.0.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.5.1.tgz
 ```
 
 装好以后重启桌面版（或重新启动 `dsh web`）；重装同一个版本号之前记得先 `remove`，否则 pnpm 不会重新解包。

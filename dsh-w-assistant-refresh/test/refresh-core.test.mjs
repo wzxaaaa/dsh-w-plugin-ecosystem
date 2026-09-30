@@ -7,7 +7,22 @@ import {
   replacementHideKeys,
   triggerHideKey,
   sessionEvents,
+  regenerationSource,
+  isRegenerationSource,
 } from '../refresh-core.js'
+
+test('regeneration admits V4 producer sources and restores migrated V3 triggers', () => {
+  const current = regenerationSource(4)
+  assert.equal(current.kind, 'dsh-w-assistant-refresh')
+  assert.equal(current.plugin, undefined)
+  assert.equal(isRegenerationSource(current), true)
+  assert.equal(isRegenerationSource(regenerationSource(3)), true)
+  assert.equal(isRegenerationSource({ ...current, kind: 'plugin:dsh-w-assistant-refresh' }), true)
+  assert.equal(isRegenerationSource({ ...current, kind: 'another-plugin' }), false)
+  for (const source of [current, { ...current, kind: 'plugin:dsh-w-assistant-refresh' }]) {
+    assert.deepEqual(collectSessionHideKeys([{ seq: 0, type: 'user/message', surfaceOp: 'append', data: { id: 'trigger', source } }]), [triggerHideKey('trigger')])
+  }
+})
 
 const user = (seq, id, text, source = { kind: 'user' }) => ({
   type: 'user/message', seq, data: { id, role: 'user', content: [{ type: 'text', text }], source },

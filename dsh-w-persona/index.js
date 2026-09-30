@@ -30,6 +30,7 @@ import {
   isAgentLoopRequest,
 } from '@deepseek-ai/dsh-llm'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
+import * as sessionProtocol from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { randomUUID } from 'node:crypto'
 import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -283,7 +284,9 @@ let PersonaManagerGateway = (() => {
           const prefix = turns.map(turn => turn.role === 'user'
             ? createUserMessage({
               content: [{ type: 'text', text: turn.text }],
-              source: { kind: 'plugin', plugin: 'dsh-w-persona', form: 'recall' },
+              source: Number(sessionProtocol.SESSION_FORMAT_VERSION) >= 4
+                ? { kind: 'dsh-w-persona', form: 'recall' }
+                : { kind: 'plugin', plugin: 'dsh-w-persona', form: 'recall' },
             })
             : createAssistantMessage({
               content: [{ type: 'text', text: turn.text }],
