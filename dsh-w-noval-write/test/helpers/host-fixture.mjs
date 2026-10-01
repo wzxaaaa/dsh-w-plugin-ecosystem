@@ -10,6 +10,7 @@ import * as files from '../../noval-file-core.js'
 import * as library from '../../noval-library.js'
 import * as search from '../../noval-search-core.js'
 import * as guard from '../../noval-mutation-guard.js'
+import * as completion from '../../noval-completion-guard.js'
 
 // Exercise the actual Host methods and filesystem; only Harness registration
 // and decorators are stubbed, so no profile, model or user session is loaded.
@@ -25,10 +26,14 @@ export async function hostFixture(t) {
   await fsp.mkdir(workspace.path)
   const registry = { get: id => id === workspace.id ? workspace : undefined, list: () => [workspace] }
   const tools = []
-  const ctx = { tools: { register: value => tools.push(value) }, inject() {}, get: () => registry, logger: () => ({ warn() {}, info() {} }) }
+  const handlers = new Map()
+  const sections = []
+  const ctx = { tools: { register: value => tools.push(value) }, on: (name, handler) => handlers.set(name, handler),
+    inject(deps, callback) { if (deps.includes('systemPrompt')) callback({ systemPrompt: { section: section => sections.push(section) } }) },
+    get: () => registry, logger: () => ({ warn() {}, info() {} }) }
   const schema = new Proxy(function () { return schema }, { get() { return schema } })
   const context = vm.createContext({
-    ...crypto, ...fs, ...fsp, ...path, ...core, ...files, ...library, ...search, ...guard,
+    ...crypto, ...fs, ...fsp, ...path, ...core, ...files, ...library, ...search, ...guard, ...completion,
     console, process, Buffer, Schema: schema, Remote: () => method => method,
     TypertRemoteService: class { constructor(scope) { this.ctx = scope } },
     createUserMessage: value => value, defineTool: value => value,
@@ -45,7 +50,7 @@ export async function hostFixture(t) {
   const handle = created.created.handle
   const book = service.workspaceRecord(handle)
   const tool = tools.find(value => value.name === 'novel_save_chapter')
-  return { root, workspace, book, handle, service, context, tools, tool,
+  return { root, workspace, book, handle, service, context, tools, tool, handlers, sections,
     execute: args => tool.execute(args, { agent: { session: { id: 's' } } }),
     setProject: project => service.mutateAs({ actor: 'user', operation: 'fixture' }, handle, service.stateForWorkspace(handle).revision, current => ({ ...current, project: core.normalizeProject(project) })),
   }

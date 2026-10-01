@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-noval-write",
-  "version": "0.14.3",
+  "version": "0.14.4",
   "description": "Several novels per workspace, one folder each, with conversations bound to a novel; novel canon with schema-v5 genre extensions, structured volume/chapter outlines, a foreshadowing and payoff ledger, manuscripts linked to outline chapters with live word counts, a per-book knowledge-base style library, version history with compare and restore, live panel sync, targeted AI tools, verified manuscript export, and a persistent /write task.",
   "type": "module",
   "main": "index.js",
@@ -15,6 +15,7 @@
     "client.js",
     "noval-write-core.js",
     "noval-mutation-guard.js",
+    "noval-completion-guard.js",
     "noval-file-core.js",
     "noval-library.js",
     "noval-search-core.js",

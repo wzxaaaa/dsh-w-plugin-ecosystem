@@ -1208,6 +1208,7 @@ window.__ModuleLoader__.load({
       var file = chapter.manuscriptFile ? props.byName[chapter.manuscriptFile] : null;
       var ready = props.files.status === "ready";
       var target = parseWordTarget(chapter.targetWords);
+      var wordCheck = (props.files.wordChecks || []).find(function (check) { return check.chapterId === chapter.id && check.rule === chapter.targetWords; });
       var owners = props.owners;
       var preview = props.preview;
       var options = (props.files.list || []).map(function (entry) {
@@ -1217,6 +1218,9 @@ window.__ModuleLoader__.load({
       });
       if (chapter.manuscriptFile && !file) options.unshift(React.createElement("option", { key: "missing", value: chapter.manuscriptFile }, chapter.manuscriptFile + (ready ? " · " + t("fileMissingShort") : "")));
       return React.createElement("div", { className: "dshwnw-manuscript" },
+        wordCheck && !wordCheck.ok ? React.createElement("div", { className: "dshwnw-warning", role: "status" }, wordCheck.missingWords
+          ? t("chapterWordShort").replace("{n}", wordCheck.missingWords)
+          : wordCheck.excessWords ? t("chapterWordLong").replace("{n}", wordCheck.excessWords) : t("chapterWordInvalid")) : null,
         React.createElement("label", { className: "dshwnw-field" },
           React.createElement("span", { className: "dshwnw-label" }, t("manuscriptFile")),
           React.createElement("select", {
@@ -1263,7 +1267,7 @@ window.__ModuleLoader__.load({
         setOpenIds(function (current) { var next = Object.assign({}, current); next[id] = value; return next; });
       }
       var t = props.t;
-      var filesSlot = React.useState({ status: "idle", list: [], error: "" });
+      var filesSlot = React.useState({ status: "idle", list: [], wordChecks: [], error: "" });
       var files = filesSlot[0];
       var setFiles = filesSlot[1];
       var previewSlot = React.useState({});
@@ -1274,9 +1278,9 @@ window.__ModuleLoader__.load({
       function scan() {
         if (!canScan) return;
         var request = ++scanRef.current;
-        setFiles(function (current) { return { status: "loading", list: current.list, error: "" }; });
+        setFiles(function (current) { return { status: "loading", list: current.list, wordChecks: current.wordChecks, error: "" }; });
         props.writer.listManuscripts(props.workspaceId).then(function (value) {
-          if (request === scanRef.current) setFiles({ status: "ready", list: (value && value.files) || [], error: "" });
+          if (request === scanRef.current) setFiles({ status: "ready", list: (value && value.files) || [], wordChecks: value && value.wordChecks, error: "" });
         }).catch(function (error) {
           if (request === scanRef.current) setFiles(function (current) { return { status: "error", list: current.list, error: failureText(error) }; });
         });
@@ -1307,14 +1311,17 @@ window.__ModuleLoader__.load({
         return [words, chapter.scenes.length ? chapter.scenes.length + " " + t("scenesUnit") : "", chapter.summary].filter(Boolean).join(" · ");
       }
       function chapterBadge(chapter) {
+        var check = (files.wordChecks || []).find(function (check) { return check.chapterId === chapter.id && check.rule === chapter.targetWords; });
+        var warning = check && !check.ok ? React.createElement("span", { className: "dshwnw-pill", "data-tone": "danger" }, t("chapterWordFailed")) : null;
         if (!chapter.manuscriptFile) return null;
         var missing = files.status === "ready" && !byName[chapter.manuscriptFile];
-        return React.createElement("span", { className: "dshwnw-file-badge", "data-missing": missing ? "true" : undefined, title: chapter.manuscriptFile },
-          React.createElement(NwIcon, { name: "file", size: 13 }));
+        return React.createElement(React.Fragment, null, warning, React.createElement("span", { className: "dshwnw-file-badge", "data-missing": missing ? "true" : undefined, title: chapter.manuscriptFile },
+          React.createElement(NwIcon, { name: "file", size: 13 })));
       }
       return React.createElement("div", { className: "dshwnw-section" },
         React.createElement("div", { className: "dshwnw-section-title" }, props.t("outlineTitle")),
         React.createElement("div", { className: "dshwnw-section-hint" }, props.t("outlineHint")),
+        files.status === "ready" && !files.wordChecks ? React.createElement("div", { className: "dshwnw-warning" }, t("wordCheckUnavailable")) : null,
         volumes.some(function (volume) { return volume.chapters.length > 0; })
           ? React.createElement(BookProgress, { project: props.project, files: files, byName: byName, t: t, onRefresh: scan, onLink: props.onLinkManuscripts })
           : null,
@@ -3320,6 +3327,7 @@ window.__ModuleLoader__.load({
         React.createElement("div", { className: "dshwnw-body", key: tab, role: "tabpanel", "aria-busy": busy || libraryBusy },
           React.createElement("fieldset", { disabled: busy || libraryBusy, style: { border: 0, padding: 0, margin: 0, minWidth: 0 } }, content)),
         React.createElement("div", { className: "dshwnw-footer" },
+          React.createElement("span", { style: { fontSize: 10, whiteSpace: "nowrap" }, title: t("runtimeVersionHint") }, state.runtimeVersion ? "v" + state.runtimeVersion : t("runtimeVersionUnknown")),
           React.createElement("span", { className: "dshwnw-notice", role: "status", "data-kind": notice ? notice.kind : undefined, "data-dirty": dirty ? "true" : undefined, title: notice ? notice.text : undefined }, React.createElement("span", { className: "dshwnw-notice-text" }, notice ? notice.text : dirty ? t("unsaved") : t("synced"))),
           React.createElement("button", { type: "button", className: "dshwnw-button", disabled: busy || libraryBusy || !dirty, onClick: function () { askDiscard(function () { load(true); }); } }, t("reload")),
           React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: busy || libraryBusy || !dirty, onClick: save }, busy ? t("saving") : t("save"))
@@ -3394,6 +3402,7 @@ window.__ModuleLoader__.load({
       writeActive: "小说写作", writeEdit: "编辑", writeClear: "解除", writeSave: "保存", writeCancel: "取消", writeObjectiveAria: "小说写作任务", writeCommandInput: "写作命令输入",
       loading: "正在载入小说项目…", loadFailed: "载入失败", retry: "重试", saveFailed: "保存失败", noWorkspace: "当前没有可用工作区。请先打开或创建一个工作区。", workspaceLabel: "共享工作区",
       saved: "项目设定已保存。", saving: "保存中…", save: "保存", reload: "撤销", unsaved: "有未保存修改", synced: "已与模型上下文同步", draftRestored: "已恢复这个工作区未保存的草稿。",
+      chapterWordFailed: "字数未达标", chapterWordShort: "尚未完成：至少还需补写 {n} 字。", chapterWordLong: "尚未完成：至少需要删减 {n} 字。", chapterWordInvalid: "尚未完成：正文缺失或字数规则需要检查。", wordCheckUnavailable: "运行中的小说服务未提供字数校验，请完全退出并重启 Harness。", runtimeVersionHint: "当前正在运行的小说插件版本；安装更新后须完全退出并重启 Harness 才会切换。", runtimeVersionUnknown: "旧服务·需重启",
       tab_project: "项目", tab_characters: "角色", tab_relationships: "关系", tab_world: "世界", tab_plot: "情节", tab_outline: "大纲", tab_scene: "场景", tab_settings: "设置",
       settingsTitle: "小说框架设置", settingsHint: "管理这个对话写的是哪本书，以及这本书的版本、导入、导出与重置。所有绑定这本书的对话都会看到变化。", settingsDirty: "请先保存或撤销当前修改，再执行导入、导出或清除。", working: "处理中…", cancel: "取消",
       exportTitle: "导出当前小说框架", exportHint: "下载一份可移植的 JSON，包含项目、角色、关系、世界观、情节、大纲、线索账本、场景和推进记录。", exportAction: "导出 JSON", exported: "小说框架已导出。", exportFailed: "导出失败",
@@ -3505,6 +3514,7 @@ window.__ModuleLoader__.load({
       writeActive: "Novel Writing", writeEdit: "Edit", writeClear: "Unlink", writeSave: "Save", writeCancel: "Cancel", writeObjectiveAria: "Novel writing objective", writeCommandInput: "Writing command input",
       loading: "Loading novel project…", loadFailed: "Load failed", retry: "Retry", saveFailed: "Save failed", noWorkspace: "No workspace is available. Open or create a workspace first.", workspaceLabel: "Shared workspace",
       saved: "Project canon saved.", saving: "Saving…", save: "Save", reload: "Revert", unsaved: "Unsaved changes", synced: "Synced to model context", draftRestored: "Restored this workspace's unsaved draft.",
+      chapterWordFailed: "Length not met", chapterWordShort: "Incomplete: add at least {n} words.", chapterWordLong: "Incomplete: remove at least {n} words.", chapterWordInvalid: "Incomplete: check the manuscript and its length rule.", wordCheckUnavailable: "The running novel service has no length checks. Fully quit and restart Harness.", runtimeVersionHint: "Running novel plugin version. Fully quit and restart Harness after an update.", runtimeVersionUnknown: "Restart required",
       tab_project: "Project", tab_characters: "Characters", tab_relationships: "Relations", tab_world: "World", tab_plot: "Plot", tab_outline: "Outline", tab_scene: "Scene", tab_settings: "Settings",
       settingsTitle: "Novel framework settings", settingsHint: "Choose which book this conversation writes, and manage that book's versions, import, export, and reset. Every conversation bound to the book sees the changes.", settingsDirty: "Save or revert current edits before importing, exporting, or clearing.", working: "Working…", cancel: "Cancel",
       exportTitle: "Export current framework", exportHint: "Download portable JSON with the project, characters, relationships, world, plot, outline, thread ledger, scene, and progress.", exportAction: "Export JSON", exported: "Novel framework exported.", exportFailed: "Export failed",

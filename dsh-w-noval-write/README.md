@@ -2,11 +2,19 @@
 
 ## 官方 Harness 兼容
 
-`0.14.3` 兼容官方 Windows Harness `0.2.0-rc.2`。兼容官方会话、工作区和 UI slots 服务；工作台从当前会话解析所属工作区。
+`0.14.4` 兼容官方 Windows Harness `0.2.0-rc.2`。兼容官方会话、工作区和 UI slots 服务；工作台从当前会话解析所属工作区。
 
 官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
 
 DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `noval` 拼写；界面名称为“小说写作 / Novel Writing”。
+
+## 0.14.4：实际运行版本与未完成章节
+
+- 工作台底部显示 Host 实际运行版本。更新安装包只替换磁盘上的文件；必须完全退出并重启 Harness，旧进程才会加载新版。仅重开对话或刷新页面不会重载 Host。
+- 已有短稿会标为“字数未达标”，展开章节显示“尚未完成：至少还需补写 N 字”。达标判断来自 Host 的同一字数规则，不由客户端重新猜测。
+- 对话绑定小说后即注入大纲和保存要求，不再要求先执行 `/write`。
+- 本轮 `novel_save_chapter` 字数失败后，模型准备结束时会收到继续改稿的上下文；最多两次自动补写，仍不达标则本轮明确失败并保留原文件。已有旧稿不能证明本轮被拒绝的新稿已成功保存。中断、换书或下一轮不会复活旧补写。
+- `present` 不能把已关联大纲、字数不达标的正文当作交付物。聊天草稿和任意外部工具写盘仍需经插件校验，插件不会擅自改写已有小说补足字数。
 
 ## 0.14.3：保存保护和大纲字数校验
 
@@ -185,7 +193,7 @@ $DSH_HOME/noval-write/session-novels.json
 3. `dsh-w-noval-write`
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-noval-write-0.14.3.tgz
+dsh plugin --profile web add .\dsh-w-noval-write-0.14.4.tgz
 ```
 
 缺少知识库时，项目工作台与 AI 数据工具不受影响，`/write` 会明确报告知识库未挂载。

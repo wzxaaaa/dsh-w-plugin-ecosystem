@@ -19,6 +19,7 @@ import { dshHomePath, expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
   advanceProject,
   assertChapterWordCount,
+  validateChapterWordCount,
   analyzeProgression,
   analyzeThreads,
   assertProjectShape,
@@ -67,6 +68,9 @@ import {
   writeLinkForSession,
 } from './noval-write-core.js'
 import { NovelMutationRoundGuard } from './noval-mutation-guard.js'
+import { NovelCompletionGuard } from './noval-completion-guard.js'
+
+export const PLUGIN_VERSION = '0.14.4'
 import { searchManuscripts } from './noval-search-core.js'
 import {
   NOVEL_DIR,
@@ -411,6 +415,7 @@ let NovalWriterService = (() => {
       this.writeLinks = readWriteLinkStoreSync(this.writeLinksPath)
       this.writeLinkTail = Promise.resolve()
       this.mutationRoundGuard = new NovelMutationRoundGuard()
+      this.completionGuard = new NovelCompletionGuard()
       // Which novel each conversation writes: session id → (workspace, novel).
       this.bindingsPath = join(this.root, 'session-novels.json')
       this.bindings = readBindingStore(this.bindingsPath)
@@ -457,9 +462,8 @@ let NovalWriterService = (() => {
           text: (context) => {
             if (!context.agent) return ''
             const link = this.linkForAgent(context.agent)
-            if (!link) return ''
             const novel = this.novelForAgentSync(context.agent)
-            if (!novel) return '# Novel writing\n\nThis conversation used /write but no novel is bound to it. Ask the user to choose or create one in the Novel Writing panel.'
+            if (!novel) return link ? '# Novel writing\n\nThis conversation used /write but no novel is bound to it. Ask the user to choose or create one in the Novel Writing panel.' : ''
             const state = this.stateForWorkspace(novel.id)
             // Refresh counts in the background; this turn uses the last known ones.
             this.manuscriptStats(novel).catch(() => {})
@@ -468,7 +472,7 @@ let NovalWriterService = (() => {
               '',
               `- Novel: ${state.project.title || novel.folder}`,
               `- Folder: ${novel.folder}/ in Workspace ${novel.workspaceTitle}; chapter files are saved there.`,
-              `- Writing objective: ${link.objective}`,
+              ...(link ? [`- Writing objective: ${link.objective}`] : []),
               '- Every conversation bound to this novel shares the same canon.',
               '',
               projectPrompt(state.project, this.settings.promptMaxChars, { manuscripts: this.manuscriptWords.get(novel.id) }),
@@ -546,6 +550,55 @@ let NovalWriterService = (() => {
       })
 
       this.registerTools()
+      if (typeof ctx.on === 'function') {
+        ctx.on('agent/turn-stopping', event => this.finishWritingTurn(event))
+        ctx.on('tools/pre-execute', async (exec, next) => {
+          if (exec.name !== 'present' || !exec.agent) return next()
+          const novel = this.novelForAgentSync(exec.agent)
+          if (!novel) return next()
+          const checks = await this.chapterWordChecks(novel)
+          const files = Array.isArray(exec.arguments?.files) ? exec.arguments.files : []
+          for (const check of checks) {
+            const target = resolve(novel.path, check.filename).toLowerCase()
+            if (!files.some(file => typeof file.path === 'string' && resolve(file.path).toLowerCase() === target)) continue
+            if (check.ok) { this.completionGuard.pass(exec.agent, novel.id, check.chapterId); continue }
+            this.completionGuard.fail(exec.agent, novel.id, { filename: check.filename, chapter_id: check.chapterId, volume_id: check.volumeId }, check)
+            return { kind: 'deny', reason: this.wordFailureFeedback([check]) }
+          }
+          return next()
+        })
+      }
+    }
+
+    wordFailureFeedback(checks) {
+      return 'NOVEL_CHAPTER_WORD_COUNT: 章节尚未达标，不能宣称完成或交付。\n' + checks.map(check =>
+        `${check.filename || check.chapterId}: ${check.actualWords ?? 0} 字；要求 ${check.rule}；${check.missingWords ? `至少还需补写 ${check.missingWords} 字` : check.excessWords ? `至少删减 ${check.excessWords} 字` : '请检查正文文件和字数规则'}。volume_id=${check.volumeId}, chapter_id=${check.chapterId}`
+      ).join('\n') + '\n按原章大纲修改实际正文，再调用 novel_save_chapter 校验；已有文件用 overwrite:true。不得降低目标、改用其他文件工具或只报告完成。'
+    }
+
+    async finishWritingTurn({ agent, turn, signal }) {
+      if (signal?.aborted) return
+      const round = this.completionGuard.round(agent, turn)
+      if (!round?.pending.size) return
+      const unresolved = []
+      for (const [key, pending] of round.pending) {
+        if (this.novelForAgentSync(agent)?.id !== pending.workspaceId) { round.pending.delete(key); continue }
+        // An old, valid file is not proof that this turn's rejected rewrite was
+        // saved. Clear only a successful counted save or a fresh delivery check.
+        unresolved.push({ ...pending, ...pending.requirement })
+      }
+      if (!unresolved.length || signal?.aborted) return
+      const feedback = this.wordFailureFeedback(unresolved)
+      if (round.retries >= 2 || typeof agent.inject !== 'function') {
+        const error = new Error(feedback + '\n自动补写仍未达标，本轮停止，原文件保留。')
+        error.code = 'NOVEL_CHAPTER_INCOMPLETE'
+        throw error
+      }
+      round.retries++
+      agent.inject(createUserMessage({
+        content: [{ type: 'text', text: feedback }],
+        source: { kind: 'dsh-w-noval-write', form: 'notice', summary: '章节字数未达标，继续修改正文' },
+      }))
     }
 
     report(what, error) {
@@ -828,6 +881,7 @@ let NovalWriterService = (() => {
     view(workspace, state) {
       return {
         ...normalizeState(state),
+        runtimeVersion: PLUGIN_VERSION,
         workspace: { id: String(workspace.id), title: workspace.title, path: workspace.path, folder: workspace.folder, workspaceId: workspace.workspaceId, workspaceTitle: workspace.workspaceTitle },
       }
     }
@@ -1089,7 +1143,22 @@ let NovalWriterService = (() => {
     async listManuscripts(workspaceId) {
       const workspace = this.workspaceRecord(workspaceId)
       const listing = await this.manuscriptStats(workspace)
-      return { files: listing.files, truncated: listing.truncated }
+      return { files: listing.files, truncated: listing.truncated, wordChecks: await this.chapterWordChecks(workspace, listing), runtimeVersion: PLUGIN_VERSION }
+    }
+
+    async chapterWordChecks(workspace, listing) {
+      listing ??= await this.manuscriptStats(workspace)
+      const files = new Map(listing.files.map(file => [file.filename, file]))
+      const checks = []
+      for (const volume of this.stateForWorkspace(workspace.id).project.volumes) for (const chapter of volume.chapters) {
+        if (!chapter.manuscriptFile || !chapter.targetWords.trim()) continue
+        const file = files.get(chapter.manuscriptFile)
+        let check
+        try { check = validateChapterWordCount(chapter, Math.max(0, file?.words || 0)) }
+        catch (error) { check = { ...error.wordRequirement, ok: false, error: error.message } }
+        checks.push({ ...check, ok: Boolean(file && file.words >= 0 && check.ok), filename: chapter.manuscriptFile, volumeId: volume.id, exists: Boolean(file) })
+      }
+      return checks
     }
 
     /** Manuscript files of a novel with their outline chapter, text loaded for search. */
@@ -1253,7 +1322,14 @@ let NovalWriterService = (() => {
         finalizeContent: manuscriptFailureContent,
         async execute(args, exec) {
           const { workspace } = await self.modelState(exec)
-          return self.saveChapter(String(workspace.id), args)
+          try {
+            const result = await self.saveChapter(String(workspace.id), args)
+            self.completionGuard.pass(exec.agent, workspace.id, args?.chapter_id)
+            return result
+          } catch (error) {
+            if (error.code === 'NOVEL_CHAPTER_WORD_COUNT') self.completionGuard.fail(exec.agent, workspace.id, args, error.wordRequirement)
+            throw error
+          }
         },
       }))
 
