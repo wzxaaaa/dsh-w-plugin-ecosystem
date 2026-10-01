@@ -66,8 +66,10 @@ test('stores each novel in its own workspace folder, binds conversations, and ex
   assert.match(host, /join\(this\.workspaceRecord\(String\(handle\)\)\.path, NOVEL_DIR, NOVEL_STATE_FILE\)/)
   assert.match(host, /join\(this\.root, 'session-novels\.json'\)/)
   assert.match(host, /code = 'NOVEL_NOT_BOUND'/)
-  for (const method of ['listNovels', 'getBinding', 'bindNovel', 'unbindNovel', 'createNovel']) assert.match(host, new RegExp(`Remote\\('${method}'\\)`))
-  for (const name of ['novel_schema', 'novel_read', 'novel_save_chapter', 'novel_patch', 'novel_character_patch', 'novel_relationship_patch', 'novel_outline_read', 'novel_volume_upsert', 'novel_chapter_upsert', 'novel_chapter_remove', 'novel_chapter_reorder', 'novel_threads', 'novel_thread_upsert', 'novel_thread_remove', 'novel_write', 'novel_advance']) {
+  for (const method of ['listNovels', 'getBinding', 'bindNovel', 'unbindNovel', 'createNovel', 'dismissCastInbox']) assert.match(host, new RegExp(`Remote\\('${method}'\\)`))
+  assert.match(client, /descriptor\("dismissCastInbox"/)
+  assert.match(client, /function GraphCanvas/)
+  for (const name of ['novel_schema', 'novel_read', 'novel_save_chapter', 'novel_patch', 'novel_character_patch', 'novel_relationship_patch', 'novel_cast_inbox', 'novel_cast_ack', 'novel_outline_read', 'novel_volume_upsert', 'novel_chapter_upsert', 'novel_chapter_remove', 'novel_chapter_reorder', 'novel_threads', 'novel_thread_upsert', 'novel_thread_remove', 'novel_write', 'novel_advance']) {
     assert.match(host, new RegExp(`name: '${name}'`))
   }
   assert.match(host, /project: projectToolSchema\(\{ partial: false, required: true \}\)/)

@@ -317,6 +317,111 @@ window.__ModuleLoader__.load({
       "button.dshwnw-workspace{border:0;font:inherit;font-size:11.5px;cursor:pointer}",
       "button.dshwnw-workspace:hover{color:var(--nw-accent)}",
       "button.dshwnw-workspace:before{background:var(--nw-warn)}",
+      ".dshwnw-body:has(>fieldset>.dshwnw-cast-fill){padding:0;overflow:hidden;gap:0}",
+      ".dshwnw-body>fieldset:has(>.dshwnw-cast-fill){flex:1;min-height:0;display:flex;flex-direction:column}",
+      ".dshwnw-cast-fill{flex:1;min-height:0;display:flex;flex-direction:column}",
+      ".dshwnw-cast-wrap{position:relative;flex:1;min-height:340px;overflow:hidden}",
+      ".dshwnw-cast-stage{position:absolute;inset:0;overflow:hidden;background:radial-gradient(circle at 1px 1px,color-mix(in srgb,var(--nw-fg) 10%,transparent) 1px,transparent 0) 0 0/22px 22px}",
+      ".dshwnw-cast-svg{display:block;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}",
+      ".dshwnw-cast-svg:active{cursor:grabbing}",
+      ".dshwnw-cast-stage[data-mode=connect] .dshwnw-cast-svg,.dshwnw-cast-stage[data-mode=connect] .dshwnw-cast-node{cursor:crosshair}",
+      ".dshwnw-cast-node{cursor:pointer;transition:opacity .2s}",
+      ".dshwnw-cast-node[data-dim=true],.dshwnw-cast-edge[data-dim=true]{opacity:.15}",
+      ".dshwnw-cast-ball{fill:hsl(var(--nw-hue,220) var(--nw-sat,58%) 55%)}",
+      ".dshwnw-cast-ring{fill:none;stroke:transparent;stroke-width:3;transition:stroke .15s}",
+      ".dshwnw-cast-node:hover .dshwnw-cast-ring{stroke:color-mix(in srgb,var(--nw-accent) 40%,transparent)}",
+      ".dshwnw-cast-node[data-selected=true] .dshwnw-cast-ring{stroke:var(--nw-accent)}",
+      ".dshwnw-cast-node[data-pending-from=true] .dshwnw-cast-ring{stroke:var(--nw-accent);stroke-dasharray:4 3;animation:dshwnw-march .8s linear infinite}",
+      ".dshwnw-cast-halo{fill:hsl(var(--nw-hue,220) var(--nw-sat,58%) 60% / .14);stroke:hsl(var(--nw-hue,220) var(--nw-sat,58%) 55% / .5);stroke-width:1.5}",
+      ".dshwnw-cast-initial{fill:#fff;font-weight:700;text-anchor:middle;pointer-events:none}",
+      ".dshwnw-cast-name{fill:var(--nw-fg);font-size:11.5px;font-weight:550;text-anchor:middle;paint-order:stroke;stroke:var(--dsw-specific-sidebar-fill,#f7f8fa);stroke-width:3.5px;stroke-linejoin:round;pointer-events:none}",
+      ".dshwnw-cast-name[data-major=true]{font-size:12.5px;font-weight:700}",
+      ".dshwnw-cast-pending{fill:var(--nw-warn);stroke:var(--nw-surface);stroke-width:1.5}",
+      ".dshwnw-cast-edge{cursor:pointer;transition:opacity .2s}",
+      ".dshwnw-cast-hit{fill:none;stroke:transparent;stroke-width:14}",
+      ".dshwnw-cast-line{fill:none;stroke-linecap:round}",
+      ".dshwnw-cast-edge[data-state=ended] .dshwnw-cast-line{opacity:.35}",
+      ".dshwnw-cast-glow{fill:none;stroke-width:10;stroke-linecap:round;opacity:.2}",
+      ".dshwnw-cast-edge-label{font-size:10.5px;font-weight:650;text-anchor:middle;paint-order:stroke;stroke:var(--dsw-specific-sidebar-fill,#f7f8fa);stroke-width:3.5px;stroke-linejoin:round}",
+      ".dshwnw-cast-preview{stroke-width:2.2;stroke-linecap:round;pointer-events:none}",
+      ".dshwnw-cast-tools{position:absolute;left:8px;right:8px;top:8px;display:flex;flex-direction:column;align-items:stretch;gap:6px;pointer-events:none;z-index:1}",
+      ".dshwnw-cast-toolrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;pointer-events:none}",
+      ".dshwnw-cast-toolrow>*,.dshwnw-cast-pen{pointer-events:auto}",
+      ".dshwnw-cast-tools .dshwnw-segment{background:var(--nw-surface);box-shadow:0 0 0 1px var(--nw-border),0 2px 6px rgba(0,0,0,.05)}",
+      ".dshwnw-cast-tools .dshwnw-segment button{display:inline-flex;align-items:center;gap:4px;height:26px}",
+      ".dshwnw-cast-tools .dshwnw-segment button[data-active=true]{color:var(--nw-accent)}",
+      ".dshwnw-cast-tool,.dshwnw-cast-icon{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;border:1px solid var(--nw-border);border-radius:8px;background:var(--nw-surface);color:var(--nw-fg);font-size:12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.05);transition:border-color .15s,color .15s}",
+      ".dshwnw-cast-tool{padding:0 10px;font-weight:600}",
+      ".dshwnw-cast-icon{width:30px;padding:0;color:var(--nw-fg2)}",
+      ".dshwnw-cast-tool:hover,.dshwnw-cast-icon:hover{border-color:color-mix(in srgb,var(--nw-accent) 45%,var(--nw-border));color:var(--nw-accent)}",
+      ".dshwnw-cast-spacer{flex:1}",
+      ".dshwnw-cast-toolrow .dshwnw-chip{box-shadow:0 2px 6px rgba(0,0,0,.04)}",
+      ".dshwnw-cast-search{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border:1px solid var(--nw-border);border-radius:999px;background:var(--nw-surface);color:var(--nw-fg3)}",
+      ".dshwnw-cast-search input{width:88px;border:0;outline:0;background:transparent;color:var(--nw-fg);font:inherit;font-size:12px}",
+      ".dshwnw-cast-pen{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;border:1px solid color-mix(in srgb,var(--nw-accent) 30%,var(--nw-border));border-radius:10px;background:var(--nw-surface);box-shadow:0 2px 8px rgba(0,0,0,.06)}",
+      ".dshwnw-cast-pen .dshwnw-select{width:auto;height:26px;padding:0 6px;font-size:12px;font-weight:600}",
+      ".dshwnw-cast-pen-label{font-size:12px;font-weight:650;color:var(--nw-fg2)}",
+      ".dshwnw-cast-pen-hint{flex:1 1 150px;min-width:0;font-size:11.5px;line-height:16px;color:var(--nw-fg3)}",
+      ".dshwnw-cast-zoom{position:absolute;right:8px;bottom:8px;display:flex;flex-direction:column;gap:4px}",
+      ".dshwnw-cast-wrap[data-card=true] .dshwnw-cast-pen-hint{display:none}",
+      ".dshwnw-cast-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);max-width:calc(100% - 96px);padding:4px 10px;border-radius:999px;background:color-mix(in srgb,var(--nw-surface) 88%,transparent);color:var(--nw-fg3);font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}",
+      ".dshwnw-cast-empty{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:min(280px,calc(100% - 32px));display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;font-size:12.5px;line-height:19px;color:var(--nw-fg2)}",
+      ".dshwnw-cast-legend{position:absolute;left:8px;bottom:8px;width:min(320px,calc(100% - 56px));max-height:calc(100% - 100px);overflow:auto;display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--nw-border);border-radius:12px;background:var(--nw-surface);box-shadow:0 8px 24px rgba(0,0,0,.1);font-size:11.5px;line-height:16px;color:var(--nw-fg2);z-index:2}",
+      ".dshwnw-cast-legend-head{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:650;color:var(--nw-fg)}",
+      ".dshwnw-cast-legend-title{margin-top:2px;font-weight:650;color:var(--nw-fg)}",
+      ".dshwnw-cast-legend-sizes{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}",
+      ".dshwnw-cast-legend-sizes span{display:inline-flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px}",
+      ".dshwnw-cast-legend-sizes i{display:block;border-radius:50%;background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.65),transparent 55%),var(--nw-accent)}",
+      ".dshwnw-cast-legend-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:4px 8px}",
+      ".dshwnw-cast-legend-grid[data-single=true]{grid-template-columns:minmax(0,1fr)}",
+      ".dshwnw-cast-legend-grid span,.dshwnw-tie{display:flex;align-items:center;gap:6px;min-width:0}",
+      ".dshwnw-line-sample{flex:none;overflow:visible}",
+      ".dshwnw-cast-inbox{flex:none;display:flex;flex-direction:column;gap:6px;padding:8px 12px;border-bottom:1px solid color-mix(in srgb,var(--nw-accent) 25%,var(--nw-border));background:color-mix(in srgb,var(--nw-accent) 7%,var(--nw-surface));font-size:12px;line-height:17px}",
+      ".dshwnw-cast-inbox[data-tone=unsaved]{flex-direction:row;align-items:center;border-bottom-color:color-mix(in srgb,var(--nw-warn) 35%,var(--nw-border));background:color-mix(in srgb,var(--nw-warn) 10%,var(--nw-surface))}",
+      ".dshwnw-cast-inbox-row{display:flex;align-items:center;gap:6px}",
+      ".dshwnw-cast-inbox-text{flex:1;min-width:0;color:var(--nw-fg)}",
+      ".dshwnw-cast-inbox-list{display:flex;flex-direction:column;gap:2px;max-height:160px;overflow:auto}",
+      ".dshwnw-cast-inbox-item{display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--nw-fg2)}",
+      ".dshwnw-cast-inbox-item[data-change=removed]{color:var(--nw-danger)}",
+      ".dshwnw-pop{position:absolute;left:8px;right:8px;bottom:8px;max-height:min(58%,520px);display:flex;flex-direction:column;border:1px solid var(--nw-border);border-radius:14px;background:var(--nw-surface);box-shadow:0 14px 40px color-mix(in srgb,var(--nw-fg) 18%,transparent);z-index:3;transform-origin:50% 100%;animation:dshwnw-card .22s cubic-bezier(.2,.9,.3,1.1)}",
+      ".dshwnw-pop-head{display:flex;align-items:flex-start;gap:10px;padding:12px 8px 8px 12px}",
+      ".dshwnw-pop-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}",
+      ".dshwnw-pop-name{width:100%;height:28px;margin-left:-6px;padding:0 6px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--nw-fg);font:inherit;font-size:16px;font-weight:700}",
+      ".dshwnw-pop-name:hover{border-color:var(--nw-border)}",
+      ".dshwnw-pop-name:focus{outline:none;border-color:var(--nw-accent);box-shadow:0 0 0 3px var(--nw-accent-soft)}",
+      ".dshwnw-pop-sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--nw-fg3)}",
+      ".dshwnw-pop-importance{height:22px;padding:0 4px;border:0;border-radius:6px;background:var(--nw-accent-soft);color:var(--nw-accent);font:inherit;font-size:11.5px;font-weight:650;cursor:pointer}",
+      ".dshwnw-pop-faction{height:20px;padding:0 7px;border-radius:999px;background:hsl(var(--nw-hue,220) var(--nw-sat,58%) 52% / .14);color:hsl(var(--nw-hue,220) var(--nw-sat,58%) 36%);font-weight:600;line-height:20px}",
+      ".dshwnw-cast-legend-factions{display:flex;flex-wrap:wrap;gap:4px 10px}",
+      ".dshwnw-cast-legend-factions span{display:inline-flex;align-items:center;gap:5px}",
+      ".dshwnw-cast-legend-factions i{width:10px;height:10px;border-radius:50%;background:hsl(var(--nw-hue,220) var(--nw-sat,58%) 55%)}",
+      ".dshwnw-pop-score{margin-left:auto;white-space:nowrap}",
+      ".dshwnw-pop-tags{display:flex;flex-wrap:wrap;gap:4px;padding:0 12px 8px}",
+      ".dshwnw-pop-tabs{flex:none;display:flex;gap:2px;padding:0 8px;border-bottom:1px solid var(--nw-border);overflow-x:auto;scrollbar-width:none}",
+      ".dshwnw-pop-tabs button{flex:none;height:32px;padding:0 9px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--nw-fg2);font-size:12.5px;cursor:pointer}",
+      ".dshwnw-pop-tabs button:hover{color:var(--nw-fg)}",
+      ".dshwnw-pop-tabs button[aria-selected=true]{border-bottom-color:var(--nw-accent);color:var(--nw-accent);font-weight:650}",
+      ".dshwnw-pop-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:12px;scrollbar-width:thin}",
+      ".dshwnw-pop-foot{flex:none;display:flex;align-items:center;gap:6px;padding:8px 12px;border-top:1px solid var(--nw-border)}",
+      ".dshwnw-pop-pair{flex:1;min-width:0;display:flex;align-items:center;gap:4px}",
+      ".dshwnw-pop-person{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:42%;padding:3px 9px 3px 3px;border:1px solid var(--nw-border);border-radius:999px;background:var(--nw-surface);color:var(--nw-fg);font:inherit;font-size:13px;font-weight:650;cursor:pointer}",
+      ".dshwnw-pop-person span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".dshwnw-pop-swap{flex:none;display:inline-flex;align-items:center;padding:5px 3px;border:0;border-radius:6px;background:transparent;cursor:pointer}",
+      ".dshwnw-pop-swap:hover{background:var(--nw-hover)}",
+      ".dshwnw-pop-ties{display:flex;flex-direction:column;gap:6px}",
+      ".dshwnw-tie{width:100%;padding:6px 8px;border:1px solid var(--nw-border);border-radius:10px;background:var(--nw-surface);color:inherit;font:inherit;text-align:left;cursor:pointer}",
+      ".dshwnw-tie:hover{border-color:color-mix(in srgb,var(--nw-accent) 40%,var(--nw-border))}",
+      ".dshwnw-sphere{width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle at 35% 28%,rgba(255,255,255,.7),rgba(255,255,255,.12) 42%,transparent 62%),radial-gradient(circle,transparent 55%,rgba(0,0,0,.28)),hsl(var(--nw-hue,220) var(--nw-sat,58%) 55%);color:#fff;font-size:11px;font-weight:700}",
+      ".dshwnw-sphere[data-size=lg]{width:42px;height:42px;font-size:18px}",
+      ".dshwnw-choices{display:flex;flex-wrap:wrap;gap:5px}",
+      ".dshwnw-choice{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 9px;border:1px solid var(--nw-border);border-radius:999px;background:var(--nw-surface);color:var(--nw-fg2);font-size:12px;cursor:pointer;transition:border-color .15s,background .15s}",
+      ".dshwnw-choice:hover{border-color:color-mix(in srgb,var(--nw-choice,var(--nw-accent)) 50%,var(--nw-border))}",
+      ".dshwnw-choice[aria-checked=true]{border-color:var(--nw-choice,var(--nw-accent));background:color-mix(in srgb,var(--nw-choice,var(--nw-accent)) 12%,var(--nw-surface));color:var(--nw-fg);font-weight:650}",
+      ".dshwnw-choice-dot{width:9px;height:9px;flex:none;border-radius:50%;background:var(--nw-choice)}",
+      "@keyframes dshwnw-card{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}",
+      "@keyframes dshwnw-march{to{stroke-dashoffset:-14}}",
+      "@media (prefers-reduced-motion:reduce){.dshwnw-pop,.dshwnw-cast-node[data-pending-from=true] .dshwnw-cast-ring{animation:none}.dshwnw-cast-node,.dshwnw-cast-edge{transition:none}}",
+      "@container novel-panel (min-width:620px){.dshwnw-pop{left:auto;top:8px;bottom:8px;width:340px;max-height:none;transform-origin:100% 50%}.dshwnw-cast-wrap[data-card=true] .dshwnw-cast-tools,.dshwnw-cast-wrap[data-card=true] .dshwnw-cast-zoom{right:356px}}",
       "@container novel-panel (max-width:430px){.dshwnw-chapter-meta{grid-template-columns:64px minmax(0,1fr)}.dshwnw-chapter-meta>:last-child{grid-column:1 / -1}.dshwnw-custom-row{grid-template-columns:minmax(80px,.7fr) minmax(100px,1.3fr) 28px}.dshwnw-toolbar{padding-inline:12px}.dshwnw-body{padding-inline:10px}.dshwnw-card{padding:11px}.dshwnw-group-body{padding-inline:11px}}",
       "@container novel-panel (max-width:340px){.dshwnw-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dshwnw-grid-3{grid-template-columns:minmax(0,1fr)}.dshwnw-timeline{grid-template-columns:80px minmax(0,1fr)}.dshwnw-grid,.dshwnw-chapter-meta{grid-template-columns:minmax(0,1fr)}.dshwnw-chapter-meta>:last-child{grid-column:auto}.dshwnw-setting-card{grid-template-columns:1fr}.dshwnw-footer{gap:6px}.dshwnw-footer .dshwnw-button,.dshwnw-footer .dshwnw-primary{padding:0 9px}}",
     ].join("\n");
@@ -380,6 +485,7 @@ window.__ModuleLoader__.load({
         descriptor("saveProgressionTemplate", [parameter("input")]),
         descriptor("deleteProgressionTemplate", [parameter("templateId")]),
         descriptor("restoreProgressionTemplates"),
+        descriptor("dismissCastInbox", [parameter("workspaceId"), parameter("ids")]),
       ],
     };
 
@@ -426,6 +532,12 @@ window.__ModuleLoader__.load({
       section_threads: ["M5 16.5V4", "M5 4.5h8.5l-1.8 3 1.8 3H5"],
       section_progression: ["M3 16.5l4.8-8.3 3 5 2.2-3.4 4 6.7z", "M13.5 6.2a1.7 1.7 0 100-3.4 1.7 1.7 0 000 3.4z"],
       folder: ["M3 6.5V15a1 1 0 001 1h12a1 1 0 001-1V7.5a1 1 0 00-1-1h-6.5L8 4.5H4a1 1 0 00-1 1z"],
+      pointer: ["M5.5 3.5l9.5 5.3-4.2 1.2-2 4.5z"],
+      fit: ["M3.5 7.5v-4h4", "M16.5 7.5v-4h-4", "M3.5 12.5v4h4", "M16.5 12.5v4h-4"],
+      close: ["M5.5 5.5l9 9", "M14.5 5.5l-9 9"],
+      minus: ["M4.5 10h11"],
+      search: ["M9 14.5a5.5 5.5 0 100-11 5.5 5.5 0 000 11z", "M13 13l3.5 3.5"],
+      graph: ["M5.5 7a2.2 2.2 0 100-4.4 2.2 2.2 0 000 4.4z", "M14 11.5a3 3 0 100-6 3 3 0 000 6z", "M6.5 17.4a2 2 0 100-4 2 2 0 000 4z", "M7.6 5.6l3.6 1.6", "M7.9 14l3.6-2.3"],
       section_settings: ["M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z", "M10 3v1.8", "M10 15.2V17", "M3 10h1.8", "M15.2 10H17", "M5 5l1.3 1.3", "M13.7 13.7L15 15", "M5 15l1.3-1.3", "M13.7 6.3L15 5"],
     };
     function NwIcon(props) {
@@ -831,17 +943,1040 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function CharacterTab(props) {
+    // ── cast graph: characters are spheres, relationships are lines ────────
+    // Sphere size follows importance; line colour follows the relationship
+    // kind, the dash pattern its state (active solid, hidden dashed, planned
+    // dotted, ended faded), an arrowhead a one-way tie, width its strength.
+    var IMPORTANCE_LEVELS = ["protagonist", "core", "major", "supporting", "minor"];
+    var IMPORTANCE_RADIUS = { protagonist: 34, core: 27, major: 22, supporting: 17, minor: 12 };
+    var RELATION_KIND_LIST = ["family", "romance", "ally", "mentor", "enemy", "rival", "interest", "other"];
+    var RELATION_KIND_COLOR = { family: "#c0782a", romance: "#e0559a", ally: "#2e9d6a", mentor: "#3978e8", enemy: "#d64545", rival: "#d9a106", interest: "#8a5cf6", other: "#8f959e" };
+    var RELATION_STATE_LIST = ["active", "hidden", "planned", "ended"];
+    var RELATION_STATE_DASH = { active: "", hidden: "8 5", planned: "0.1 6", ended: "" };
+    var RELATION_STRENGTH_WIDTH = { 1: 1.3, 2: 2.2, 3: 3.6 };
+    var CHARACTER_FIELD_KEYS = ["name", "aliases", "gender", "age", "identity", "role", "importance", "faction", "tags", "status", "appearance", "traits", "contrast", "background", "goal", "motivation", "stakes", "conflict", "values", "likes", "abilities", "edge", "weaknesses", "secret", "knowledge", "possessions", "voice", "habits", "firstAppearance", "arc", "fate", "readerAppeal"];
+    var RELATION_TEXT_KEYS = ["label", "status", "history", "dynamic", "powerBalance", "publicFace", "privateTruth", "sharedSecret", "tension", "turningPoints", "futureDirection"];
+
+    function field(key, kind, label, rows) { return { key: key, kind: kind || "text", label: label || key, rows: rows || 3 }; }
+    // A fuller profile in the shape web-novel outlines use: identity, a
+    // memorable persona with a contrast, the inner drive and bottom line, the
+    // backstory, the edge and its limits, and the character's story job.
+    var CHARACTER_SECTIONS = [
+      { key: "basic", fields: [field("name", "input"), field("aliases", "input"), field("gender", "input"), field("age", "input"), field("identity", "input"), field("role", "input"), field("faction", "input"), field("status", "input", "characterStatus"), field("tags", "wide")] },
+      { key: "persona", fields: [field("appearance"), field("traits"), field("contrast"), field("voice"), field("habits"), field("likes")] },
+      { key: "drive", fields: [field("goal"), field("motivation"), field("stakes"), field("values"), field("conflict")] },
+      { key: "past", fields: [field("background", "text", null, 6), field("secret"), field("knowledge")] },
+      { key: "power", fields: [field("abilities"), field("edge"), field("weaknesses"), field("possessions")] },
+      { key: "story", fields: [field("firstAppearance"), field("arc", "text", null, 5), field("fate"), field("readerAppeal")] },
+    ];
+
+    function blankCharacter(id, seed) {
+      var character = { id: id };
+      CHARACTER_FIELD_KEYS.forEach(function (key) { character[key] = ""; });
+      character.importance = "supporting";
+      character.customFields = {};
+      return Object.assign(character, seed || {});
+    }
+
+    function blankRelationship(id, fromId, toId, seed) {
+      var relation = { id: id, fromId: fromId, toId: toId, kind: "ally", state: "active", direction: "mutual", strength: "2" };
+      RELATION_TEXT_KEYS.forEach(function (key) { relation[key] = ""; });
+      relation.customFields = {};
+      return Object.assign(relation, seed || {});
+    }
+
+    function characterCompleteness(character) {
+      var total = 0;
+      var filled = 0;
+      CHARACTER_SECTIONS.forEach(function (section) {
+        section.fields.forEach(function (item) {
+          if (item.key === "name") return;
+          total += 1;
+          if (String(character[item.key] || "").trim()) filled += 1;
+        });
+      });
+      return { filled: filled, total: total };
+    }
+
+    function nodeRadius(character) { return IMPORTANCE_RADIUS[character.importance] || IMPORTANCE_RADIUS.supporting; }
+    // One colour per faction, taken in order of first appearance from a
+    // palette of well-separated hues; a character with no faction stays a
+    // muted grey-blue.
+    var FACTION_HUES = [214, 150, 24, 278, 348, 186, 44, 312, 96, 0, 236, 168];
+    function castColors(characters) {
+      var factions = [];
+      characters.forEach(function (item) {
+        var name = String(item.faction || "").trim();
+        if (name && factions.indexOf(name) === -1) factions.push(name);
+      });
+      function colorOf(character) {
+        var index = factions.indexOf(String(character.faction || "").trim());
+        if (index < 0) return { "--nw-hue": 215, "--nw-sat": "16%" };
+        return { "--nw-hue": FACTION_HUES[index % FACTION_HUES.length] + Math.floor(index / FACTION_HUES.length) * 17, "--nw-sat": "58%" };
+      }
+      colorOf.factions = factions;
+      return colorOf;
+    }
+    function validRelation(relation, ids) { return relation.fromId && relation.toId && relation.fromId !== relation.toId && ids.has(relation.fromId) && ids.has(relation.toId); }
+
+    function readCastLayout(novelKey) {
+      try {
+        var parsed = JSON.parse(window.localStorage.getItem("dshwnw-cast-layout:" + novelKey) || "null");
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch (_) { return {}; }
+    }
+    function writeCastLayout(novelKey, nodes) {
+      try {
+        var out = {};
+        nodes.forEach(function (node, id) { if (node.pinned) out[id] = { x: Math.round(node.x), y: Math.round(node.y) }; });
+        window.localStorage.setItem("dshwnw-cast-layout:" + novelKey, JSON.stringify(out));
+      } catch (_) {}
+    }
+
+    // One step of a small force layout: spheres repel, lines pull their two
+    // ends toward a rest length that grows with the spheres, the cast drifts to
+    // the centre (the protagonist hardest), and spheres never overlap. Pinned
+    // spheres stay where the author put them.
+    function stepCast(nodes, links, alpha) {
+      var list = [];
+      nodes.forEach(function (node) { list.push(node); });
+      var i, j, a, b, dx, dy, d2, d, k;
+      for (i = 0; i < list.length; i += 1) {
+        a = list[i];
+        for (j = i + 1; j < list.length; j += 1) {
+          b = list[j];
+          dx = b.x - a.x; dy = b.y - a.y;
+          d2 = dx * dx + dy * dy;
+          if (d2 < 1) { dx = (i - j) * 0.7 + 0.3; dy = (j % 3) - 1 + 0.2; d2 = dx * dx + dy * dy; }
+          if (d2 > 640000) continue;
+          k = (380 + 8 * (a.r + b.r)) * alpha / d2;
+          a.vx -= dx * k; a.vy -= dy * k;
+          b.vx += dx * k; b.vy += dy * k;
+        }
+      }
+      links.forEach(function (link) {
+        a = nodes.get(link.fromId); b = nodes.get(link.toId);
+        if (!a || !b) return;
+        dx = b.x - a.x; dy = b.y - a.y;
+        d = Math.sqrt(dx * dx + dy * dy) || 1;
+        k = (d - (70 + a.r + b.r)) / d * 0.06 * alpha;
+        a.vx += dx * k; a.vy += dy * k;
+        b.vx -= dx * k; b.vy -= dy * k;
+      });
+      list.forEach(function (node) {
+        var pull = node.center ? 0.2 : 0.035;
+        node.vx -= node.x * pull * alpha;
+        node.vy -= node.y * pull * alpha;
+        if (node.pinned || node.dragging) { node.vx = 0; node.vy = 0; return; }
+        node.vx = Math.max(-40, Math.min(40, node.vx * 0.6));
+        node.vy = Math.max(-40, Math.min(40, node.vy * 0.6));
+        node.x += node.vx;
+        node.y += node.vy;
+      });
+      for (i = 0; i < list.length; i += 1) {
+        a = list[i];
+        for (j = i + 1; j < list.length; j += 1) {
+          b = list[j];
+          dx = b.x - a.x; dy = b.y - a.y;
+          d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+          var min = a.r + b.r + 16;
+          if (d >= min) continue;
+          var push = (min - d) / d;
+          var aFixed = a.pinned || a.dragging;
+          var bFixed = b.pinned || b.dragging;
+          if (aFixed && bFixed) continue;
+          var share = aFixed ? 0 : bFixed ? 1 : 0.5;
+          a.x -= dx * push * share; a.y -= dy * push * share;
+          b.x += dx * push * (1 - share); b.y += dy * push * (1 - share);
+        }
+      }
+    }
+
+    function seedPosition(character, index, count, nodes, relations) {
+      if (character.importance === "protagonist" && !nodes.size) return { x: 0, y: 0 };
+      for (var i = 0; i < relations.length; i += 1) {
+        var relation = relations[i];
+        var other = relation.fromId === character.id ? relation.toId : relation.toId === character.id ? relation.fromId : "";
+        var anchor = other && nodes.get(other);
+        if (anchor) {
+          var turn = (hueOf(character.id) / 360) * Math.PI * 2;
+          return { x: anchor.x + Math.cos(turn) * (anchor.r + 70), y: anchor.y + Math.sin(turn) * (anchor.r + 70) };
+        }
+      }
+      var angle = index * 2.4;
+      var radius = 50 + 34 * Math.sqrt(index + 1);
+      return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+    }
+
+    // A quadratic curve between two spheres. Parallel ties between the same
+    // pair fan out, and the curve stops at each sphere's surface.
+    function edgeGeometry(from, to, offset, arrow) {
+      var dx = to.x - from.x;
+      var dy = to.y - from.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      var cx = (from.x + to.x) / 2 - dy / d * offset * 2;
+      var cy = (from.y + to.y) / 2 + dx / d * offset * 2;
+      var sx = cx - from.x, sy = cy - from.y, sl = Math.sqrt(sx * sx + sy * sy) || 1;
+      var ex = cx - to.x, ey = cy - to.y, el = Math.sqrt(ex * ex + ey * ey) || 1;
+      var x1 = from.x + sx / sl * (from.r + 2), y1 = from.y + sy / sl * (from.r + 2);
+      var x2 = to.x + ex / el * (to.r + (arrow ? 5 : 2)), y2 = to.y + ey / el * (to.r + (arrow ? 5 : 2));
+      var round = function (value) { return Math.round(value * 10) / 10; };
+      return {
+        d: "M" + round(x1) + " " + round(y1) + " Q" + round(cx) + " " + round(cy) + " " + round(x2) + " " + round(y2),
+        mx: 0.25 * x1 + 0.5 * cx + 0.25 * x2,
+        my: 0.25 * y1 + 0.5 * cy + 0.25 * y2,
+      };
+    }
+
+    function reducedMotion() {
+      try { return Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (_) { return false; }
+    }
+
+    function GraphCanvas(props) {
+      var t = props.t;
       var characters = props.project.characters;
-      var selected = characters.find(function (item) { return item.id === props.selectedId; }) || characters[0] || null;
-      return React.createElement("div", { className: "dshwnw-section" },
-        React.createElement("div", { className: "dshwnw-card-head" },
-          React.createElement("div", { className: "dshwnw-section-title" }, props.t("charactersTitle")),
-          characters.length > 0 ? React.createElement("span", { className: "dshwnw-pill" }, characters.length) : null
+      var ids = new Set(characters.map(function (item) { return item.id; }));
+      var relations = props.project.relationships.filter(function (relation) { return validRelation(relation, ids); });
+      var tickSlot = React.useState(0);
+      var setTick = tickSlot[1];
+      var viewSlot = React.useState({ x: 0, y: 0, k: 1 });
+      var view = viewSlot[0];
+      var setView = viewSlot[1];
+      var sizeSlot = React.useState({ w: 0, h: 0 });
+      var size = sizeSlot[0];
+      var setSize = sizeSlot[1];
+      var modeSlot = React.useState("select");
+      var mode = modeSlot[0];
+      var setMode = modeSlot[1];
+      var penSlot = React.useState({ kind: "ally", state: "active" });
+      var pen = penSlot[0];
+      var setPen = penSlot[1];
+      var hoverSlot = React.useState("");
+      var hoverId = hoverSlot[0];
+      var setHoverId = hoverSlot[1];
+      var pendingSlot = React.useState("");
+      var pendingFrom = pendingSlot[0];
+      var setPendingFrom = pendingSlot[1];
+      var previewSlot = React.useState(null);
+      var preview = previewSlot[0];
+      var setPreview = previewSlot[1];
+      var legendSlot = React.useState(false);
+      var legendOpen = legendSlot[0];
+      var setLegendOpen = legendSlot[1];
+      var minorSlot = React.useState(false);
+      var hideMinor = minorSlot[0];
+      var setHideMinor = minorSlot[1];
+      var querySlot = React.useState("");
+      var query = querySlot[0];
+      var setQuery = querySlot[1];
+      var stageRef = React.useRef(null);
+      var svgRef = React.useRef(null);
+      var nodesRef = React.useRef(new Map());
+      var linksRef = React.useRef([]);
+      var alphaRef = React.useRef(0);
+      var frameRef = React.useRef(0);
+      var dragRef = React.useRef(null);
+      var viewRef = React.useRef(view);
+      var sizeRef = React.useRef(size);
+      var fittedRef = React.useRef(false);
+      var spawnRef = React.useRef({});
+      var layoutRef = React.useRef({ key: null, saved: {} });
+      var aliveRef = React.useRef(true);
+      var gestureRef = React.useRef("");
+      viewRef.current = view;
+      sizeRef.current = size;
+      linksRef.current = relations;
+      if (layoutRef.current.key !== props.novelKey) layoutRef.current = { key: props.novelKey, saved: readCastLayout(props.novelKey) };
+
+      function frame() {
+        frameRef.current = 0;
+        if (!aliveRef.current) return;
+        var alpha = alphaRef.current;
+        for (var step = 0; step < 2; step += 1) { stepCast(nodesRef.current, linksRef.current, alpha); alpha *= 0.985; }
+        alphaRef.current = alpha;
+        if (!fittedRef.current && alpha < 0.3) fittedRef.current = fitView();
+        setTick(function (value) { return value + 1; });
+        if (alpha > 0.012 || dragRef.current) frameRef.current = window.requestAnimationFrame(frame);
+      }
+      function reheat(value) {
+        alphaRef.current = Math.max(alphaRef.current, value);
+        if (reducedMotion() && !dragRef.current) {
+          var alpha = alphaRef.current;
+          while (alpha > 0.012) { stepCast(nodesRef.current, linksRef.current, alpha); alpha *= 0.985; }
+          alphaRef.current = 0;
+          if (!fittedRef.current) fittedRef.current = fitView();
+          setTick(function (n) { return n + 1; });
+          return;
+        }
+        if (!frameRef.current) frameRef.current = window.requestAnimationFrame(frame);
+      }
+
+      React.useEffect(function () {
+        aliveRef.current = true;
+        return function () { aliveRef.current = false; if (frameRef.current) window.cancelAnimationFrame(frameRef.current); frameRef.current = 0; };
+      }, []);
+
+      // Measure the stage; the panel can be resized or docked anywhere.
+      React.useEffect(function () {
+        var node = stageRef.current;
+        if (!node) return undefined;
+        function measure() {
+          sizeRef.current = { w: node.clientWidth, h: node.clientHeight };
+          setSize(sizeRef.current);
+          if (!fittedRef.current && alphaRef.current < 0.3) fittedRef.current = fitView();
+        }
+        measure();
+        if (typeof ResizeObserver !== "function") return undefined;
+        var observer = new ResizeObserver(measure);
+        observer.observe(node);
+        return function () { observer.disconnect(); };
+      }, []);
+
+      // Wheel zoom needs a non-passive listener to keep the panel from scrolling.
+      React.useEffect(function () {
+        var svg = svgRef.current;
+        if (!svg) return undefined;
+        function onWheel(event) {
+          event.preventDefault();
+          var rect = svg.getBoundingClientRect();
+          zoomAt(event.clientX - rect.left, event.clientY - rect.top, Math.exp(-event.deltaY * 0.0015));
+        }
+        svg.addEventListener("wheel", onWheel, { passive: false });
+        return function () { svg.removeEventListener("wheel", onWheel); };
+      }, []);
+
+      // Keep simulation nodes in step with the cast; restart only when the
+      // structure changes, not while the author types into a card.
+      var signature = characters.map(function (item) { return item.id + ":" + item.importance; }).join("|") + "#" + relations.map(function (item) { return item.id + ":" + item.fromId + ">" + item.toId; }).join("|");
+      React.useEffect(function () {
+        var nodes = nodesRef.current;
+        var saved = layoutRef.current.saved;
+        var first = nodes.size === 0;
+        var added = false;
+        characters.forEach(function (character, index) {
+          var node = nodes.get(character.id);
+          if (!node) {
+            var spawn = spawnRef.current[character.id];
+            var spot = saved[character.id] || spawn || seedPosition(character, index, characters.length, nodes, relations);
+            node = { id: character.id, x: spot.x, y: spot.y, vx: 0, vy: 0, pinned: Boolean(saved[character.id] || spawn) };
+            nodes.set(character.id, node);
+            delete spawnRef.current[character.id];
+            added = true;
+          }
+          node.r = nodeRadius(character);
+          node.center = character.importance === "protagonist";
+        });
+        nodes.forEach(function (_node, id) { if (!ids.has(id)) nodes.delete(id); });
+        reheat(first ? 1 : added ? 0.5 : 0.35);
+      }, [signature, props.novelKey]);
+
+      function toWorld(sx, sy) {
+        var v = viewRef.current;
+        var s = sizeRef.current;
+        return { x: (sx - s.w / 2 - v.x) / v.k, y: (sy - s.h / 2 - v.y) / v.k };
+      }
+      function pointer(event) {
+        var rect = svgRef.current.getBoundingClientRect();
+        return { sx: event.clientX - rect.left, sy: event.clientY - rect.top };
+      }
+      function zoomAt(sx, sy, factor) {
+        fittedRef.current = true;
+        setView(function (current) {
+          var s = sizeRef.current;
+          var k = Math.max(0.25, Math.min(3, current.k * factor));
+          var wx = (sx - s.w / 2 - current.x) / current.k;
+          var wy = (sy - s.h / 2 - current.y) / current.k;
+          return { k: k, x: sx - s.w / 2 - wx * k, y: sy - s.h / 2 - wy * k };
+        });
+      }
+      function fitView() {
+        var s = sizeRef.current;
+        if (!s.w || !s.h || nodesRef.current.size === 0) return false;
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodesRef.current.forEach(function (node) {
+          minX = Math.min(minX, node.x - node.r); maxX = Math.max(maxX, node.x + node.r);
+          minY = Math.min(minY, node.y - node.r); maxY = Math.max(maxY, node.y + node.r + 18);
+        });
+        var k = Math.max(0.3, Math.min(1.2, (s.w - 48) / (maxX - minX || 1), (s.h - 120) / (maxY - minY || 1)));
+        setView({ k: k, x: -((minX + maxX) / 2) * k, y: -((minY + maxY) / 2) * k + 20 });
+        return true;
+      }
+      function nodeAt(world, except) {
+        var hit = "";
+        var best = Infinity;
+        nodesRef.current.forEach(function (node, id) {
+          if (id === except) return;
+          var d = Math.sqrt((node.x - world.x) * (node.x - world.x) + (node.y - world.y) * (node.y - world.y));
+          if (d <= node.r + 6 && d < best) { best = d; hit = id; }
+        });
+        return hit;
+      }
+      function connect(fromId, toId) {
+        setPendingFrom("");
+        if (!fromId || !toId || fromId === toId) return;
+        var id = props.onConnect(fromId, toId, { kind: pen.kind, state: pen.state });
+        if (id) props.onSelect({ type: "relationship", id: id });
+      }
+      function addAt(world) {
+        var id = props.onAddCharacter();
+        if (!id) return;
+        spawnRef.current[id] = { x: world.x, y: world.y };
+        props.onSelect({ type: "character", id: id, fresh: true });
+      }
+
+      function onPointerDown(event) {
+        if (event.button !== 0) return;
+        var p = pointer(event);
+        var nodeEl = event.target.closest && event.target.closest("[data-node]");
+        var edgeEl = event.target.closest && event.target.closest("[data-edge]");
+        var start = { sx: p.sx, sy: p.sy, moved: false };
+        if (nodeEl) {
+          var id = nodeEl.getAttribute("data-node");
+          var node = nodesRef.current.get(id);
+          if (!node) return;
+          if (mode === "connect") {
+            dragRef.current = Object.assign(start, { type: "link", id: id });
+          } else {
+            dragRef.current = Object.assign(start, { type: "node", id: id, wasPinned: node.pinned });
+            node.dragging = true;
+          }
+        } else if (edgeEl) {
+          dragRef.current = Object.assign(start, { type: "edge", id: edgeEl.getAttribute("data-edge") });
+        } else {
+          dragRef.current = Object.assign(start, { type: "pan", view: viewRef.current });
+        }
+        try { svgRef.current.setPointerCapture(event.pointerId); } catch (_) {}
+      }
+      function onPointerMove(event) {
+        var drag = dragRef.current;
+        if (!drag) {
+          if (hoverId && !(event.target.closest && event.target.closest("[data-node]"))) setHoverId("");
+          return;
+        }
+        var p = pointer(event);
+        if (!drag.moved && Math.abs(p.sx - drag.sx) + Math.abs(p.sy - drag.sy) > 4) drag.moved = true;
+        if (!drag.moved) return;
+        if (drag.type === "node") {
+          var node = nodesRef.current.get(drag.id);
+          if (!node) return;
+          var world = toWorld(p.sx, p.sy);
+          node.x = world.x; node.y = world.y;
+          reheat(0.25);
+        } else if (drag.type === "link") {
+          var target = toWorld(p.sx, p.sy);
+          setPreview({ from: drag.id, x: target.x, y: target.y, over: nodeAt(target, drag.id) });
+        } else if (drag.type === "pan") {
+          fittedRef.current = true;
+          setView({ k: drag.view.k, x: drag.view.x + p.sx - drag.sx, y: drag.view.y + p.sy - drag.sy });
+        }
+      }
+      function onPointerUp(event) {
+        var drag = dragRef.current;
+        dragRef.current = null;
+        if (!drag) return;
+        // With pointer capture a click lands on the canvas itself, so remember
+        // what the gesture was for the double-click that may follow.
+        gestureRef.current = drag.moved ? "" : drag.type;
+        var p = pointer(event);
+        if (drag.type === "node") {
+          var node = nodesRef.current.get(drag.id);
+          if (node) node.dragging = false;
+          if (drag.moved) {
+            if (node) node.pinned = true;
+            writeCastLayout(props.novelKey, nodesRef.current);
+            reheat(0.2);
+          } else {
+            props.onSelect({ type: "character", id: drag.id });
+          }
+        } else if (drag.type === "link") {
+          setPreview(null);
+          if (drag.moved) connect(drag.id, nodeAt(toWorld(p.sx, p.sy), drag.id));
+          else if (pendingFrom && pendingFrom !== drag.id) connect(pendingFrom, drag.id);
+          else setPendingFrom(pendingFrom === drag.id ? "" : drag.id);
+        } else if (drag.type === "edge") {
+          if (!drag.moved) props.onSelect({ type: "relationship", id: drag.id });
+        } else if (!drag.moved) {
+          setPendingFrom("");
+          props.onSelect(null);
+        }
+      }
+      function onDoubleClick(event) {
+        if (gestureRef.current !== "pan") return;
+        var p = pointer(event);
+        var world = toWorld(p.sx, p.sy);
+        if (nodeAt(world, "")) return;
+        addAt(world);
+      }
+      function relayout() {
+        nodesRef.current.forEach(function (node) { node.pinned = false; });
+        writeCastLayout(props.novelKey, nodesRef.current);
+        fittedRef.current = false;
+        reheat(1);
+      }
+      function addAtCenter() {
+        var jitter = (nodesRef.current.size % 5) * 14;
+        addAt(toWorld(sizeRef.current.w / 2 + jitter, sizeRef.current.h / 2 - 30 + jitter));
+      }
+      function findCharacter() {
+        var needle = query.trim();
+        if (!needle) return;
+        var hit = characters.find(function (item) { return (item.name || "").indexOf(needle) !== -1 || (item.aliases || "").indexOf(needle) !== -1; });
+        var node = hit && nodesRef.current.get(hit.id);
+        if (!node) return;
+        setView(function (current) { return { k: current.k, x: -node.x * current.k, y: -node.y * current.k }; });
+        props.onSelect({ type: "character", id: hit.id });
+      }
+      function setModeTo(next) {
+        setMode(next);
+        setPendingFrom("");
+        setPreview(null);
+      }
+      var selectedKey = props.selection ? props.selection.type + ":" + props.selection.id : "";
+      React.useEffect(function () {
+        if (!props.selection) return;
+        fittedRef.current = true;
+        var s = sizeRef.current;
+        var target = null;
+        if (props.selection.type === "character") target = nodesRef.current.get(props.selection.id);
+        else {
+          var tie = linksRef.current.find(function (item) { return item.id === props.selection.id; });
+          var a = tie && nodesRef.current.get(tie.fromId);
+          var b = tie && nodesRef.current.get(tie.toId);
+          if (a && b) target = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, r: 0 };
+        }
+        if (!target || !s.w || !s.h) return;
+        setView(function (current) {
+          var sx = s.w / 2 + current.x + target.x * current.k;
+          var sy = s.h / 2 + current.y + target.y * current.k;
+          if (s.w >= 620) {
+            var right = s.w - 356;
+            return sx > right - 30 ? { k: current.k, x: current.x + right / 2 - sx, y: current.y } : current;
+          }
+          // The card is a bottom sheet here: aim for the gap between the tools and its top edge.
+          var cardTop = s.h - 8 - Math.min(s.h * 0.58, 520);
+          var middle = Math.max(80, (84 + cardTop) / 2);
+          return sy > cardTop - 16 || sy < 84 ? { k: current.k, x: current.x + s.w / 2 - sx, y: current.y + middle - sy } : current;
+        });
+      }, [selectedKey]);
+      React.useEffect(function () {
+        if (!props.connectFrom) return;
+        setMode("connect");
+        setPendingFrom(props.connectFrom.id);
+      }, [props.connectFrom]);
+
+      // What to emphasise: the selected or hovered character and its ties,
+      // or both ends of the selected relationship, or the search hits.
+      var selected = props.selection;
+      var focus = new Set();
+      var focusEdges = new Set();
+      var focusId = selected && selected.type === "character" ? selected.id : hoverId;
+      if (selected && selected.type === "relationship") {
+        var picked = relations.find(function (item) { return item.id === selected.id; });
+        if (picked) { focus.add(picked.fromId); focus.add(picked.toId); focusEdges.add(picked.id); }
+      } else if (focusId) {
+        focus.add(focusId);
+        relations.forEach(function (relation) {
+          if (relation.fromId === focusId || relation.toId === focusId) { focus.add(relation.fromId); focus.add(relation.toId); focusEdges.add(relation.id); }
+        });
+      }
+      var needle = query.trim();
+      var matches = needle ? new Set(characters.filter(function (item) { return (item.name || "").indexOf(needle) !== -1 || (item.aliases || "").indexOf(needle) !== -1; }).map(function (item) { return item.id; })) : null;
+      var hidden = new Set(hideMinor ? characters.filter(function (item) { return item.importance === "minor" && !focus.has(item.id); }).map(function (item) { return item.id; }) : []);
+      var dimming = focus.size > 0 || Boolean(matches);
+      var showAllLabels = relations.length <= 12 || view.k >= 1.3;
+      var pending = props.pendingIds || new Set();
+      var byId = new Map(characters.map(function (item) { return [item.id, item]; }));
+      var colors = castColors(characters);
+
+      var pairCounts = new Map();
+      var pairIndex = new Map();
+      relations.forEach(function (relation) {
+        var key = relation.fromId < relation.toId ? relation.fromId + "|" + relation.toId : relation.toId + "|" + relation.fromId;
+        pairIndex.set(relation.id, pairCounts.get(key) || 0);
+        pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
+      });
+
+      var edgeEls = [];
+      var labelEls = [];
+      relations.forEach(function (relation) {
+        var from = nodesRef.current.get(relation.fromId);
+        var to = nodesRef.current.get(relation.toId);
+        if (!from || !to || hidden.has(relation.fromId) || hidden.has(relation.toId)) return;
+        var key = relation.fromId < relation.toId ? relation.fromId + "|" + relation.toId : relation.toId + "|" + relation.fromId;
+        var count = pairCounts.get(key);
+        var offset = (pairIndex.get(relation.id) - (count - 1) / 2) * 24 * (relation.fromId < relation.toId ? 1 : -1);
+        var oneway = relation.direction === "oneway";
+        var geometry = edgeGeometry(from, to, offset, oneway);
+        var color = RELATION_KIND_COLOR[relation.kind] || RELATION_KIND_COLOR.other;
+        var isSelected = selected && selected.type === "relationship" && selected.id === relation.id;
+        var dim = dimming && !focusEdges.has(relation.id) && !(matches && matches.has(relation.fromId) && matches.has(relation.toId));
+        edgeEls.push(React.createElement("g", { key: relation.id, "data-edge": relation.id, className: "dshwnw-cast-edge", "data-dim": dim ? "true" : undefined, "data-selected": isSelected ? "true" : undefined, "data-state": relation.state },
+          React.createElement("path", { d: geometry.d, className: "dshwnw-cast-hit" }),
+          isSelected ? React.createElement("path", { d: geometry.d, className: "dshwnw-cast-glow", stroke: color }) : null,
+          React.createElement("path", {
+            d: geometry.d, className: "dshwnw-cast-line", stroke: color,
+            strokeWidth: RELATION_STRENGTH_WIDTH[relation.strength] || 2.2,
+            strokeDasharray: RELATION_STATE_DASH[relation.state] || undefined,
+            markerEnd: oneway ? "url(#dshwnw-arrow-" + (RELATION_KIND_COLOR[relation.kind] ? relation.kind : "other") + ")" : undefined,
+          })
+        ));
+        var text = relation.label || (focusEdges.has(relation.id) ? t("relKind_" + relation.kind) : "");
+        if (text && !dim && (showAllLabels || focusEdges.has(relation.id))) {
+          labelEls.push(React.createElement("text", { key: relation.id, x: geometry.mx, y: geometry.my + 3.5, className: "dshwnw-cast-edge-label", fill: color }, text.length > 10 ? text.slice(0, 9) + "…" : text));
+        }
+        if (pending.has("relationship:" + relation.id) && !dim) {
+          labelEls.push(React.createElement("circle", { key: relation.id + "-pending", cx: geometry.mx, cy: geometry.my - 9, r: 3.5, className: "dshwnw-cast-pending" }));
+        }
+      });
+
+      var nodeEls = characters.map(function (character) {
+        var node = nodesRef.current.get(character.id);
+        if (!node || hidden.has(character.id)) return null;
+        var r = node.r;
+        var color = colors(character);
+        var isSelected = selected && selected.type === "character" && selected.id === character.id;
+        var dim = dimming && !focus.has(character.id) && !(matches && matches.has(character.id));
+        var name = character.name || t("unnamedCharacter");
+        return React.createElement("g", {
+          key: character.id, "data-node": character.id, className: "dshwnw-cast-node",
+          transform: "translate(" + Math.round(node.x * 10) / 10 + " " + Math.round(node.y * 10) / 10 + ")",
+          "data-dim": dim ? "true" : undefined, "data-selected": isSelected ? "true" : undefined,
+          "data-pending-from": pendingFrom === character.id || (preview && preview.over === character.id) ? "true" : undefined,
+          onPointerEnter: function () { if (!dragRef.current) setHoverId(character.id); },
+          onPointerLeave: function () { setHoverId(function (current) { return current === character.id ? "" : current; }); },
+        },
+          character.importance === "protagonist" ? React.createElement("circle", { r: r + 5, className: "dshwnw-cast-halo", style: color }) : null,
+          React.createElement("circle", { r: r + 3.5, className: "dshwnw-cast-ring" }),
+          React.createElement("circle", { r: r, className: "dshwnw-cast-ball", style: color }),
+          React.createElement("circle", { r: r, fill: "url(#dshwnw-sphere-shade)", pointerEvents: "none" }),
+          React.createElement("circle", { r: r, fill: "url(#dshwnw-sphere-shine)", pointerEvents: "none" }),
+          React.createElement("text", { className: "dshwnw-cast-initial", y: r * 0.32, style: { fontSize: Math.max(10, r * 0.86) + "px" } }, name.slice(0, 1)),
+          React.createElement("text", { className: "dshwnw-cast-name", y: r + 14, "data-major": IMPORTANCE_LEVELS.indexOf(character.importance) <= 1 ? "true" : undefined }, name.length > 8 ? name.slice(0, 7) + "…" : name),
+          pending.has("character:" + character.id) ? React.createElement("circle", { cx: r * 0.72, cy: -r * 0.72, r: 4.5, className: "dshwnw-cast-pending" }) : null
+        );
+      });
+
+      var previewEl = null;
+      if (preview) {
+        var source = nodesRef.current.get(preview.from);
+        var over = preview.over && nodesRef.current.get(preview.over);
+        if (source) previewEl = React.createElement("line", {
+          x1: source.x, y1: source.y, x2: over ? over.x : preview.x, y2: over ? over.y : preview.y,
+          className: "dshwnw-cast-preview", stroke: RELATION_KIND_COLOR[pen.kind], strokeDasharray: RELATION_STATE_DASH[pen.state] || "5 4",
+        });
+      }
+
+      var pendingName = pendingFrom && byId.get(pendingFrom) ? byId.get(pendingFrom).name || t("unnamedCharacter") : "";
+      var defs = React.createElement("defs", null,
+        React.createElement("radialGradient", { id: "dshwnw-sphere-shine", cx: "35%", cy: "28%", r: "62%" },
+          React.createElement("stop", { offset: "0", stopColor: "#fff", stopOpacity: 0.78 }),
+          React.createElement("stop", { offset: "0.42", stopColor: "#fff", stopOpacity: 0.14 }),
+          React.createElement("stop", { offset: "1", stopColor: "#fff", stopOpacity: 0 })),
+        React.createElement("radialGradient", { id: "dshwnw-sphere-shade", cx: "50%", cy: "50%", r: "50%" },
+          React.createElement("stop", { offset: "0.55", stopColor: "#000", stopOpacity: 0 }),
+          React.createElement("stop", { offset: "1", stopColor: "#000", stopOpacity: 0.3 })),
+        RELATION_KIND_LIST.map(function (kind) {
+          return React.createElement("marker", { key: kind, id: "dshwnw-arrow-" + kind, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 9, markerHeight: 9, markerUnits: "userSpaceOnUse", orient: "auto-start-reverse" },
+            React.createElement("path", { d: "M1 1L9 5 1 9z", fill: RELATION_KIND_COLOR[kind] }));
+        })
+      );
+
+      return React.createElement("div", { ref: stageRef, className: "dshwnw-cast-stage", "data-mode": mode },
+        React.createElement("svg", {
+          ref: svgRef, className: "dshwnw-cast-svg", width: size.w || "100%", height: size.h || "100%",
+          role: "img", "aria-label": t("castTitle"),
+          onPointerDown: onPointerDown, onPointerMove: onPointerMove, onPointerUp: onPointerUp, onPointerCancel: onPointerUp, onDoubleClick: onDoubleClick,
+          onPointerLeave: function () { if (!dragRef.current) setHoverId(""); },
+        },
+          defs,
+          React.createElement("g", { transform: "translate(" + (size.w / 2 + view.x) + " " + (size.h / 2 + view.y) + ") scale(" + view.k + ")" },
+            React.createElement("g", null, edgeEls),
+            previewEl,
+            React.createElement("g", null, nodeEls),
+            React.createElement("g", { pointerEvents: "none" }, labelEls)
+          )
+        ),
+        React.createElement("div", { className: "dshwnw-cast-tools" },
+          React.createElement("div", { className: "dshwnw-cast-toolrow" },
+            React.createElement("div", { className: "dshwnw-segment", role: "group", "aria-label": t("castTools") },
+              React.createElement("button", { type: "button", "data-active": mode === "select" ? "true" : undefined, title: t("toolSelectHint"), onClick: function () { setModeTo("select"); } }, React.createElement(NwIcon, { name: "pointer", size: 13 }), t("toolSelect")),
+              React.createElement("button", { type: "button", "data-active": mode === "connect" ? "true" : undefined, title: t("connectHint"), onClick: function () { setModeTo(mode === "connect" ? "select" : "connect"); } }, React.createElement(NwIcon, { name: "link", size: 13 }), t("toolConnect"))
+            ),
+            React.createElement("button", { type: "button", className: "dshwnw-cast-tool", title: t("toolAddCharacterHint"), onClick: addAtCenter }, React.createElement(NwIcon, { name: "plus", size: 13 }), t("toolAddCharacter")),
+            React.createElement("span", { className: "dshwnw-cast-spacer" }),
+            React.createElement("button", { type: "button", className: "dshwnw-cast-icon", title: t("toolRelayout"), "aria-label": t("toolRelayout"), onClick: relayout }, React.createElement(NwIcon, { name: "refresh", size: 14 })),
+            React.createElement("button", { type: "button", className: "dshwnw-cast-icon", title: t("toolFit"), "aria-label": t("toolFit"), onClick: fitView }, React.createElement(NwIcon, { name: "fit", size: 14 })),
+            React.createElement("button", { type: "button", className: "dshwnw-cast-icon", title: t("toolListView"), "aria-label": t("toolListView"), onClick: props.onListView }, React.createElement(NwIcon, { name: "section_outline", size: 14 }))
+          ),
+          mode === "connect"
+            ? React.createElement("div", { className: "dshwnw-cast-pen" },
+              React.createElement("span", { className: "dshwnw-cast-pen-label" }, t("penLabel")),
+              React.createElement("select", { className: "dshwnw-select", value: pen.kind, "aria-label": t("kind"), style: { color: RELATION_KIND_COLOR[pen.kind] }, onChange: function (event) { setPen(Object.assign({}, pen, { kind: event.target.value })); } },
+                RELATION_KIND_LIST.map(function (kind) { return React.createElement("option", { key: kind, value: kind }, t("relKind_" + kind)); })),
+              React.createElement("select", { className: "dshwnw-select", value: pen.state, "aria-label": t("state"), onChange: function (event) { setPen(Object.assign({}, pen, { state: event.target.value })); } },
+                RELATION_STATE_LIST.map(function (state) { return React.createElement("option", { key: state, value: state }, t("relState_" + state)); })),
+              React.createElement("span", { className: "dshwnw-cast-pen-hint" }, pendingName ? t("connectPending").replace("{name}", pendingName) : t("connectHint"))
+            )
+            : React.createElement("div", { className: "dshwnw-cast-toolrow" },
+              React.createElement("label", { className: "dshwnw-cast-search" },
+                React.createElement(NwIcon, { name: "search", size: 13 }),
+                React.createElement("input", { value: query, placeholder: t("castSearch"), "aria-label": t("castSearch"), onChange: function (event) { setQuery(event.target.value); }, onKeyDown: function (event) { if (event.key === "Enter") findCharacter(); if (event.key === "Escape") setQuery(""); } })
+              ),
+              React.createElement("button", { type: "button", className: "dshwnw-chip", "data-active": hideMinor ? "true" : undefined, onClick: function () { setHideMinor(!hideMinor); } }, t("toolHideMinor")),
+              React.createElement("button", { type: "button", className: "dshwnw-chip", "data-active": legendOpen ? "true" : undefined, onClick: function () { setLegendOpen(!legendOpen); } }, t("toolLegend"))
+            )
+        ),
+        legendOpen ? React.createElement(CastLegend, { t: t, colors: colors, onClose: function () { setLegendOpen(false); } }) : null,
+        React.createElement("div", { className: "dshwnw-cast-zoom" },
+          React.createElement("button", { type: "button", className: "dshwnw-cast-icon", title: t("zoomIn"), "aria-label": t("zoomIn"), onClick: function () { zoomAt(size.w / 2, size.h / 2, 1.25); } }, React.createElement(NwIcon, { name: "plus", size: 14 })),
+          React.createElement("button", { type: "button", className: "dshwnw-cast-icon", title: t("zoomOut"), "aria-label": t("zoomOut"), onClick: function () { zoomAt(size.w / 2, size.h / 2, 0.8); } }, React.createElement(NwIcon, { name: "minus", size: 14 }))
         ),
         characters.length === 0
-          ? React.createElement("div", { className: "dshwnw-empty" }, props.t("charactersEmpty"),
-            React.createElement("button", { type: "button", className: "dshwnw-primary", onClick: props.onAdd }, React.createElement(NwIcon, { name: "plus", size: 14 }), props.t("addCharacter")))
+          ? React.createElement("div", { className: "dshwnw-cast-empty" },
+            React.createElement("span", null, t("castEmpty")),
+            React.createElement("button", { type: "button", className: "dshwnw-primary", onClick: function () { var id = props.onAddCharacter({ importance: "protagonist" }); if (id) { spawnRef.current[id] = { x: 0, y: 0 }; props.onSelect({ type: "character", id: id, fresh: true }); } } }, React.createElement(NwIcon, { name: "plus", size: 14 }), t("addProtagonist")))
+          : !selected && mode !== "connect" ? React.createElement("div", { className: "dshwnw-cast-hint" }, t("castCanvasHint")) : null
+      );
+    }
+
+    // A short swatch of a relationship line; `reverse` points the arrow left.
+    function LineSample(props) {
+      var marker = "dshwnw-sample-arrow-" + String(props.color).replace(/[^a-z0-9]/gi, "");
+      var start = props.reverse ? 32 : 2;
+      var end = props.arrow ? (props.reverse ? 6 : 28) : (props.reverse ? 2 : 32);
+      return React.createElement("svg", { width: 34, height: 10, "aria-hidden": true, className: "dshwnw-line-sample" },
+        props.arrow ? React.createElement("defs", null, React.createElement("marker", { id: marker, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 7, markerHeight: 7, markerUnits: "userSpaceOnUse", orient: "auto" }, React.createElement("path", { d: "M1 1L9 5 1 9z", fill: props.color }))) : null,
+        React.createElement("line", {
+          x1: start, y1: 5, x2: end, y2: 5, stroke: props.color, strokeWidth: props.width || 2.2, strokeLinecap: "round",
+          strokeDasharray: props.dash || undefined, opacity: props.faded ? 0.35 : 1, markerEnd: props.arrow ? "url(#" + marker + ")" : undefined,
+        })
+      );
+    }
+
+    function CastLegend(props) {
+      var t = props.t;
+      return React.createElement("div", { className: "dshwnw-cast-legend", role: "note" },
+        React.createElement("div", { className: "dshwnw-cast-legend-head" }, t("toolLegend"), React.createElement("button", { type: "button", className: "dshwnw-icon-btn", "aria-label": t("close"), onClick: props.onClose }, React.createElement(NwIcon, { name: "close", size: 13 }))),
+        React.createElement("div", { className: "dshwnw-cast-legend-title" }, t("legendSize")),
+        React.createElement("div", { className: "dshwnw-cast-legend-sizes" }, IMPORTANCE_LEVELS.map(function (level) {
+          var r = IMPORTANCE_RADIUS[level] / 2.6;
+          return React.createElement("span", { key: level }, React.createElement("i", { style: { width: r * 2, height: r * 2 } }), t("castImp_" + level));
+        })),
+        props.colors.factions.length ? React.createElement("div", { className: "dshwnw-cast-legend-title" }, t("legendFactions")) : null,
+        props.colors.factions.length ? React.createElement("div", { className: "dshwnw-cast-legend-factions" }, props.colors.factions.map(function (name) {
+          return React.createElement("span", { key: name }, React.createElement("i", { style: props.colors({ faction: name }) }), name);
+        })) : null,
+        React.createElement("div", { className: "dshwnw-cast-legend-title" }, t("legendKinds")),
+        React.createElement("div", { className: "dshwnw-cast-legend-grid" }, RELATION_KIND_LIST.map(function (kind) {
+          return React.createElement("span", { key: kind }, React.createElement(LineSample, { color: RELATION_KIND_COLOR[kind] }), t("relKind_" + kind));
+        })),
+        React.createElement("div", { className: "dshwnw-cast-legend-title" }, t("legendStates")),
+        React.createElement("div", { className: "dshwnw-cast-legend-grid", "data-single": "true" }, RELATION_STATE_LIST.map(function (state) {
+          return React.createElement("span", { key: state, title: t("stateHint_" + state) }, React.createElement(LineSample, { color: "var(--nw-fg2)", dash: RELATION_STATE_DASH[state], faded: state === "ended" }), t("relState_" + state) + " · " + t("stateHint_" + state));
+        })),
+        React.createElement("div", { className: "dshwnw-cast-legend-grid" },
+          React.createElement("span", null, React.createElement(LineSample, { color: "var(--nw-fg2)", arrow: true }), t("legendArrow")),
+          React.createElement("span", null, React.createElement(LineSample, { color: "var(--nw-fg2)", width: 3.6 }), t("legendWidth"))
+        )
+      );
+    }
+
+    function SphereDot(props) {
+      return React.createElement("span", { className: "dshwnw-sphere", "data-size": props.size, style: props.colors(props.character) }, (props.character.name || "?").slice(0, 1));
+    }
+
+    function CharacterSectionFields(props) {
+      var character = props.character;
+      var t = props.t;
+      var inputs = props.section.fields.filter(function (item) { return item.kind === "input"; });
+      var others = props.section.fields.filter(function (item) { return item.kind !== "input"; });
+      return React.createElement(React.Fragment, null,
+        inputs.length ? React.createElement("div", { className: "dshwnw-grid" },
+          inputs.map(function (item) {
+            return React.createElement(InputField, { key: item.key, label: t(item.label), value: character[item.key], onChange: function (v) { props.onPatch(item.key, v); } });
+          }),
+          props.section.key === "basic" ? React.createElement(SelectField, { key: "importance", label: t("importance"), empty: null, value: character.importance || "supporting", options: IMPORTANCE_LEVELS.map(function (level) { return { value: level, label: t("castImp_" + level) }; }), onChange: function (v) { props.onPatch("importance", v); } }) : null
+        ) : null,
+        others.map(function (item) {
+          return item.kind === "wide"
+            ? React.createElement(InputField, { key: item.key, label: t(item.label), value: character[item.key], onChange: function (v) { props.onPatch(item.key, v); } })
+            : React.createElement(TextField, { key: item.key, label: t(item.label), value: character[item.key], rows: item.rows, onChange: function (v) { props.onPatch(item.key, v); } });
+        })
+      );
+    }
+
+    function splitTags(value) {
+      return String(value || "").split(/[,，、;；#\s]+/).map(function (item) { return item.trim(); }).filter(Boolean).slice(0, 8);
+    }
+
+    // The small card that pops up when a sphere is clicked.
+    function CharacterPopCard(props) {
+      var t = props.t;
+      var character = props.character;
+      var sectionSlot = React.useState("basic");
+      var section = sectionSlot[0];
+      var setSection = sectionSlot[1];
+      var confirmSlot = React.useState(false);
+      var confirming = confirmSlot[0];
+      var setConfirming = confirmSlot[1];
+      var nameRef = React.useRef(null);
+      React.useEffect(function () { setSection("basic"); setConfirming(false); }, [character.id]);
+      React.useEffect(function () { if (props.fresh && nameRef.current) nameRef.current.focus(); }, [character.id, props.fresh]);
+      var names = new Map(props.project.characters.map(function (item) { return [item.id, item]; }));
+      var colors = castColors(props.project.characters);
+      var ties = props.project.relationships.filter(function (relation) { return relation.fromId === character.id || relation.toId === character.id; });
+      var score = characterCompleteness(character);
+      var tags = splitTags(character.tags);
+      var current = CHARACTER_SECTIONS.find(function (item) { return item.key === section; });
+      function patch(key, value) { props.onPatch(character.id, key, value); }
+      return React.createElement("div", { className: "dshwnw-pop", role: "dialog", "aria-label": character.name || t("unnamedCharacter"), onKeyDown: function (event) { if (event.key === "Escape") props.onClose(); } },
+        React.createElement("div", { className: "dshwnw-pop-head" },
+          React.createElement(SphereDot, { character: character, size: "lg", colors: colors }),
+          React.createElement("div", { className: "dshwnw-pop-title" },
+            React.createElement("input", { ref: nameRef, className: "dshwnw-pop-name", value: character.name || "", placeholder: t("unnamedCharacter"), "aria-label": t("name"), onChange: function (event) { patch("name", event.target.value); } }),
+            React.createElement("div", { className: "dshwnw-pop-sub" },
+              React.createElement("select", { className: "dshwnw-pop-importance", value: character.importance || "supporting", "aria-label": t("importance"), onChange: function (event) { patch("importance", event.target.value); } },
+                IMPORTANCE_LEVELS.map(function (level) { return React.createElement("option", { key: level, value: level }, t("castImp_" + level)); })),
+              character.faction ? React.createElement("span", { className: "dshwnw-pop-faction", style: colors(character) }, character.faction) : null,
+              React.createElement("span", { className: "dshwnw-pop-score", title: t("cardCompletenessHint") }, t("cardCompleteness").replace("{n}", score.filled).replace("{total}", score.total))
+            )
+          ),
+          React.createElement("button", { type: "button", className: "dshwnw-icon-btn", "aria-label": t("close"), title: t("close"), onClick: props.onClose }, React.createElement(NwIcon, { name: "close", size: 15 }))
+        ),
+        tags.length ? React.createElement("div", { className: "dshwnw-pop-tags" }, tags.map(function (tag, index) { return React.createElement("span", { key: index, className: "dshwnw-pill" }, "#" + tag); })) : null,
+        React.createElement("div", { className: "dshwnw-pop-tabs", role: "tablist" },
+          CHARACTER_SECTIONS.map(function (item) {
+            return React.createElement("button", { key: item.key, type: "button", role: "tab", "aria-selected": section === item.key, onClick: function () { setSection(item.key); } }, t("cardSection_" + item.key));
+          }),
+          React.createElement("button", { type: "button", role: "tab", "aria-selected": section === "relations", onClick: function () { setSection("relations"); } }, t("cardSection_relations") + (ties.length ? " " + ties.length : ""))
+        ),
+        React.createElement("div", { className: "dshwnw-pop-body" },
+          section === "relations"
+            ? React.createElement("div", { className: "dshwnw-pop-ties" },
+              ties.length === 0 ? React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("cardRelationsEmpty")) : null,
+              ties.map(function (relation) {
+                var otherId = relation.fromId === character.id ? relation.toId : relation.fromId;
+                var other = names.get(otherId);
+                var outgoing = relation.fromId === character.id;
+                return React.createElement("button", { key: relation.id, type: "button", className: "dshwnw-tie", onClick: function () { props.onSelect({ type: "relationship", id: relation.id }); } },
+                  React.createElement(LineSample, { color: RELATION_KIND_COLOR[relation.kind] || RELATION_KIND_COLOR.other, dash: RELATION_STATE_DASH[relation.state], faded: relation.state === "ended", arrow: relation.direction === "oneway", reverse: relation.direction === "oneway" && !outgoing }),
+                  other ? React.createElement(SphereDot, { character: other, colors: colors }) : null,
+                  React.createElement("span", { className: "dshwnw-list-copy" },
+                    React.createElement("span", { className: "dshwnw-list-name" }, (relation.direction === "oneway" ? (outgoing ? "→ " : "← ") : "") + (other ? other.name || t("unnamedCharacter") : t("missingCharacter"))),
+                    React.createElement("span", { className: "dshwnw-list-meta" }, [t("relKind_" + relation.kind), t("relState_" + relation.state), relation.label].filter(Boolean).join(" · "))
+                  )
+                );
+              }),
+              React.createElement(AddButton, { onClick: function () { props.onStartConnect(character.id); } }, t("connectFrom"))
+            )
+            : React.createElement(CharacterSectionFields, { t: t, section: current, character: character, onPatch: patch }),
+          section === "story" ? React.createElement(CustomFieldsEditor, { t: t, value: character.customFields, onChange: function (value) { patch("customFields", value); } }) : null
+        ),
+        React.createElement("div", { className: "dshwnw-pop-foot" },
+          React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { props.onStartConnect(character.id); } }, React.createElement(NwIcon, { name: "link", size: 13 }), t("connectFrom")),
+          React.createElement("button", { type: "button", className: "dshwnw-danger", onClick: function () { if (confirming) props.onDelete(character.id); else setConfirming(true); } }, React.createElement(NwIcon, { name: "trash", size: 13 }), confirming ? t("deleteConfirm") : t("deleteCharacter"))
+        )
+      );
+    }
+
+    function ChoiceRow(props) {
+      return React.createElement("div", { className: "dshwnw-field" },
+        React.createElement("span", { className: "dshwnw-label" }, props.label),
+        React.createElement("div", { className: "dshwnw-choices", role: "radiogroup", "aria-label": props.label }, props.options.map(function (option) {
+          return React.createElement("button", {
+            key: option.value, type: "button", role: "radio", "aria-checked": props.value === option.value, className: "dshwnw-choice", title: option.title,
+            style: option.color ? { "--nw-choice": option.color } : undefined,
+            onClick: function () { props.onChange(option.value); },
+          }, option.sample || null, option.label);
+        }))
+      );
+    }
+
+    function RelationPopCard(props) {
+      var t = props.t;
+      var relation = props.relation;
+      var confirmSlot = React.useState(false);
+      var confirming = confirmSlot[0];
+      var setConfirming = confirmSlot[1];
+      React.useEffect(function () { setConfirming(false); }, [relation.id]);
+      var names = new Map(props.project.characters.map(function (item) { return [item.id, item]; }));
+      var colors = castColors(props.project.characters);
+      var from = names.get(relation.fromId);
+      var to = names.get(relation.toId);
+      var color = RELATION_KIND_COLOR[relation.kind] || RELATION_KIND_COLOR.other;
+      function patch(key, value) { props.onPatch(relation.id, key, value); }
+      function swap() { props.onPatch(relation.id, "fromId", relation.toId); props.onPatch(relation.id, "toId", relation.fromId); }
+      function person(character) {
+        return character
+          ? React.createElement("button", { type: "button", className: "dshwnw-pop-person", onClick: function () { props.onSelect({ type: "character", id: character.id }); } }, React.createElement(SphereDot, { character: character, colors: colors }), React.createElement("span", null, character.name || t("unnamedCharacter")))
+          : React.createElement("span", { className: "dshwnw-pop-person" }, t("missingCharacter"));
+      }
+      return React.createElement("div", { className: "dshwnw-pop", role: "dialog", "aria-label": t("relationship"), onKeyDown: function (event) { if (event.key === "Escape") props.onClose(); } },
+        React.createElement("div", { className: "dshwnw-pop-head" },
+          React.createElement("div", { className: "dshwnw-pop-pair" },
+            person(from),
+            React.createElement("button", { type: "button", className: "dshwnw-pop-swap", title: t("swapEnds"), "aria-label": t("swapEnds"), onClick: swap, style: { color: color } },
+              React.createElement(LineSample, { color: color, dash: RELATION_STATE_DASH[relation.state], faded: relation.state === "ended", arrow: relation.direction === "oneway", width: RELATION_STRENGTH_WIDTH[relation.strength] })),
+            person(to)
+          ),
+          React.createElement("button", { type: "button", className: "dshwnw-icon-btn", "aria-label": t("close"), title: t("close"), onClick: props.onClose }, React.createElement(NwIcon, { name: "close", size: 15 }))
+        ),
+        React.createElement("div", { className: "dshwnw-pop-body" },
+          React.createElement(ChoiceRow, {
+            label: t("kind"), value: relation.kind, onChange: function (v) { patch("kind", v); },
+            options: RELATION_KIND_LIST.map(function (kind) { return { value: kind, label: t("relKind_" + kind), color: RELATION_KIND_COLOR[kind], sample: React.createElement("i", { className: "dshwnw-choice-dot" }) }; }),
+          }),
+          React.createElement(ChoiceRow, {
+            label: t("state"), value: relation.state, onChange: function (v) { patch("state", v); },
+            options: RELATION_STATE_LIST.map(function (state) { return { value: state, label: t("relState_" + state), title: t("stateHint_" + state), sample: React.createElement(LineSample, { color: "currentColor", dash: RELATION_STATE_DASH[state], faded: state === "ended" }) }; }),
+          }),
+          React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: -4 } }, t("stateHint_" + relation.state)),
+          React.createElement("div", { className: "dshwnw-grid" },
+            React.createElement(ChoiceRow, { label: t("direction"), value: relation.direction, onChange: function (v) { patch("direction", v); }, options: ["mutual", "oneway"].map(function (value) { return { value: value, label: t("direction_" + value) }; }) }),
+            React.createElement(ChoiceRow, { label: t("strength"), value: relation.strength, onChange: function (v) { patch("strength", v); }, options: ["1", "2", "3"].map(function (value) { return { value: value, label: t("strength_" + value) }; }) })
+          ),
+          React.createElement("div", { className: "dshwnw-grid" },
+            React.createElement(InputField, { label: t("relationLabel"), value: relation.label, placeholder: t("relationLabelPlaceholder"), onChange: function (v) { patch("label", v); } }),
+            React.createElement(InputField, { label: t("relationStatus"), value: relation.status, onChange: function (v) { patch("status", v); } })
+          ),
+          React.createElement(TextField, { label: t("futureDirection"), value: relation.futureDirection, placeholder: t("relationFocusHint"), onChange: function (v) { patch("futureDirection", v); } }),
+          React.createElement(TextField, { label: t("tension"), value: relation.tension, onChange: function (v) { patch("tension", v); } }),
+          React.createElement(FieldGroup, { title: t("groupRelationHistory"), collapsed: true },
+            React.createElement(TextField, { label: t("relationHistory"), value: relation.history, onChange: function (v) { patch("history", v); } }),
+            React.createElement(TextField, { label: t("dynamic"), value: relation.dynamic, onChange: function (v) { patch("dynamic", v); } }),
+            React.createElement(TextField, { label: t("powerBalance"), value: relation.powerBalance, onChange: function (v) { patch("powerBalance", v); } })
+          ),
+          React.createElement(FieldGroup, { title: t("groupRelationLayers"), collapsed: true },
+            React.createElement(TextField, { label: t("publicFace"), value: relation.publicFace, onChange: function (v) { patch("publicFace", v); } }),
+            React.createElement(TextField, { label: t("privateTruth"), value: relation.privateTruth, onChange: function (v) { patch("privateTruth", v); } }),
+            React.createElement(TextField, { label: t("sharedSecret"), value: relation.sharedSecret, onChange: function (v) { patch("sharedSecret", v); } }),
+            React.createElement(TextField, { label: t("turningPoints"), value: relation.turningPoints, onChange: function (v) { patch("turningPoints", v); } })
+          )
+        ),
+        React.createElement("div", { className: "dshwnw-pop-foot" },
+          React.createElement("span", { className: "dshwnw-cast-spacer" }),
+          React.createElement("button", { type: "button", className: "dshwnw-danger", onClick: function () { if (confirming) props.onDelete(relation.id); else setConfirming(true); } }, React.createElement(NwIcon, { name: "trash", size: 13 }), confirming ? t("deleteConfirm") : t("deleteRelationship"))
+        )
+      );
+    }
+
+    function castInboxLabel(entry, project, t) {
+      var label = entry.label || entry.targetId;
+      if (entry.change !== "removed") {
+        if (entry.target === "character") {
+          var character = project.characters.find(function (item) { return item.id === entry.targetId; });
+          if (character) label = character.name || t("unnamedCharacter");
+        } else {
+          var relation = project.relationships.find(function (item) { return item.id === entry.targetId; });
+          var names = new Map(project.characters.map(function (item) { return [item.id, item.name || t("unnamedCharacter")]; }));
+          if (relation) label = (names.get(relation.fromId) || "?") + (relation.direction === "oneway" ? " → " : " ↔ ") + (names.get(relation.toId) || "?") + " · " + t("relKind_" + relation.kind) + " · " + t("relState_" + relation.state);
+        }
+      }
+      return t("inboxChange_" + entry.change) + t("inboxTarget_" + entry.target) + "：" + label;
+    }
+
+    // Saved cast edits wait here until the AI has worked them into the outline.
+    function CastInbox(props) {
+      var t = props.t;
+      var openSlot = React.useState(false);
+      var open = openSlot[0];
+      var setOpen = openSlot[1];
+      var inbox = props.inbox || [];
+      if (props.castDirty) {
+        return React.createElement("div", { className: "dshwnw-cast-inbox", "data-tone": "unsaved" },
+          React.createElement("span", { className: "dshwnw-cast-inbox-text" }, t("inboxUnsaved")),
+          React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: props.busy, onClick: props.onSave }, t("save"))
+        );
+      }
+      if (inbox.length === 0) return null;
+      return React.createElement("div", { className: "dshwnw-cast-inbox" },
+        React.createElement("div", { className: "dshwnw-cast-inbox-row" },
+          React.createElement("span", { className: "dshwnw-cast-inbox-text", title: t("inboxHint") }, t("inboxTitle").replace("{n}", inbox.length)),
+          React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { setOpen(!open); } }, open ? t("inboxHide") : t("inboxShow")),
+          React.createElement("button", { type: "button", className: "dshwnw-button", disabled: props.busy, title: t("inboxDismissHint"), onClick: function () { props.onDismiss([]); } }, t("inboxDismiss"))
+        ),
+        open ? React.createElement("div", { className: "dshwnw-cast-inbox-list" },
+          React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("inboxHint")),
+          inbox.map(function (entry) {
+            return React.createElement("div", { key: entry.id, className: "dshwnw-cast-inbox-item", "data-change": entry.change },
+              React.createElement("span", null, castInboxLabel(entry, props.project, t)),
+              React.createElement("button", { type: "button", className: "dshwnw-icon-btn", "aria-label": t("inboxDismiss"), title: t("inboxDismiss"), onClick: function () { props.onDismiss([entry.id]); } }, React.createElement(NwIcon, { name: "close", size: 12 }))
+            );
+          })
+        ) : null
+      );
+    }
+
+    function readCastView() {
+      try { return window.localStorage.getItem("dshwnw-cast-view") === "list" ? "list" : "graph"; } catch (_) { return "graph"; }
+    }
+
+    // The 角色 page: the cast as a living graph, or the classic card list.
+    function CastTab(props) {
+      var t = props.t;
+      var viewSlot = React.useState(readCastView);
+      var view = viewSlot[0];
+      var setView = viewSlot[1];
+      var selectionSlot = React.useState(null);
+      var selection = selectionSlot[0];
+      var setSelection = selectionSlot[1];
+      var connectSlot = React.useState(null);
+      var connectFrom = connectSlot[0];
+      var setConnectFrom = connectSlot[1];
+      function switchView(next) {
+        setView(next);
+        try { window.localStorage.setItem("dshwnw-cast-view", next); } catch (_) {}
+      }
+      if (view === "list") {
+        return React.createElement(CharacterTab, Object.assign({}, props.listProps, { onGraphView: function () { switchView("graph"); } }));
+      }
+      var project = props.project;
+      var character = selection && selection.type === "character" ? project.characters.find(function (item) { return item.id === selection.id; }) : null;
+      var relation = selection && selection.type === "relationship" ? project.relationships.find(function (item) { return item.id === selection.id; }) : null;
+      var pendingIds = new Set((props.inbox || []).map(function (entry) { return entry.id; }));
+      var card = null;
+      if (character) {
+        card = React.createElement(CharacterPopCard, {
+          key: "c-" + character.id, t: t, project: project, character: character, fresh: Boolean(selection.fresh),
+          onPatch: props.onPatchCharacter, onSelect: setSelection, onClose: function () { setSelection(null); },
+          onDelete: function (id) { props.onDeleteCharacter(id); setSelection(null); },
+          onStartConnect: function (id) { setSelection(null); setConnectFrom({ id: id, at: Date.now() }); },
+        });
+      } else if (relation) {
+        card = React.createElement(RelationPopCard, {
+          key: "r-" + relation.id, t: t, project: project, relation: relation,
+          onPatch: props.onPatchRelationship, onSelect: setSelection, onClose: function () { setSelection(null); },
+          onDelete: function (id) { props.onDeleteRelationship(id); setSelection(null); },
+        });
+      }
+      return React.createElement("div", { className: "dshwnw-cast-fill" },
+        React.createElement(CastInbox, { t: t, project: project, inbox: props.inbox, castDirty: props.castDirty, busy: props.busy, onSave: props.onSave, onDismiss: props.onDismissInbox }),
+        React.createElement("div", { className: "dshwnw-cast-wrap", "data-card": card ? "true" : undefined },
+          React.createElement(GraphCanvas, {
+            t: t, project: project, novelKey: props.novelKey, selection: selection, pendingIds: pendingIds, connectFrom: connectFrom,
+            onSelect: setSelection, onListView: function () { switchView("list"); },
+            onAddCharacter: props.onAddCharacter, onConnect: props.onAddRelationship,
+          }),
+          card
+        )
+      );
+    }
+
+    function CharacterTab(props) {
+      var t = props.t;
+      var characters = props.project.characters;
+      var selected = characters.find(function (item) { return item.id === props.selectedId; }) || characters[0] || null;
+      var score = selected ? characterCompleteness(selected) : null;
+      var colors = castColors(characters);
+      return React.createElement("div", { className: "dshwnw-section" },
+        React.createElement("div", { className: "dshwnw-card-head" },
+          React.createElement("div", { className: "dshwnw-section-title" }, t("charactersTitle")),
+          characters.length > 0 ? React.createElement("span", { className: "dshwnw-pill" }, characters.length) : null,
+          props.onGraphView ? React.createElement("button", { type: "button", className: "dshwnw-button", onClick: props.onGraphView }, React.createElement(NwIcon, { name: "graph", size: 14 }), t("castView_graph")) : null
+        ),
+        characters.length === 0
+          ? React.createElement("div", { className: "dshwnw-empty" }, t("charactersEmpty"),
+            React.createElement("button", { type: "button", className: "dshwnw-primary", onClick: props.onAdd }, React.createElement(NwIcon, { name: "plus", size: 14 }), t("addCharacter")))
           : React.createElement(React.Fragment, null,
             React.createElement("div", { className: "dshwnw-list" }, characters.map(function (character) {
               return React.createElement("button", {
@@ -849,57 +1984,28 @@ window.__ModuleLoader__.load({
                 "data-active": selected && selected.id === character.id ? "true" : undefined,
                 onClick: function () { props.onSelect(character.id); },
               },
-                React.createElement(Avatar, { seed: character.id, name: character.name }),
+                React.createElement(SphereDot, { character: character, colors: colors }),
                 React.createElement("span", { className: "dshwnw-list-copy" },
-                  React.createElement("span", { className: "dshwnw-list-name" }, character.name || props.t("unnamedCharacter")),
-                  React.createElement("span", { className: "dshwnw-list-meta" }, character.role || props.t("rolePlaceholder"))
+                  React.createElement("span", { className: "dshwnw-list-name" }, character.name || t("unnamedCharacter")),
+                  React.createElement("span", { className: "dshwnw-list-meta" }, [t("castImp_" + (character.importance || "supporting")), character.role].filter(Boolean).join(" · "))
                 )
               );
             })),
-            React.createElement(AddButton, { onClick: props.onAdd }, props.t("addCharacter")),
+            React.createElement(AddButton, { onClick: props.onAdd }, t("addCharacter")),
             selected ? React.createElement("div", { className: "dshwnw-card", key: selected.id },
               React.createElement("div", { className: "dshwnw-hero" },
-                React.createElement(Avatar, { seed: selected.id, name: selected.name, size: "lg" }),
+                React.createElement(SphereDot, { character: selected, size: "lg", colors: colors }),
                 React.createElement("span", { className: "dshwnw-list-copy" },
-                  React.createElement("span", { className: "dshwnw-list-name" }, selected.name || props.t("unnamedCharacter")),
-                  React.createElement("span", { className: "dshwnw-list-meta" }, [selected.role, selected.identity].filter(Boolean).join(" · ") || props.t("rolePlaceholder"))
+                  React.createElement("span", { className: "dshwnw-list-name" }, selected.name || t("unnamedCharacter")),
+                  React.createElement("span", { className: "dshwnw-list-meta" }, [t("castImp_" + (selected.importance || "supporting")), selected.role, selected.identity, t("cardCompleteness").replace("{n}", score.filled).replace("{total}", score.total)].filter(Boolean).join(" · "))
                 ),
-                React.createElement(IconButton, { icon: "trash", danger: true, label: props.t("delete"), onClick: function () { props.onDelete(selected.id); } })
+                React.createElement(IconButton, { icon: "trash", danger: true, label: t("delete"), onClick: function () { props.onDelete(selected.id); } })
               ),
-              React.createElement(FieldGroup, { title: props.t("groupIdentity") },
-                React.createElement("div", { className: "dshwnw-grid" },
-                  React.createElement(InputField, { label: props.t("name"), value: selected.name, onChange: function (v) { props.onPatch(selected.id, "name", v); } }),
-                  React.createElement(InputField, { label: props.t("aliases"), value: selected.aliases, onChange: function (v) { props.onPatch(selected.id, "aliases", v); } }),
-                  React.createElement(InputField, { label: props.t("age"), value: selected.age, onChange: function (v) { props.onPatch(selected.id, "age", v); } }),
-                  React.createElement(InputField, { label: props.t("identity"), value: selected.identity, onChange: function (v) { props.onPatch(selected.id, "identity", v); } }),
-                  React.createElement(InputField, { label: props.t("role"), value: selected.role, onChange: function (v) { props.onPatch(selected.id, "role", v); } }),
-                  React.createElement(InputField, { label: props.t("characterStatus"), value: selected.status, onChange: function (v) { props.onPatch(selected.id, "status", v); } })
-                )
-              ),
-              React.createElement(FieldGroup, { title: props.t("groupPortrait"), collapsed: true },
-                React.createElement(TextField, { label: props.t("appearance"), value: selected.appearance, onChange: function (v) { props.onPatch(selected.id, "appearance", v); } }),
-                React.createElement(TextField, { label: props.t("traits"), value: selected.traits, onChange: function (v) { props.onPatch(selected.id, "traits", v); } }),
-                React.createElement(TextField, { label: props.t("background"), value: selected.background, onChange: function (v) { props.onPatch(selected.id, "background", v); } })
-              ),
-              React.createElement(FieldGroup, { title: props.t("groupDrive") },
-                React.createElement(TextField, { label: props.t("goal"), value: selected.goal, onChange: function (v) { props.onPatch(selected.id, "goal", v); } }),
-                React.createElement(TextField, { label: props.t("motivation"), value: selected.motivation, onChange: function (v) { props.onPatch(selected.id, "motivation", v); } }),
-                React.createElement(TextField, { label: props.t("stakes"), value: selected.stakes, onChange: function (v) { props.onPatch(selected.id, "stakes", v); } }),
-                React.createElement(TextField, { label: props.t("conflict"), value: selected.conflict, onChange: function (v) { props.onPatch(selected.id, "conflict", v); } })
-              ),
-              React.createElement(FieldGroup, { title: props.t("groupResources"), collapsed: true },
-                React.createElement(TextField, { label: props.t("abilities"), value: selected.abilities, onChange: function (v) { props.onPatch(selected.id, "abilities", v); } }),
-                React.createElement(TextField, { label: props.t("weaknesses"), value: selected.weaknesses, onChange: function (v) { props.onPatch(selected.id, "weaknesses", v); } }),
-                React.createElement(TextField, { label: props.t("knowledge"), value: selected.knowledge, onChange: function (v) { props.onPatch(selected.id, "knowledge", v); } }),
-                React.createElement(TextField, { label: props.t("possessions"), value: selected.possessions, onChange: function (v) { props.onPatch(selected.id, "possessions", v); } })
-              ),
-              React.createElement(FieldGroup, { title: props.t("groupPerformance"), collapsed: true },
-                React.createElement(TextField, { label: props.t("secret"), value: selected.secret, onChange: function (v) { props.onPatch(selected.id, "secret", v); } }),
-                React.createElement(TextField, { label: props.t("voice"), value: selected.voice, onChange: function (v) { props.onPatch(selected.id, "voice", v); } }),
-                React.createElement(TextField, { label: props.t("habits"), value: selected.habits, onChange: function (v) { props.onPatch(selected.id, "habits", v); } }),
-                React.createElement(TextField, { label: props.t("arc"), value: selected.arc, onChange: function (v) { props.onPatch(selected.id, "arc", v); } })
-              ),
-              React.createElement(CustomFieldsEditor, { t: props.t, value: selected.customFields, onChange: function (value) { props.onPatch(selected.id, "customFields", value); } })
+              CHARACTER_SECTIONS.map(function (section, index) {
+                return React.createElement(FieldGroup, { key: section.key, title: t("cardSection_" + section.key), collapsed: index > 2 },
+                  React.createElement(CharacterSectionFields, { t: t, section: section, character: selected, onPatch: function (key, value) { props.onPatch(selected.id, key, value); } }));
+              }),
+              React.createElement(CustomFieldsEditor, { t: t, value: selected.customFields, onChange: function (value) { props.onPatch(selected.id, "customFields", value); } })
             ) : null
           )
       );
@@ -935,6 +2041,7 @@ window.__ModuleLoader__.load({
                       React.createElement("span", null, toCharacter.name || props.t("unnamedCharacter"))
                     )
                     : React.createElement("div", { className: "dshwnw-card-title" }, props.t("relationship")),
+                  React.createElement(LineSample, { color: RELATION_KIND_COLOR[relation.kind] || RELATION_KIND_COLOR.other, dash: RELATION_STATE_DASH[relation.state], faded: relation.state === "ended", arrow: relation.direction === "oneway" }),
                   relation.label ? React.createElement("span", { className: "dshwnw-pill", "data-tone": "active" }, relation.label) : null,
                   React.createElement(IconButton, { icon: "trash", danger: true, label: props.t("delete"), onClick: function () { props.onDelete(relation.id); } })
                 ),
@@ -945,6 +2052,10 @@ window.__ModuleLoader__.load({
                   React.createElement("div", { className: "dshwnw-grid" },
                     React.createElement(SelectField, { label: props.t("from"), empty: props.t("chooseCharacter"), value: relation.fromId, options: fromOptions, onChange: function (v) { props.onPatch(relation.id, "fromId", v); } }),
                     React.createElement(SelectField, { label: props.t("to"), empty: props.t("chooseCharacter"), value: relation.toId, options: toOptions, onChange: function (v) { props.onPatch(relation.id, "toId", v); } }),
+                    React.createElement(SelectField, { label: props.t("kind"), empty: null, value: relation.kind || "other", options: RELATION_KIND_LIST.map(function (kind) { return { value: kind, label: props.t("relKind_" + kind) }; }), onChange: function (v) { props.onPatch(relation.id, "kind", v); } }),
+                    React.createElement(SelectField, { label: props.t("state"), empty: null, value: relation.state || "active", options: RELATION_STATE_LIST.map(function (state) { return { value: state, label: props.t("relState_" + state) + " · " + props.t("stateHint_" + state) }; }), onChange: function (v) { props.onPatch(relation.id, "state", v); } }),
+                    React.createElement(SelectField, { label: props.t("direction"), empty: null, value: relation.direction || "mutual", options: ["mutual", "oneway"].map(function (value) { return { value: value, label: props.t("direction_" + value) }; }), onChange: function (v) { props.onPatch(relation.id, "direction", v); } }),
+                    React.createElement(SelectField, { label: props.t("strength"), empty: null, value: relation.strength || "2", options: ["1", "2", "3"].map(function (value) { return { value: value, label: props.t("strength_" + value) }; }), onChange: function (v) { props.onPatch(relation.id, "strength", v); } }),
                     React.createElement(InputField, { label: props.t("relationLabel"), value: relation.label, onChange: function (v) { props.onPatch(relation.id, "label", v); } }),
                     React.createElement(InputField, { label: props.t("relationStatus"), value: relation.status, onChange: function (v) { props.onPatch(relation.id, "status", v); } })
                   )
@@ -2939,6 +4050,13 @@ window.__ModuleLoader__.load({
           if (busyRef.current || revisionRef.current < 0) return;
           if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
           writer.getRevision(workspaceId).then(function (info) {
+            if (!stopped && info && Array.isArray(info.castInbox)) {
+              setState(function (current) {
+                return current && current.revision === info.revision && JSON.stringify(current.castInbox || []) !== JSON.stringify(info.castInbox)
+                  ? Object.assign({}, current, { castInbox: info.castInbox })
+                  : current;
+              });
+            }
             if (stopped || busyRef.current || libraryBusyRef.current || !info || info.revision <= revisionRef.current) return;
             if (!dirtyRef.current) { pullRemote(info); return; }
             if (info.revision > ignoredRevisionRef.current) setExternal(info);
@@ -3146,6 +4264,35 @@ window.__ModuleLoader__.load({
         );
       }
 
+      // Cast edits shared by the graph, the card list and the relationships page.
+      var cast = {
+        addCharacter: function (seed) {
+          if (!workspaceId || busyRef.current || libraryBusyRef.current) return "";
+          var newId = makeId("character");
+          updateProject(function (next) { next.characters.push(blankCharacter(newId, seed)); });
+          return newId;
+        },
+        patchCharacter: function (id, key, value) { updateProject(function (next) { var item = next.characters.find(function (entry) { return entry.id === id; }); if (item) item[key] = value; }); },
+        deleteCharacter: function (id) { updateProject(function (next) { next.characters = next.characters.filter(function (item) { return item.id !== id; }); next.relationships = next.relationships.filter(function (item) { return item.fromId !== id && item.toId !== id; }); if (next.scene.povCharacterId === id) next.scene.povCharacterId = ""; if (next.progression && next.progression.records) next.progression.records = next.progression.records.filter(function (record) { return record.characterId !== id; }); (next.threads || []).forEach(function (thread) { thread.characterIds = thread.characterIds.filter(function (item) { return item !== id; }); thread.knownByIds = thread.knownByIds.filter(function (item) { return item !== id; }); }); next.volumes.forEach(function (volume) { volume.chapters.forEach(function (chapter) { chapter.scenes.forEach(function (scene) { if (scene.povCharacterId === id) scene.povCharacterId = ""; }); }); }); }); },
+        addRelationship: function (fromId, toId, seed) {
+          if (!workspaceId || busyRef.current || libraryBusyRef.current || !fromId || !toId || fromId === toId) return "";
+          var newId = makeId("relationship");
+          updateProject(function (next) { next.relationships.push(blankRelationship(newId, fromId, toId, seed)); });
+          return newId;
+        },
+        patchRelationship: function (id, key, value) { updateProject(function (next) { var item = next.relationships.find(function (entry) { return entry.id === id; }); if (item) item[key] = value; }); },
+        deleteRelationship: function (id) { updateProject(function (next) { next.relationships = next.relationships.filter(function (item) { return item.id !== id; }); }); },
+      };
+      var castDirty = dirty && (JSON.stringify(draft.characters) !== JSON.stringify(state.project.characters) || JSON.stringify(draft.relationships) !== JSON.stringify(state.project.relationships));
+      function dismissCastInbox(ids) {
+        if (!workspaceId || typeof writer.dismissCastInbox !== "function") return;
+        var target = workspaceId;
+        writer.dismissCastInbox(target, ids).then(function (value) {
+          if (!panelAliveRef.current || target !== activeWorkspaceRef.current) return;
+          setState(function (current) { return current ? Object.assign({}, current, { castInbox: (value && value.castInbox) || [] }) : current; });
+        }).catch(function (error) { setNotice({ kind: "error", text: failureText(error) }); });
+      }
+
       // The progression page appears only for progression books (genre or an existing tier ladder).
       var tabs = ["project", "characters", "relationships", "world", "plot", "outline", "scene", "threads"].concat(progressionOn(draft) ? ["progression"] : [], ["settings"]);
       var content;
@@ -3158,31 +4305,24 @@ window.__ModuleLoader__.load({
           setProgressionEnabled: function (value) { updateProject(function (next) { next.progression = next.progression || { enabled: true, systems: [], records: [] }; next.progression.enabled = value; }); if (value) setTab("progression"); },
         });
       } else if (tab === "characters") {
-        content = React.createElement(CharacterTab, {
-          project: draft, t: t, selectedId: selectedId, onSelect: setSelectedId,
-          onAdd: function () {
-            var newId = makeId("character");
-            updateProject(function (next) {
-              next.characters.push({
-                id: newId, name: "", aliases: "", age: "", identity: "", role: "", status: "", appearance: "", traits: "", background: "",
-                goal: "", motivation: "", stakes: "", conflict: "", abilities: "", weaknesses: "", secret: "", knowledge: "",
-                possessions: "", voice: "", habits: "", arc: "", customFields: {},
-              });
-            });
-            setSelectedId(newId);
+        content = React.createElement(CastTab, {
+          project: draft, t: t, novelKey: workspaceId, inbox: state.castInbox || [], castDirty: castDirty, busy: busy || libraryBusy,
+          onSave: save, onDismissInbox: dismissCastInbox,
+          onAddCharacter: cast.addCharacter, onPatchCharacter: cast.patchCharacter, onDeleteCharacter: cast.deleteCharacter,
+          onAddRelationship: cast.addRelationship, onPatchRelationship: cast.patchRelationship, onDeleteRelationship: cast.deleteRelationship,
+          listProps: {
+            project: draft, t: t, selectedId: selectedId, onSelect: setSelectedId,
+            onAdd: function () { var newId = cast.addCharacter(); if (newId) setSelectedId(newId); },
+            onPatch: cast.patchCharacter,
+            onDelete: function (id) { cast.deleteCharacter(id); setSelectedId(""); },
           },
-          onPatch: function (id, key, value) { updateProject(function (next) { var item = next.characters.find(function (entry) { return entry.id === id; }); if (item) item[key] = value; }); },
-          onDelete: function (id) { updateProject(function (next) { next.characters = next.characters.filter(function (item) { return item.id !== id; }); next.relationships = next.relationships.filter(function (item) { return item.fromId !== id && item.toId !== id; }); if (next.scene.povCharacterId === id) next.scene.povCharacterId = ""; if (next.progression && next.progression.records) next.progression.records = next.progression.records.filter(function (record) { return record.characterId !== id; }); (next.threads || []).forEach(function (thread) { thread.characterIds = thread.characterIds.filter(function (item) { return item !== id; }); thread.knownByIds = thread.knownByIds.filter(function (item) { return item !== id; }); }); next.volumes.forEach(function (volume) { volume.chapters.forEach(function (chapter) { chapter.scenes.forEach(function (scene) { if (scene.povCharacterId === id) scene.povCharacterId = ""; }); }); }); }); setSelectedId(""); },
         });
       } else if (tab === "relationships") {
         content = React.createElement(RelationshipsTab, {
           project: draft, t: t,
-          onAdd: function () { updateProject(function (next) { next.relationships.push({
-            id: makeId("relationship"), fromId: next.characters[0].id, toId: next.characters[1].id, label: "", status: "", history: "",
-            dynamic: "", powerBalance: "", publicFace: "", privateTruth: "", sharedSecret: "", tension: "", turningPoints: "", futureDirection: "", customFields: {},
-          }); }); },
-          onPatch: function (id, key, value) { updateProject(function (next) { var item = next.relationships.find(function (entry) { return entry.id === id; }); if (item) item[key] = value; }); },
-          onDelete: function (id) { updateProject(function (next) { next.relationships = next.relationships.filter(function (item) { return item.id !== id; }); }); },
+          onAdd: function () { if (draft.characters.length >= 2) cast.addRelationship(draft.characters[0].id, draft.characters[1].id); },
+          onPatch: cast.patchRelationship,
+          onDelete: cast.deleteRelationship,
         });
       } else if (tab === "world") {
         content = React.createElement(SectionFields, {
@@ -3367,6 +4507,28 @@ window.__ModuleLoader__.load({
     var NS = "dshWNovalWrite";
     var inject = ["slots", "locale", "remote", "uiConversation"];
     var zh = {
+      castTitle: "人物图谱", castView_graph: "图谱", castTools: "图谱工具", toolSelect: "选择", toolSelectHint: "点球看人物卡，拖动球摆位置，拖空白处平移", toolConnect: "连线",
+      toolAddCharacter: "角色", toolAddCharacterHint: "在画布中央放一个新角色（也可以双击空白处）", toolRelayout: "重新自动布局（解除所有固定位置）", toolFit: "缩放到全部可见", toolListView: "切换到卡片列表",
+      toolHideMinor: "隐藏龙套", toolLegend: "图例", zoomIn: "放大", zoomOut: "缩小", close: "关闭", castSearch: "找人…",
+      penLabel: "画笔", connectHint: "从一个球拖到另一个球即可连线，也可以先后点两个球。线型按左边的画笔来。", connectPending: "已选中「{name}」，再点另一个角色完成连线。",
+      castEmpty: "还没有角色。先放下主角，再从他/她出发连出整张关系网。", addProtagonist: "放下主角",
+      castCanvasHint: "点球看人物卡 · 拖动摆位置 · 双击空白处新增角色 · 滚轮缩放",
+      legendSize: "球越大，角色越重要", legendFactions: "球的颜色 = 阵营", legendKinds: "颜色 = 关系类型", legendStates: "线型 = 关系状态", legendArrow: "箭头 = 单向", legendWidth: "粗细 = 强度",
+      importance: "重要度", castImp_protagonist: "主角", castImp_core: "核心配角", castImp_major: "重要配角", castImp_supporting: "配角", castImp_minor: "龙套",
+      kind: "关系类型", relKind_family: "亲缘", relKind_romance: "情感", relKind_ally: "友盟", relKind_mentor: "师徒/上下级", relKind_enemy: "敌对", relKind_rival: "竞争", relKind_interest: "利益", relKind_other: "其他",
+      state: "关系状态", relState_active: "明线", relState_hidden: "暗线", relState_planned: "伏线", relState_ended: "已断",
+      stateHint_active: "已在正文中确立", stateHint_hidden: "存在，但对他人或读者隐瞒", stateHint_planned: "计划中，交给 AI 在后续章节里发展出来", stateHint_ended: "已破裂或成为过去",
+      direction: "方向", direction_mutual: "双向", direction_oneway: "单向", strength: "强度", strength_1: "弱", strength_2: "中", strength_3: "强", swapEnds: "交换方向",
+      relationLabelPlaceholder: "如：青梅竹马、杀父之仇", relationFocusHint: "伏线 / 暗线尤其要写清：什么时候、因为什么发生变化。AI 会照此安排后续章节。",
+      gender: "性别", faction: "阵营 / 势力", tags: "人设标签（逗号分隔，如：腹黑，护短，社恐）", contrast: "反差与记忆点（让读者记住的那个细节）", values: "信念与底线（绝不会做的事）", likes: "喜好与厌恶",
+      edge: "金手指 / 底牌（类型、能力、来源、限制）", firstAppearance: "首次登场（时机，以及立住人设的那个动作）", fate: "结局走向", readerAppeal: "读者看点 / 爽点",
+      cardSection_basic: "基础", cardSection_persona: "人设", cardSection_drive: "内核", cardSection_past: "过往", cardSection_power: "能力", cardSection_story: "剧情", cardSection_relations: "关系",
+      cardCompleteness: "设定 {n}/{total}", cardCompletenessHint: "已填写的设定项。越完整，AI 写出来的人越立体。", cardRelationsEmpty: "还没有关系线。", connectFrom: "从这里连线",
+      deleteCharacter: "删除角色", deleteRelationship: "删除关系", deleteConfirm: "再点一次确认删除",
+      inboxTitle: "{n} 项人物变动等待 AI 调整剧情", inboxHint: "在绑定这本书的对话里发任意一条消息，AI 会先根据这些变动修改还没写的章节大纲、细纲和伏笔，再标记为已处理。",
+      inboxShow: "查看", inboxHide: "收起", inboxDismiss: "不用调整", inboxDismissHint: "保留设定，但不让 AI 据此改大纲",
+      inboxUnsaved: "人物图谱有未保存的修改。保存后，AI 才会看到并据此调整大纲与细纲。",
+      inboxChange_added: "新增", inboxChange_removed: "删除", inboxChange_changed: "修改", inboxTarget_character: "角色", inboxTarget_relationship: "关系",
       tab_progression: "体系", metaProgression: "{r} 套体系 · {n} 条记录", metaProgressionEmpty: "等级与成长",
       section_progressionSystems: "成长体系", section_progressionRecords: "成长记录",
       progressionGroup: "成长体系", progressionGroupHint: "追踪角色在各套等级体系里的位置和状态变化，例如修为境界、武学层次、魔法位阶、位分、军衔、段位。默认开启，工作台里有「体系」页；不需要的书可以关掉，「体系」页就会隐藏。",
@@ -3411,7 +4573,7 @@ window.__ModuleLoader__.load({
       projectTitle: "项目总览", projectHint: "先定义作品契约，再让角色、世界与情节围绕它保持一致。", groupBasics: "作品定位", groupWritingContract: "写作契约", bookTitle: "书名", genre: "题材 / 类型", tone: "基调与文风", pov: "叙事视角", targetWords: "目标字数", audience: "目标读者", contentRating: "内容分级与边界", premise: "一句话梗概 / 核心命题", styleGuide: "文风指南（句式、节奏、叙述距离、禁用表达）", constraints: "创作约束（必须遵守 / 必须避免）", notes: "总备注",
       genreProfileTitle: "题材扩展配置", genreProfileType: "配置类型", genreProfilePlaceholder: "例如 romance、mystery、xianxia", customFields: "自定义字段", customFieldsHint: "自由定义本题材需要的数据；模型会按原键名读取和维护。", customFieldsEmpty: "还没有自定义字段。", customFieldDefault: "字段", customFieldName: "字段名", customFieldValue: "字段值", addCustomField: "新增自定义字段",
       charactersTitle: "角色卡", add: "新增", delete: "删除", charactersEmpty: "还没有角色。先建立主角和主要对手。", unnamedCharacter: "未命名角色", rolePlaceholder: "尚未填写角色定位",
-      groupIdentity: "身份与现状", groupPortrait: "人物画像", groupDrive: "欲望与压力", groupResources: "能力、弱点与信息", groupPerformance: "表现方式与弧光", name: "姓名", aliases: "别名 / 称呼", age: "年龄 / 年龄段", identity: "身份、职业与社会位置", role: "故事功能", characterStatus: "当前状态（位置、健康、阵营）", appearance: "外貌、体态与辨识特征", traits: "性格、价值观与行为模式", background: "成长经历与关键往事", goal: "外在目标", motivation: "深层动机与缺失", stakes: "失败代价", conflict: "内外冲突", abilities: "能力、资源与优势", weaknesses: "弱点、恐惧与盲区", secret: "秘密与信息差", knowledge: "已知 / 未知 / 错误认知", possessions: "关键物品与资源", voice: "语言习惯 / 角色声音", habits: "习惯、动作与压力反应", arc: "人物弧光（起点—转折—终点）",
+      groupIdentity: "身份与现状", groupPortrait: "人物画像", groupDrive: "欲望与压力", groupResources: "能力、弱点与信息", groupPerformance: "表现方式与弧光", name: "姓名", aliases: "别名 / 称呼", age: "年龄 / 年龄段", identity: "身份、职业与社会位置", role: "故事功能", characterStatus: "当前状态（位置、健康、阵营）", appearance: "外貌与辨识特征（一眼认出的视觉标签）", traits: "性格主调（表层 / 内里）", background: "人物小传（出身—关键事件—转折—现状）", goal: "想要什么（外在目标）", motivation: "为什么想要（深层动机与缺失）", stakes: "害怕失去什么（失败代价）", conflict: "内外冲突", abilities: "能力、资源与优势", weaknesses: "弱点、恐惧与盲区", secret: "秘密与信息差", knowledge: "已知 / 未知 / 错误认知", possessions: "关键物品与资源", voice: "口头禅与说话方式", habits: "习惯、动作与压力反应", arc: "成长弧线（初期—中期—后期—终局）",
       relationshipsTitle: "角色关系", relationshipsNeedCharacters: "至少建立两名角色后才能添加关系。", relationshipsEmpty: "还没有关系线。", relationship: "关系线", relationshipInvalid: "关系端点无效或指向同一角色，请重新选择角色 A 与角色 B。", chooseCharacter: "请选择角色", groupRelationIdentity: "关系身份", groupRelationHistory: "历史与运作方式", groupRelationLayers: "公开层与真实层", groupRelationArc: "张力与关系弧", from: "角色 A（主动视角）", to: "角色 B（关系对象）", relationLabel: "关系标签", relationStatus: "当前关系状态", relationHistory: "共同历史与关键事件", dynamic: "日常互动模式", powerBalance: "权力、依赖与交换", publicFace: "他人眼中的关系", privateTruth: "私下真实关系", sharedSecret: "共同秘密与信息差", tension: "当前张力、误解与冲突", turningPoints: "已发生 / 计划中的关系转折", futureDirection: "下一阶段变化方向",
       worldTitle: "世界观设定", worldHint: "从时间空间、社会系统和文化认知三层写清会影响因果与选择的规则。", groupWorldFrame: "时间与空间", groupWorldSystems: "制度与资源", groupWorldCulture: "文化与公共认知", era: "时代、纪年与技术阶段", chronology: "历史时间线与关键年代", geography: "地理格局、距离与交通", environment: "自然环境、气候与生存条件", locations: "关键地点及其叙事功能", rules: "世界硬规则、代价与例外", factions: "势力、目标、资源与关系", politics: "权力结构、法律与治理", society: "阶层、家庭、组织与社会规范", economy: "生产、货币、稀缺资源与交易", worldConflicts: "系统性矛盾与当前危机", culture: "习俗、礼仪、禁忌与日常", beliefs: "宗教、价值观与公共信念", technology: "科技 / 魔法体系及限制", lore: "历史、传说、误传与公共认知",
       plotTitle: "情节骨架", plotHint: "先写清欲望—阻力—代价—选择，再组织转折、伏笔和章节节奏。", groupPlotCore: "戏剧核心", groupPlotStructure: "主线结构", groupPlotWeaving: "支线、伏笔与节奏", themes: "主题与母题", storyQuestion: "核心戏剧问题", protagonistGoal: "主角总体目标", plotStakes: "总体风险与失败代价", coreConflict: "核心冲突", antagonisticForce: "对抗力量及其逻辑", opening: "开局、常态与诱发事件", midpoint: "中点转折与认知改变", climax: "高潮、终极选择与代价", ending: "结局状态与主题回应", subplots: "支线及其与主线的交汇", foreshadowing: "伏笔清单、埋设与回收", reveals: "秘密、揭示顺序与知情范围", pacing: "节奏曲线与张弛安排", chapterPlan: "章节计划（目标、冲突、转折、钩子）", outline: "详细节拍 / 场景大纲",
@@ -3479,6 +4641,28 @@ window.__ModuleLoader__.load({
       progressTitle: "写作进展", progressEmpty: "还没有推进记录。AI 可在写作后自动写入。", progressEntry: "进展", canonChanges: "设定变更", openThreads: "待续线索",
     };
     var en = {
+      castTitle: "Cast graph", castView_graph: "Graph", castTools: "Graph tools", toolSelect: "Select", toolSelectHint: "Click a sphere for its card, drag spheres to place them, drag empty space to pan", toolConnect: "Connect",
+      toolAddCharacter: "Character", toolAddCharacterHint: "Place a new character in the middle (or double-click empty space)", toolRelayout: "Auto-layout again (unpins every sphere)", toolFit: "Zoom to fit", toolListView: "Switch to the card list",
+      toolHideMinor: "Hide walk-ons", toolLegend: "Legend", zoomIn: "Zoom in", zoomOut: "Zoom out", close: "Close", castSearch: "Find…",
+      penLabel: "Pen", connectHint: "Drag from one sphere to another to connect them, or click two spheres in turn. New lines use the pen on the left.", connectPending: "{name} picked; click another character to connect.",
+      castEmpty: "No characters yet. Place the protagonist, then draw the web of relationships out from them.", addProtagonist: "Place the protagonist",
+      castCanvasHint: "Click a sphere for its card · drag to place · double-click empty space to add · scroll to zoom",
+      legendSize: "Bigger sphere, more important character", legendFactions: "Sphere colour = faction", legendKinds: "Colour = kind", legendStates: "Line = state", legendArrow: "Arrow = one-way", legendWidth: "Width = strength",
+      importance: "Importance", castImp_protagonist: "Protagonist", castImp_core: "Core cast", castImp_major: "Major", castImp_supporting: "Supporting", castImp_minor: "Walk-on",
+      kind: "Kind", relKind_family: "Family", relKind_romance: "Romance", relKind_ally: "Ally", relKind_mentor: "Mentor / rank", relKind_enemy: "Enemy", relKind_rival: "Rival", relKind_interest: "Interest", relKind_other: "Other",
+      state: "State", relState_active: "Open", relState_hidden: "Hidden", relState_planned: "Planned", relState_ended: "Ended",
+      stateHint_active: "established on the page", stateHint_hidden: "exists, but kept from others or readers", stateHint_planned: "planned; the AI develops it in coming chapters", stateHint_ended: "broken or in the past",
+      direction: "Direction", direction_mutual: "Mutual", direction_oneway: "One-way", strength: "Strength", strength_1: "Weak", strength_2: "Normal", strength_3: "Strong", swapEnds: "Swap direction",
+      relationLabelPlaceholder: "e.g. childhood friends, blood feud", relationFocusHint: "Especially for planned or hidden ties: when and why it changes. The AI plans coming chapters from this.",
+      gender: "Gender", faction: "Faction", tags: "Persona tags (comma separated)", contrast: "Contrast and memorable detail", values: "Beliefs and bottom line (what they never do)", likes: "Likes and dislikes",
+      edge: "Edge / trump card (kind, power, source, limits)", firstAppearance: "First appearance (when, and the act that defines them)", fate: "Intended fate", readerAppeal: "Reader appeal",
+      cardSection_basic: "Basics", cardSection_persona: "Persona", cardSection_drive: "Drive", cardSection_past: "Past", cardSection_power: "Power", cardSection_story: "Story", cardSection_relations: "Ties",
+      cardCompleteness: "Profile {n}/{total}", cardCompletenessHint: "Profile fields filled in. The fuller it is, the rounder the AI writes the character.", cardRelationsEmpty: "No relationship lines yet.", connectFrom: "Connect from here",
+      deleteCharacter: "Delete character", deleteRelationship: "Delete relationship", deleteConfirm: "Click again to delete",
+      inboxTitle: "{n} cast changes waiting for the AI to adjust the plot", inboxHint: "Send any message in a conversation bound to this book: the AI first revises the outlines, detailed outlines and threads of unwritten chapters for these changes, then marks them handled.",
+      inboxShow: "Show", inboxHide: "Hide", inboxDismiss: "No adjustment", inboxDismissHint: "Keep the canon but do not have the AI change the outline for it",
+      inboxUnsaved: "The cast graph has unsaved changes. Once saved, the AI sees them and adjusts the outline.",
+      inboxChange_added: "Added ", inboxChange_removed: "Removed ", inboxChange_changed: "Edited ", inboxTarget_character: "character", inboxTarget_relationship: "relationship",
       tab_progression: "Systems", metaProgression: "{r} systems · {n} records", metaProgressionEmpty: "Ranks & growth",
       section_progressionSystems: "Progression systems", section_progressionRecords: "Progression records",
       progressionGroup: "Progression systems", progressionGroupHint: "Track where characters stand in each ranking system and how their state changes: cultivation realms, martial tiers, magic ranks, court ranks, military ranks, game tiers. On by default with a Systems page; turn it off for books that do not need it and the page hides.",
@@ -3632,6 +4816,7 @@ window.__ModuleLoader__.load({
           saveProgressionTemplate: function (input) { return unwrap("saveProgressionTemplate", [input]); },
           deleteProgressionTemplate: function (templateId) { return unwrap("deleteProgressionTemplate", [templateId]); },
           restoreProgressionTemplates: function () { return unwrap("restoreProgressionTemplates", []); },
+          dismissCastInbox: function (workspaceId, ids) { return unwrap("dismissCastInbox", [workspaceId, ids]); },
         } };
       }
       ctx.uiConversation.events.register(writeCommandInputDefinition);

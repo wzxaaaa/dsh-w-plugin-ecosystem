@@ -360,7 +360,7 @@ test('prompt renders canon, relationships, current scene, and KB boundary', () =
     scene: { chapter: '第三章', povCharacterId: 'a', continuity: '岚左手受伤；钥匙在鹭身上' },
   })
   assert.match(prompt, /潮汐碑/)
-  assert.match(prompt, /岚 → 鹭: 互相利用; 信任正在增长/)
+  assert.match(prompt, /岚 ↔ 鹭 \[other · active · mutual · strength 2\] \(r\): 互相利用; 信任正在增长/)
   assert.match(prompt, /POV character: 岚/)
   assert.match(prompt, /岚左手受伤/)
   assert.match(prompt, /kb_search\/kb_read/)

@@ -46,14 +46,47 @@ const PROJECT_KEYS = Object.freeze([
   'styleCorpusId',
 ])
 const CHARACTER_KEYS = Object.freeze([
-  'id', 'name', 'aliases', 'age', 'identity', 'role', 'status', 'appearance', 'traits', 'background',
-  'goal', 'motivation', 'stakes', 'conflict', 'abilities', 'weaknesses', 'secret', 'knowledge',
-  'possessions', 'voice', 'habits', 'arc',
+  'id', 'name', 'aliases', 'gender', 'age', 'identity', 'role', 'importance', 'faction', 'tags', 'status',
+  'appearance', 'traits', 'contrast', 'background', 'goal', 'motivation', 'stakes', 'conflict', 'values',
+  'likes', 'abilities', 'edge', 'weaknesses', 'secret', 'knowledge', 'possessions', 'voice', 'habits',
+  'firstAppearance', 'arc', 'fate', 'readerAppeal',
 ])
 const RELATIONSHIP_KEYS = Object.freeze([
-  'id', 'fromId', 'toId', 'label', 'status', 'history', 'dynamic', 'powerBalance', 'publicFace',
-  'privateTruth', 'sharedSecret', 'tension', 'turningPoints', 'futureDirection',
+  'id', 'fromId', 'toId', 'kind', 'state', 'direction', 'strength', 'label', 'status', 'history', 'dynamic',
+  'powerBalance', 'publicFace', 'privateTruth', 'sharedSecret', 'tension', 'turningPoints', 'futureDirection',
 ])
+// The cast graph draws these: a character's importance sets its sphere size;
+// a relationship's kind sets the line colour, its state the dash pattern
+// (active solid, hidden dashed, planned dotted, ended faded), its direction an
+// arrowhead and its strength the line width.
+export const CHARACTER_IMPORTANCE = Object.freeze(['protagonist', 'core', 'major', 'supporting', 'minor'])
+export const RELATION_KINDS = Object.freeze(['family', 'romance', 'ally', 'mentor', 'enemy', 'rival', 'interest', 'other'])
+export const RELATION_STATES = Object.freeze(['active', 'hidden', 'planned', 'ended'])
+export const RELATION_DIRECTIONS = Object.freeze(['mutual', 'oneway'])
+export const RELATION_STRENGTHS = Object.freeze(['1', '2', '3'])
+const CAST_ENUMS = Object.freeze({
+  importance: { values: CHARACTER_IMPORTANCE, fallback: 'supporting', aliases: { 主角: 'protagonist', 男主: 'protagonist', 女主: 'protagonist', 核心: 'core', 核心配角: 'core', 重要: 'major', 主要: 'major', 重要配角: 'major', 配角: 'supporting', 次要: 'minor', 龙套: 'minor', 路人: 'minor' } },
+  kind: { values: RELATION_KINDS, fallback: 'other', aliases: { 亲缘: 'family', 亲人: 'family', 家人: 'family', 血缘: 'family', 情感: 'romance', 爱情: 'romance', 恋人: 'romance', 暧昧: 'romance', 友盟: 'ally', 友情: 'ally', 朋友: 'ally', 同盟: 'ally', 盟友: 'ally', 师徒: 'mentor', 上下级: 'mentor', 主从: 'mentor', 敌对: 'enemy', 仇敌: 'enemy', 敌人: 'enemy', 竞争: 'rival', 对手: 'rival', 利益: 'interest', 交易: 'interest', 利用: 'interest', 其他: 'other' } },
+  state: { values: RELATION_STATES, fallback: 'active', aliases: { 明线: 'active', 公开: 'active', 已确立: 'active', 暗线: 'hidden', 隐藏: 'hidden', 秘密: 'hidden', 伏线: 'planned', 计划: 'planned', 计划中: 'planned', 潜在: 'planned', 断裂: 'ended', 已断: 'ended', 结束: 'ended', 已结束: 'ended', 过去: 'ended' } },
+  direction: { values: RELATION_DIRECTIONS, fallback: 'mutual', aliases: { 双向: 'mutual', 互相: 'mutual', 单向: 'oneway', 'one-way': 'oneway' } },
+  strength: { values: RELATION_STRENGTHS, fallback: '2', aliases: { 弱: '1', 中: '2', 强: '3' } },
+})
+const CAST_ENUM_DESCRIPTIONS = Object.freeze({
+  importance: 'Narrative weight; sets the sphere size in the cast graph. protagonist, core (main supporting cast), major, supporting, minor (walk-on).',
+  kind: 'Relationship nature (line colour): family, romance, ally (friendship/alliance), mentor (master-disciple or superior-subordinate), enemy, rival, interest (transactional/use), other.',
+  state: 'active = established on the page (solid line); hidden = exists but secret from others or readers (dashed); planned = the author wants it developed in upcoming chapters, not yet on the page (dotted); ended = broken or in the past (faded).',
+  direction: 'mutual, or oneway from fromId to toId (unrequited love, loyalty, control).',
+  strength: '1 weak, 2 normal, 3 strong (line width).',
+})
+
+function castEnum(key, value) {
+  const spec = CAST_ENUMS[key]
+  const raw = typeof value === 'string' ? value.trim() : ''
+  if (spec.values.includes(raw)) return raw
+  const lower = raw.toLowerCase()
+  if (spec.values.includes(lower)) return lower
+  return spec.aliases[raw] || spec.fallback
+}
 const WORLD_KEYS = Object.freeze([
   'era', 'chronology', 'geography', 'environment', 'locations', 'rules', 'factions', 'politics',
   'society', 'culture', 'economy', 'beliefs', 'technology', 'conflicts', 'lore',
@@ -161,13 +194,25 @@ function customFieldsSchema(required = false) {
   }
 }
 
+function castEnumProperties(keys) {
+  return Object.fromEntries(keys.map(key => [key, { type: 'string', enum: [...CAST_ENUMS[key].values], description: CAST_ENUM_DESCRIPTIONS[key] }]))
+}
+
+function characterProperties(keys) {
+  return { ...schemaProperties(keys, false), ...castEnumProperties(['importance']) }
+}
+
+function relationshipProperties(keys) {
+  return { ...schemaProperties(keys, false), ...castEnumProperties(['kind', 'state', 'direction', 'strength']) }
+}
+
 export function characterPatchToolSchema({ required = true } = {}) {
   return {
     type: 'object',
     ...(required ? { required: true } : {}),
     additionalProperties: false,
     properties: {
-      ...schemaProperties(CHARACTER_KEYS.filter(key => key !== 'id'), false),
+      ...characterProperties(CHARACTER_KEYS.filter(key => key !== 'id')),
       customFields: customFieldsSchema(),
     },
   }
@@ -179,7 +224,7 @@ export function relationshipPatchToolSchema({ required = true } = {}) {
     ...(required ? { required: true } : {}),
     additionalProperties: false,
     properties: {
-      ...schemaProperties(RELATIONSHIP_KEYS.filter(key => key !== 'id'), false),
+      ...relationshipProperties(RELATIONSHIP_KEYS.filter(key => key !== 'id')),
       customFields: customFieldsSchema(),
     },
   }
@@ -374,13 +419,13 @@ export function projectToolSchema({ partial = false, required = true } = {}) {
         properties: { type: { type: 'string' }, customFields: customFieldsSchema() },
       },
       characters: arraySchema({
-        ...schemaProperties(CHARACTER_KEYS, false),
+        ...characterProperties(CHARACTER_KEYS),
         id: { type: 'string', required: true },
         name: { type: 'string', required: true },
         customFields: customFieldsSchema(),
       }, !partial),
       relationships: arraySchema({
-        ...schemaProperties(RELATIONSHIP_KEYS, false),
+        ...relationshipProperties(RELATIONSHIP_KEYS),
         id: { type: 'string', required: true },
         fromId: { type: 'string', required: true },
         toId: { type: 'string', required: true },
@@ -428,6 +473,7 @@ export function novelToolContract() {
     chapterPatchSchema: chapterPatchToolSchema(),
     threadPatchSchema: threadPatchToolSchema(),
     threadEnums: { kind: [...THREAD_KINDS], importance: [...THREAD_IMPORTANCE], status: [...THREAD_STATUSES] },
+    castEnums: Object.fromEntries(Object.entries(CAST_ENUMS).map(([key, spec]) => [key, [...spec.values]])),
     progressionRecordPatchSchema: progressionRecordPatchToolSchema(),
     emptyProjectExample: defaultProject(),
     retryProtocol: [...NOVEL_TOOL_RETRY_PROTOCOL],
@@ -841,25 +887,36 @@ function normalizeCharacter(value, index) {
     id: id(item.id, 'character', index),
     name: text(item.name, MAX_SHORT),
     aliases: text(item.aliases),
+    gender: text(item.gender, MAX_SHORT),
     age: text(item.age, MAX_SHORT),
     identity: text(item.identity, MAX_SHORT),
     role: text(item.role, MAX_SHORT),
+    importance: castEnum('importance', item.importance),
+    faction: text(item.faction, MAX_SHORT),
+    tags: text(item.tags, MAX_SHORT),
     status: text(item.status, MAX_SHORT),
     appearance: text(item.appearance),
     traits: text(item.traits),
+    contrast: text(item.contrast),
     background: text(item.background),
     goal: text(item.goal),
     motivation: text(item.motivation),
     stakes: text(item.stakes),
     conflict: text(item.conflict),
+    values: text(item.values),
+    likes: text(item.likes),
     abilities: text(item.abilities),
+    edge: text(item.edge),
     weaknesses: text(item.weaknesses),
     secret: text(item.secret),
     knowledge: text(item.knowledge),
     possessions: text(item.possessions),
     voice: text(item.voice),
     habits: text(item.habits),
+    firstAppearance: text(item.firstAppearance),
     arc: text(item.arc),
+    fate: text(item.fate),
+    readerAppeal: text(item.readerAppeal),
     customFields: normalizeCustomFields(item.customFields),
   }
 }
@@ -874,6 +931,10 @@ function normalizeRelationship(value, index, characterIds, characterReferences) 
     id: id(item.id, 'relationship', index),
     fromId,
     toId,
+    kind: castEnum('kind', item.kind),
+    state: castEnum('state', item.state),
+    direction: castEnum('direction', item.direction),
+    strength: castEnum('strength', item.strength),
     label: text(item.label, MAX_SHORT),
     status: text(item.status, MAX_SHORT),
     history: text(item.history),
@@ -1428,6 +1489,7 @@ export function defaultState(now = Date.now()) {
     revision: 0,
     updatedAt: new Date(now).toISOString(),
     project: defaultProject(),
+    castInbox: [],
   }
 }
 
@@ -1448,6 +1510,7 @@ export function normalizeState(value, now = Date.now()) {
     revision: Number.isSafeInteger(input.revision) && input.revision >= 0 ? input.revision : 0,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : new Date(now).toISOString(),
     project: normalizeProject(progressionOnForLegacy(input.project, input.schemaVersion)),
+    castInbox: normalizeCastInbox(input.castInbox),
   }
 }
 
@@ -2348,11 +2411,154 @@ function addCustomFields(lines, fields) {
   for (const [key, value] of Object.entries(fields || {})) add(lines, key, value)
 }
 
+const CHARACTER_PROMPT_KEYS = Object.freeze(CHARACTER_KEYS.filter(key => !['id', 'name', 'importance'].includes(key)))
+const CHARACTER_PROMPT_LABELS = Object.freeze({
+  contrast: 'contrast / memorable trait', values: 'beliefs and bottom line', likes: 'likes and dislikes',
+  edge: 'edge / trump card', firstAppearance: 'first appearance', fate: 'intended fate', readerAppeal: 'reader appeal',
+})
+
+function relationTags(relation) {
+  return [relation.kind, relation.state, relation.direction, `strength ${relation.strength}`].join(' · ')
+}
+
+// ── Cast inbox ────────────────────────────────────────────────────────────
+// Characters and relationships the author changes in the panel are queued
+// here until the AI has absorbed them into the outline. One entry per
+// character or relationship; later edits fold into it.
+const MAX_CAST_INBOX = 60
+const CAST_CHANGES = Object.freeze(['added', 'removed', 'changed'])
+
+function castLabel(project, target, item) {
+  if (target === 'character') return item.name || item.id
+  const names = new Map(project.characters.map(character => [character.id, character.name || character.id]))
+  const from = names.get(item.fromId) || item.fromId || '?'
+  const to = names.get(item.toId) || item.toId || '?'
+  return `${from} ${item.direction === 'oneway' ? '→' : '↔'} ${to}${item.label ? ` (${item.label})` : ''}`
+}
+
+/** What the author changed in the cast between two versions of a project. */
+export function castChangesBetween(beforeValue, afterValue, now = Date.now()) {
+  const before = normalizeProject(beforeValue)
+  const after = normalizeProject(afterValue)
+  const at = new Date(now).toISOString()
+  const entries = []
+  for (const [target, left, right] of [['character', before.characters, after.characters], ['relationship', before.relationships, after.relationships]]) {
+    const leftById = new Map(left.map(item => [item.id, item]))
+    const rightById = new Map(right.map(item => [item.id, item]))
+    for (const item of right) {
+      const previous = leftById.get(item.id)
+      if (!previous) {
+        entries.push({ id: `${target}:${item.id}`, target, targetId: item.id, change: 'added', fields: [], label: castLabel(after, target, item), at })
+        continue
+      }
+      const fields = changedFields(previous, item).map(field => (field === 'fromId' || field === 'toId' ? 'endpoints' : field))
+      if (fields.length) entries.push({ id: `${target}:${item.id}`, target, targetId: item.id, change: 'changed', fields: [...new Set(fields)], label: castLabel(after, target, item), at })
+    }
+    for (const item of left) {
+      if (!rightById.has(item.id)) entries.push({ id: `${target}:${item.id}`, target, targetId: item.id, change: 'removed', fields: [], label: castLabel(before, target, item), at })
+    }
+  }
+  return entries
+}
+
+export function normalizeCastInbox(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const entries = []
+  for (const raw of value.slice(-MAX_CAST_INBOX)) {
+    if (!isPlainObject(raw)) continue
+    const target = raw.target === 'relationship' ? 'relationship' : raw.target === 'character' ? 'character' : ''
+    const targetId = text(raw.targetId, 100)
+    if (!target || !targetId || !CAST_CHANGES.includes(raw.change)) continue
+    const entryId = `${target}:${targetId}`
+    if (seen.has(entryId)) continue
+    seen.add(entryId)
+    entries.push({
+      id: entryId, target, targetId, change: raw.change,
+      fields: Array.isArray(raw.fields) ? [...new Set(raw.fields.map(field => text(field, 60)).filter(Boolean))].slice(0, 40) : [],
+      label: text(raw.label, MAX_SHORT),
+      at: typeof raw.at === 'string' ? raw.at : new Date(0).toISOString(),
+    })
+  }
+  return entries
+}
+
+/** Fold new cast changes into the inbox, one entry per character or relationship. */
+export function mergeCastInbox(inboxValue, incoming) {
+  const inbox = normalizeCastInbox(inboxValue)
+  for (const entry of normalizeCastInbox(incoming)) {
+    const index = inbox.findIndex(item => item.id === entry.id)
+    if (index < 0) { inbox.push(entry); continue }
+    const previous = inbox[index]
+    if (previous.change === 'added' && entry.change === 'removed') { inbox.splice(index, 1); continue }
+    const change = previous.change === 'added' && entry.change === 'changed' ? 'added'
+      : previous.change === 'removed' && entry.change === 'added' ? 'changed'
+        : entry.change
+    const fields = change === 'removed' ? [] : [...new Set([...previous.fields, ...entry.fields])]
+    inbox[index] = { ...entry, change, fields }
+  }
+  return inbox.slice(-MAX_CAST_INBOX)
+}
+
+/** Drop the acknowledged entries; no ids drops them all. */
+export function acknowledgeCastInbox(inboxValue, ids) {
+  const inbox = normalizeCastInbox(inboxValue)
+  if (!Array.isArray(ids) || ids.length === 0) return []
+  const wanted = new Set(ids.map(item => text(item, 120)))
+  return inbox.filter(entry => !wanted.has(entry.id) && !wanted.has(entry.targetId))
+}
+
+function castInboxPromptLines(project, inboxValue) {
+  const inbox = normalizeCastInbox(inboxValue)
+  if (inbox.length === 0) return []
+  const characters = new Map(project.characters.map(character => [character.id, character]))
+  const relationships = new Map(project.relationships.map(relation => [relation.id, relation]))
+  const clip = value => {
+    const rendered = compact(value)
+    return rendered.length > 140 ? `${rendered.slice(0, 137)}...` : rendered
+  }
+  const lines = [
+    '## Author cast changes awaiting your adjustment',
+    'The author changed characters or relationships in the cast graph. In this turn, unless the author says to leave them, work out what each change means for the story before other work:',
+  ]
+  for (const entry of inbox.slice(-24)) {
+    const tag = `[${entry.target} ${entry.change}]`
+    if (entry.change === 'removed') {
+      lines.push(`- ${tag} ${entry.label || entry.targetId} (${entry.id}) — no longer in the cast; write them out of unwritten outline chapters, scenes and threads.`)
+      continue
+    }
+    if (entry.target === 'character') {
+      const character = characters.get(entry.targetId)
+      if (!character) continue
+      const details = entry.change === 'added'
+        ? [character.importance, character.faction ? `faction ${clip(character.faction)}` : '', character.role ? clip(character.role) : '', character.goal ? `goal: ${clip(character.goal)}` : ''].filter(Boolean).join('; ')
+        : `edited ${entry.fields.join(', ')}`
+      lines.push(`- ${tag} ${character.name || character.id} (${entry.id})${details ? ` — ${details}` : ''}`)
+      continue
+    }
+    const relation = relationships.get(entry.targetId)
+    if (!relation) continue
+    const details = [
+      relationTags(relation),
+      entry.change === 'changed' ? `edited ${entry.fields.join(', ')}` : '',
+      relation.futureDirection ? `direction: ${clip(relation.futureDirection)}` : '',
+      relation.tension ? `tension: ${clip(relation.tension)}` : '',
+    ].filter(Boolean).join('; ')
+    lines.push(`- ${tag} ${castLabel(project, 'relationship', relation)} (${entry.id}) — ${details}`)
+  }
+  if (inbox.length > 24) lines.push(`- [${inbox.length - 24} more; call novel_cast_inbox.]`)
+  lines.push(
+    'How to absorb them: read the outline (novel_outline_read) and revise only chapters that have no manuscript yet — chapter summaries, scenes, events, ending hooks (novel_chapter_upsert) and threads (novel_thread_upsert) — so each new or changed tie is set up, developed and paid off with clear cause. A planned relationship is the author asking you to build it in upcoming chapters; hidden means plant hints without revealing it; ended needs an on-page cause. Give a new character an entrance and a story job; fill thin character or relationship fields with novel_character_patch / novel_relationship_patch. Never rewrite chapters that already have manuscripts unless asked.',
+    'Then tell the author in a few lines what you changed (or why nothing needed to change) and call novel_cast_ack with the entry ids you handled.',
+  )
+  return lines
+}
+
 /**
  * `manuscripts` optionally maps a manuscript filename to its live word count
  * so the outline can show how much of each chapter is written.
  */
-export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } = {}) {
+export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts, castInbox } = {}) {
   const project = normalizeProject(projectValue)
   const lines = ['# Novel writing workspace', '', 'The right-side Novel Writing panel is the source of truth for this book. Preserve its facts and continuity.']
   add(lines, 'Title', project.title)
@@ -2368,36 +2574,20 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
   add(lines, 'Genre profile', project.genreProfile.type)
   addCustomFields(lines, project.genreProfile.customFields)
   if (project.characters.length > 0) {
-    lines.push('', '## Characters')
-    for (const character of project.characters) {
+    lines.push('', '## Characters (most important first)')
+    const weight = character => CHARACTER_IMPORTANCE.indexOf(character.importance)
+    const ordered = project.characters.map((character, index) => ({ character, index }))
+      .sort((a, b) => weight(a.character) - weight(b.character) || a.index - b.index)
+    for (const { character } of ordered) {
       const details = []
-      add(details, 'aliases', character.aliases)
-      add(details, 'age', character.age)
-      add(details, 'identity', character.identity)
-      add(details, 'role', character.role)
-      add(details, 'status', character.status)
-      add(details, 'appearance', character.appearance)
-      add(details, 'traits', character.traits)
-      add(details, 'background', character.background)
-      add(details, 'goal', character.goal)
-      add(details, 'motivation', character.motivation)
-      add(details, 'stakes', character.stakes)
-      add(details, 'conflict', character.conflict)
-      add(details, 'abilities', character.abilities)
-      add(details, 'weaknesses', character.weaknesses)
-      add(details, 'secret', character.secret)
-      add(details, 'knowledge', character.knowledge)
-      add(details, 'possessions', character.possessions)
-      add(details, 'voice', character.voice)
-      add(details, 'habits', character.habits)
-      add(details, 'arc', character.arc)
+      for (const key of CHARACTER_PROMPT_KEYS) add(details, CHARACTER_PROMPT_LABELS[key] || key, character[key])
       addCustomFields(details, character.customFields)
-      lines.push(`- ${character.name || character.id}${details.length ? ` — ${details.map(item => item.slice(2)).join('; ')}` : ''}`)
+      lines.push(`- ${character.name || character.id} (${character.id}; ${character.importance})${details.length ? ` — ${details.map(item => item.slice(2)).join('; ')}` : ''}`)
     }
   }
   if (project.relationships.length > 0) {
     const names = new Map(project.characters.map(character => [character.id, character.name || character.id]))
-    lines.push('', '## Relationships')
+    lines.push('', '## Relationships', '- Format: A → B [kind · state · direction · strength]. state: active = on the page; hidden = secret from others/readers; planned = the author wants it developed in coming chapters; ended = broken or past.')
     for (const relation of project.relationships) {
       const from = names.get(relation.fromId) || relation.fromId || '?'
       const to = names.get(relation.toId) || relation.toId || '?'
@@ -2407,7 +2597,7 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
         relation.turningPoints, relation.futureDirection,
       ].map(compact).filter(Boolean).join('; ')
       const custom = Object.entries(relation.customFields || {}).map(([key, value]) => `${key}: ${compact(value)}`).filter(Boolean).join('; ')
-      lines.push(`- ${from} → ${to}${details || custom ? `: ${[details, custom].filter(Boolean).join('; ')}` : ''}`)
+      lines.push(`- ${from} ${relation.direction === 'oneway' ? '→' : '↔'} ${to} [${relationTags(relation)}] (${relation.id})${details || custom ? `: ${[details, custom].filter(Boolean).join('; ')}` : ''}`)
     }
   }
   const worldLines = []
@@ -2560,7 +2750,10 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
     }
   }
   add(lines, 'Additional notes', project.notes)
+  // The inbox rides with the protocol so truncating long canon never hides it.
+  const inboxLines = castInboxPromptLines(project, castInbox)
   const protocol = [
+    ...(inboxLines.length ? ['', ...inboxLines] : []),
     '',
     'Writing protocol:',
     '- Preserve canon; surface conflicts and ask about material story decisions.',

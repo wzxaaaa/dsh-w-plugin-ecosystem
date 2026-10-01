@@ -17,6 +17,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { dshHomePath, expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
+  acknowledgeCastInbox,
   advanceProject,
   assertChapterWordCount,
   validateChapterWordCount,
@@ -27,6 +28,7 @@ import {
   chapterPatchToolSchema,
   chapterSequence,
   chapterWordRequirement,
+  castChangesBetween,
   characterPatchToolSchema,
   progressionRecordPatchToolSchema,
   defaultProject,
@@ -35,6 +37,7 @@ import {
   describeProjectDiff,
   findChapter,
   linkChapterManuscript,
+  mergeCastInbox,
   mergeProject,
   novelToolContract,
   normalizeProgressionTemplates,
@@ -70,7 +73,7 @@ import {
 import { NovelMutationRoundGuard } from './noval-mutation-guard.js'
 import { NovelCompletionGuard } from './noval-completion-guard.js'
 
-export const PLUGIN_VERSION = '0.14.4'
+export const PLUGIN_VERSION = '0.15.0'
 import { searchManuscripts } from './noval-search-core.js'
 import {
   NOVEL_DIR,
@@ -275,6 +278,7 @@ let NovalWriterService = (() => {
   let _saveProgressionTemplate_decorators
   let _deleteProgressionTemplate_decorators
   let _restoreProgressionTemplates_decorators
+  let _dismissCastInbox_decorators
   return class NovalWriterService extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0
@@ -398,6 +402,11 @@ let NovalWriterService = (() => {
         kind: 'method', name: 'restoreProgressionTemplates', static: false, private: false,
         access: { has: obj => 'restoreProgressionTemplates' in obj, get: obj => obj.restoreProgressionTemplates }, metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _dismissCastInbox_decorators = [Remote('dismissCastInbox')]
+      __esDecorate(this, null, _dismissCastInbox_decorators, {
+        kind: 'method', name: 'dismissCastInbox', static: false, private: false,
+        access: { has: obj => 'dismissCastInbox' in obj, get: obj => obj.dismissCastInbox }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata })
     }
 
@@ -475,7 +484,7 @@ let NovalWriterService = (() => {
               ...(link ? [`- Writing objective: ${link.objective}`] : []),
               '- Every conversation bound to this novel shares the same canon.',
               '',
-              projectPrompt(state.project, this.settings.promptMaxChars, { manuscripts: this.manuscriptWords.get(novel.id) }),
+              projectPrompt(state.project, this.settings.promptMaxChars, { manuscripts: this.manuscriptWords.get(novel.id), castInbox: state.castInbox }),
             ].join('\n')
           },
         })
@@ -1036,7 +1045,7 @@ let NovalWriterService = (() => {
       const state = this.stateForWorkspace(key)
       const entries = await this.readHistoryIndex(key).catch(() => [])
       const last = entries.length > 0 && entries[entries.length - 1].revision === state.revision ? entries[entries.length - 1] : null
-      return { revision: state.revision, updatedAt: state.updatedAt, last }
+      return { revision: state.revision, updatedAt: state.updatedAt, last, castInbox: state.castInbox || [] }
     }
 
     async listHistory(workspaceId) {
@@ -1115,8 +1124,32 @@ let NovalWriterService = (() => {
       return this.mutateAs({ actor: 'user', operation: 'panel-save' }, workspaceId, expectedRevision, current => {
         const project = normalizeProject(input)
         if (keepsProgression) project.progression = current.project.progression
-        return { ...current, project }
+        // Cast edits wait in the inbox until the AI works them into the outline.
+        return { ...current, project, castInbox: mergeCastInbox(current.castInbox, castChangesBetween(current.project, project)) }
       })
+    }
+
+    /**
+     * Remove cast-inbox entries (all when ids is empty). The inbox lives
+     * beside the project, so this neither bumps the revision nor disturbs an
+     * unsaved panel draft.
+     */
+    async acknowledgeCast(workspaceId, ids) {
+      return this.queueWorkspaceWrite(workspaceId, async workspace => {
+        const key = String(workspace.id)
+        const current = normalizeState(this.stateForWorkspace(key))
+        const castInbox = acknowledgeCastInbox(current.castInbox, ids)
+        if (castInbox.length !== current.castInbox.length) {
+          const next = { ...current, castInbox }
+          await writeAtomic(this.statePath(key), next)
+          this.states.set(key, next)
+        }
+        return { removed: current.castInbox.length - castInbox.length, castInbox }
+      })
+    }
+
+    async dismissCastInbox(workspaceId, ids) {
+      return this.acknowledgeCast(String(this.workspaceRecord(workspaceId).id), Array.isArray(ids) ? ids : [])
     }
 
     async exportProject(workspaceId) {
@@ -1127,11 +1160,11 @@ let NovalWriterService = (() => {
 
     async importProject(workspaceId, input, expectedRevision) {
       const project = projectFromImportDocument(input)
-      return this.mutateAs({ actor: 'user', operation: 'import' }, workspaceId, expectedRevision, current => ({ ...current, project }))
+      return this.mutateAs({ actor: 'user', operation: 'import' }, workspaceId, expectedRevision, current => ({ ...current, project, castInbox: [] }))
     }
 
     async resetProject(workspaceId, expectedRevision) {
-      return this.mutateAs({ actor: 'user', operation: 'reset' }, workspaceId, expectedRevision, current => ({ ...current, project: defaultProject() }))
+      return this.mutateAs({ actor: 'user', operation: 'reset' }, workspaceId, expectedRevision, current => ({ ...current, project: defaultProject(), castInbox: [] }))
     }
 
     async manuscriptStats(workspace) {
@@ -1394,6 +1427,32 @@ let NovalWriterService = (() => {
             project: patchRelationshipById(current.project, args?.relationship_id, args?.patch),
           }))
           return concludeStoppedMutation(result, exec)
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_cast_inbox',
+        description: '列出作者在人物关系图谱里做过、还没被你吸收进大纲的人物/关系变动（新增配角、新连线、关系改为暗线或伏线等）。处理完后用 novel_cast_ack 标记。',
+        parameters: {},
+        output: toolOutput('人物变动已读取', { includeValue: true }),
+        async execute(_args, exec) {
+          const { workspace, state } = await self.modelState(exec)
+          return { workspace: { id: String(workspace.id), title: workspace.title }, revision: state.revision, castInbox: state.castInbox || [] }
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_cast_ack',
+        description: '在你已经按作者的人物图谱变动调整完大纲、线索或人物设定之后（或判断无需调整后），把这些变动标记为已处理。entry_ids 取自提示里的条目 id（如 relationship:rel-1）；省略则全部标记。不会修改小说设定，也不改变 revision。',
+        parameters: {
+          entry_ids: { type: 'array', items: { type: 'string' }, description: '已处理的条目 id；省略表示全部。' },
+        },
+        output: toolOutput('人物变动已标记处理'),
+        async execute(args, exec) {
+          const { workspace } = await self.modelState(exec)
+          const ids = Array.isArray(args?.entry_ids) ? args.entry_ids.filter(item => typeof item === 'string') : []
+          const result = await self.acknowledgeCast(String(workspace.id), ids)
+          return { ok: true, removed: result.removed, remaining: result.castInbox.length }
         },
       }))
 
