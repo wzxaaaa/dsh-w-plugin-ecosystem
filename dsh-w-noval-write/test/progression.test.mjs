@@ -185,7 +185,7 @@ test('record upserts validate every reference and generate stable ids', () => {
   assert.equal(first.recordId, 'record-1')
   assert.deepEqual(first.project.progression.records[0], {
     id: 'record-1', characterId: 'lin', chapterId: 'c1', systemId: 'xiuwei', tierId: '筑基',
-    stage: '', condition: '', holdings: '', revealed: '', gained: '', lost: '', note: '',
+    stage: '', condition: '', conditionSet: false, holdings: '', holdingsSet: false, revealed: '', gained: '', lost: '', note: '',
   })
   const edited = record(first.project, { stage: '后期' }, 'record-1')
   assert.equal(edited.recordId, 'record-1')
@@ -285,4 +285,52 @@ test('a template becomes a book system with its own unique id', () => {
   assert.equal(second.id, '修仙境界-2')
   first.tiers[0].name = 'changed'
   assert.equal(xiuxian.tiers[0].name, '炼气', 'the copy is independent of the template')
+})
+
+test('explicit empty snapshots clear holdings and condition while omitted fields keep them', () => {
+  let project = record(book(), { characterId: 'lin', chapterId: 'c1', holdings: '唯一宝剑', condition: '骨折' }).project
+  project = record(project, { characterId: 'lin', chapterId: 'c2', note: '继续赶路' }).project
+  let state = analyzeProgression(project, { asOfChapterId: 'c2', characterIds: ['lin'] }).states[0]
+  assert.equal(state.holdings, '唯一宝剑')
+  assert.equal(state.condition, '骨折')
+  project = record(project, { characterId: 'lin', chapterId: 'c3', holdings: '', condition: '', lost: '宝剑被毁，骨折已愈' }).project
+  const clear = project.progression.records.at(-1)
+  assert.equal(clear.holdingsSet, true)
+  assert.equal(clear.conditionSet, true)
+  state = analyzeProgression(project, { asOfChapterId: 'c3', characterIds: ['lin'] }).states[0]
+  assert.equal(state.holdings, '')
+  assert.equal(state.condition, '')
+  assert.deepEqual(normalizeProject(project), project, 'markers survive repeated reads')
+  assert.deepEqual(projectFromImportDocument(projectExportDocument({ project })).progression, project.progression)
+})
+
+test('legacy default empty snapshot fields do not erase earlier state', () => {
+  const project = book({ records: [
+    { id: 'r1', characterId: 'lin', chapterId: 'c1', holdings: '宝剑', condition: '受伤' },
+    { id: 'r2', characterId: 'lin', chapterId: 'c2', holdings: '', condition: '', note: '旧面板每个记录都有这些默认空字段' },
+  ] })
+  assert.equal(project.progression.records[0].holdingsSet, true)
+  assert.equal(project.progression.records[1].holdingsSet, false)
+  assert.equal(project.progression.records[1].conditionSet, false)
+  let state = analyzeProgression(project, { characterIds: ['lin'] }).states[0]
+  assert.equal(state.holdings, '宝剑')
+  assert.equal(state.condition, '受伤')
+  const cleared = record(project, { holdings: '' }, 'r2').project
+  state = analyzeProgression(cleared, { characterIds: ['lin'] }).states[0]
+  assert.equal(state.holdings, '')
+  assert.equal(state.condition, '受伤')
+  const unchanged = record(cleared, { holdings: '', holdingsSet: false }, 'r2').project
+  assert.equal(analyzeProgression(unchanged, { characterIds: ['lin'] }).states[0].holdings, '宝剑')
+  assert.throws(() => record(project, { holdingsSet: 'true' }, 'r2'), /must be a boolean/)
+})
+
+test('restoring built-ins refuses to delete custom templates at capacity', () => {
+  const custom = Array.from({ length: 100 }, (_, index) => ({ id: `custom-${index}`, name: `自建${index}`, tiers: [{ name: '入门' }] }))
+  const library = normalizeProgressionTemplates({ templates: custom })
+  const before = structuredClone(library)
+  assert.throws(() => restoreBuiltInProgressionTemplates(library), /without deleting custom templates/)
+  assert.deepEqual(library, before, 'the shared library is unchanged after failure')
+  const atLimit = restoreBuiltInProgressionTemplates({ templates: custom.slice(0, 94) })
+  assert.equal(atLimit.templates.length, 100)
+  assert.deepEqual(atLimit.templates.filter(template => !template.builtIn).map(template => template.id), custom.slice(0, 94).map(template => template.id))
 })

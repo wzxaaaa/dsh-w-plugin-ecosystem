@@ -2,15 +2,25 @@
 
 ## 官方 Harness 兼容
 
-`0.14.2` 已适配官方 Windows Harness `0.2.0-rc.2`。兼容官方会话、工作区和 UI slots 服务；工作台从当前会话解析所属工作区，创建绑定、保存与重载已验证。
+`0.14.3` 兼容官方 Windows Harness `0.2.0-rc.2`。兼容官方会话、工作区和 UI slots 服务；工作台从当前会话解析所属工作区。
 
 官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
 
 DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `noval` 拼写；界面名称为“小说写作 / Novel Writing”。
 
+## 0.14.3：保存保护和大纲字数校验
+
+- 正文创建使用原子的禁止覆盖提交，同一本书的正文和大纲更新共用写入队列；章节关联或项目落盘失败时回滚正文。无法安全回滚时保留原稿备份并明确报告实际写入状态。
+- 面板自动同步保留请求期间的新草稿，恢复历史时锁住编辑，过期的绑定或恢复响应不能覆盖另一会话的面板。
+- 旧项目迁移可在失败后继续，沿用同一个目标目录，并保留旧项目、历史和工作区根目录正文作为备份。完成迁移前不会把半本书显示在列表里。
+- 全书章节 ID 唯一；旧数据里的歧义引用会标记为需要重新选章，不会自动套用到后卷。持有物支持明确的空快照；恢复内置模板不会静默删掉自建模板。倒序搜索仍将未关联正文的笔记放在最后。
+- `novel_save_chapter` 保存前按章大纲的 `targetWords` 检查正文：`3000字` 表示至少 3000 字，`3000—4000字` 同时限制上下限，支持 `3千`、`1.5万`、`至少`、`最多` 等常见写法。字数采用面板同一统计方式，忽略 Markdown 标记。未达标不写文件，工具返回实际字数和需要补写或缩减的字数，让模型修正文后重试；不允许省略章节参数绕过。全书目标字数不会被错误套用到每一章。
+
+字数校验约束通过插件保存的正文。模型只在聊天里输出草稿，或直接用其他文件工具写盘时，仍需在提交章节前调用 `novel_save_chapter` 完成校验。
+
 ## 核心语义
 
-- 一个 Harness 工作区共享一个小说项目。同一工作区下的所有对话和右侧栏看到的是同一份角色、关系、世界观、情节、场景与进展数据。
+- 一个 Harness 工作区可以有多本小说，每本书各有文件夹。对话绑定一本书，同一本书的所有对话和右侧栏共享角色、关系、世界观、情节、场景与进展数据。
 - 小说工作台始终可用，没有开启/关闭状态，也没有模式按钮。
 - `/write` 像 `/goal` 一样是一项持久会话能力：写作任务按会话保存在插件自己的 `session-links.json` 中；重启后仍然有效，不污染 Harness 会话事件，也不影响其他对话。
 - AI 对项目数据拥有完整能力：可以读取、局部修改、完整重写并推进进展。长期设定变化应回写项目，而不是只留在聊天文本里。
@@ -127,7 +137,7 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 
 - `novel_write` 和 `novel_advance` 只维护结构化项目数据，并不创建 Markdown 正文文件。
 - 用户要求生成、保存或导出章节文件时，模型必须调用 `novel_save_chapter`，传入完整正文和单个 `.md`/`.txt` 文件名。
-- 工具只允许写入当前 Harness Workspace 根目录，拒绝绝对路径、子目录和路径穿越。
+- 工具只允许写入当前对话绑定的小说文件夹根目录，拒绝绝对路径、子目录和路径穿越。
 - 文件采用临时文件加原子重命名写入，随后回读全文；只有返回 `ok: true, verified: true` 才允许模型声称文件已经创建。
 - 成功回执包含绝对路径、字符数、字节数和 SHA-256；同名不同内容默认拒绝覆盖，只有显式 `overwrite: true` 才会替换。
 
@@ -136,11 +146,12 @@ DeepSeek Harness 的工作区级小说写作插件。包名保留既有的 `nova
 数据默认存放在：
 
 ```text
-$DSH_HOME/noval-write/workspaces/<workspaceId>/project.json
+<Harness Workspace>/<小说文件夹>/.novel/project.json
 $DSH_HOME/noval-write/session-links.json
+$DSH_HOME/noval-write/session-novels.json
 ```
 
-`project.json` 是工作区共享的小说框架；`session-links.json` 只保存各会话的 `/write` 任务与工作区绑定。两者都采用临时文件加原子重命名写入。
+`project.json` 是这本书共享的小说框架；`session-links.json` 保存各会话的 `/write` 任务，`session-novels.json` 保存对话所选的小说。三者都采用临时文件加原子重命名写入。旧版工作区项目会自动迁移，并保留原文件备份。
 
 可以在 profile 的 `cordis.patch.yml` 中改根目录和提示词上限：
 
@@ -174,7 +185,7 @@ $DSH_HOME/noval-write/session-links.json
 3. `dsh-w-noval-write`
 
 ```powershell
-dsh plugin --profile web add .\dsh-w-noval-write-0.14.2.tgz
+dsh plugin --profile web add .\dsh-w-noval-write-0.14.3.tgz
 ```
 
 缺少知识库时，项目工作台与 AI 数据工具不受影响，`/write` 会明确报告知识库未挂载。

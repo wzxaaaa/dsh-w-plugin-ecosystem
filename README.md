@@ -11,7 +11,7 @@
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.5.1` | 自定义插件管理、启停和拖拽安装；隐藏 preset 内部实现模块；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.5.1.tgz?raw=1) |
 | [`dsh-w-right-sidebar`](./dsh-w-right-sidebar) | `0.8.3` | W 系列共用的右侧 Sidebar 宿主：工具栏、工具页返回、收缩栏直达工具，并真实挤压中间对话区域, 已完美兼容**dsh-better-sidebar**; **建议第二个安装** | [下载 `.tgz`](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.8.3.tgz?raw=1) |
 | [`dsh-w-deslop`](./dsh-w-deslop) | `0.1.1` | 小说去 AI 味规则与文本扫描 | [下载 `.tgz`](./dsh-w-deslop/dsh-w-deslop-0.1.1.tgz?raw=1) |
-| [`dsh-w-noval-write`](./dsh-w-noval-write) | `0.14.2` | 一个工作区多本小说、按对话绑定的小说数据层：schema v5 自定义字段、卷章场景大纲、伏笔线索账本、正文字数追踪、版本历史与回滚、按 ID 局部 AI 工具和持久 `/write`；兼容 Harness 0.1.2-alpha.4 | [下载 `.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.14.2.tgz?raw=1) |
+| [`dsh-w-noval-write`](./dsh-w-noval-write) | `0.14.3` | 一个工作区多本小说、按对话绑定：卷章场景大纲、保存前大纲字数校验、伏笔和成长账本、版本历史、正文回滚与并发保护、持久 `/write`；兼容官方 Harness | [下载 `.tgz`](./dsh-w-noval-write/dsh-w-noval-write-0.14.3.tgz?raw=1) |
 | [`dsh-w-whale-tail`](./dsh-w-whale-tail) | `0.5.0` | 右侧 Sidebar 中的鲸鱼娘工具：透明主立绘、眨眼与状态动作、流动液体爱心淫乱值和对话记忆窗口 | [下载 `.tgz`](./dsh-w-whale-tail/dsh-w-whale-tail-0.5.0.tgz?raw=1) |
 | [`dsh-w-archive-manager`](./dsh-w-archive-manager) | `0.2.0` | 在设置中管理已归档对话，兼容新旧 Harness，并自动续跑历史待删除记录 | [下载 `.tgz`](./dsh-w-archive-manager/dsh-w-archive-manager-0.2.0.tgz?raw=1) |
 | [`dsh-w-assistant-refresh`](./dsh-w-assistant-refresh) | `0.2.6` | 在同一会话内重生成指定 AI 回复，不创建新对话并隐藏被替换的旧回复 | [下载 `.tgz`](./dsh-w-assistant-refresh/dsh-w-assistant-refresh-0.2.6.tgz?raw=1) |

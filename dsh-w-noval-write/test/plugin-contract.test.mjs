@@ -86,7 +86,7 @@ test('stores each novel in its own workspace folder, binds conversations, and ex
   assert.match(host, /mutationRoundGuard\.record/)
   assert.match(host, /saveWorkspaceManuscript/)
   assert.match(host, /verified: true/)
-  assert.match(host, /noFileWritten: true/)
+  assert.match(host, /noFileWritten:/)
   assert.doesNotMatch(host, /project: \{ type: 'json'/)
 })
 

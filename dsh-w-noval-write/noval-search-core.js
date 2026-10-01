@@ -147,7 +147,11 @@ export function searchManuscripts(files, optionsInput) {
     }
   }
   const total = hits.length
-  const orderedHits = options.order === 'desc' ? [...hits].reverse() : hits
+  // Descending chronology reverses outline-linked hits only. Unlinked drafts
+  // and notes have no place on that timeline and must remain after the chapters.
+  const orderedHits = options.order === 'desc'
+    ? [...hits.filter(hit => hit.outlineIndex >= 0).reverse(), ...hits.filter(hit => hit.outlineIndex < 0)]
+    : hits
   return {
     query: options.query,
     match: options.match,

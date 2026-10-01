@@ -31,6 +31,16 @@ test('desc order shows the most recent mention first', () => {
   assert.equal(result.truncated, true)
 })
 
+test('desc order keeps unlinked notes after the newest linked manuscript', () => {
+  const result = searchManuscripts(files, { query: '青玄剑', order: 'desc' })
+  assert.deepEqual(result.hits.map(hit => [hit.chapterId, hit.line]), [['c2', 3], ['c2', 2], ['c1', 1], ['', 1]])
+  const latest = searchManuscripts(files, { query: '青玄剑', order: 'desc', maxResults: 1 })
+  assert.equal(latest.hits[0].chapterId, 'c2')
+  assert.equal(latest.hits[0].line, 3)
+  const notes = searchManuscripts([{ filename: 'b.md', chapter: null, text: '目标' }, { filename: 'a.md', chapter: null, text: '目标' }], { query: '目标', order: 'desc' })
+  assert.deepEqual(notes.hits.map(hit => hit.filename), ['a.md', 'b.md'])
+})
+
 test('a chapter range searches only linked chapters inside it', () => {
   const result = searchManuscripts(files, { query: '林默', fromIndex: 1, toIndex: 2 })
   assert.deepEqual(result.hits.map(hit => hit.chapterId), ['c2', 'c3'])

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
+import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { test } from 'node:test'
 import { defaultState } from '../noval-write-core.js'
 import {
@@ -18,7 +20,11 @@ import {
 
 function tempWorkspace(t) {
   const root = mkdtempSync(join(tmpdir(), 'novel-library-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => {
+    const local = relative(resolve(tmpdir()), resolve(root))
+    assert.ok(local && !isAbsolute(local) && local !== '..' && !local.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`))
+    rmSync(root, { recursive: true, force: true })
+  })
   return root
 }
 
@@ -118,4 +124,174 @@ test('the binding table keeps only complete session bindings', () => {
   assert.deepEqual(Object.keys(store.bindings), ['s1'])
   assert.equal(store.bindings.s1.folder, '书')
   assert.deepEqual(normalizeBindingStore(null), { version: 1, bindings: {} })
+})
+
+function legacyFixture(t, blockedSecond = false) {
+  const root = tempWorkspace(t)
+  const workspacePath = join(root, 'workspace')
+  const legacyDir = join(root, 'legacy')
+  mkdirSync(workspacePath)
+  mkdirSync(join(legacyDir, 'history'), { recursive: true })
+  const state = defaultState(0)
+  state.revision = 7
+  state.project.title = '旧书'
+  state.project.volumes = [{ id: 'v1', chapters: [
+    { id: 'c1', manuscriptFile: 'first.md' },
+    { id: 'c2', manuscriptFile: 'second.md' },
+  ] }]
+  writeFileSync(join(legacyDir, 'project.json'), JSON.stringify(state))
+  writeFileSync(join(legacyDir, 'history', 'r6.json'), '{"revision":6}')
+  writeFileSync(join(workspacePath, 'first.md'), 'FIRST')
+  if (blockedSecond) mkdirSync(join(workspacePath, 'second.md'))
+  else writeFileSync(join(workspacePath, 'second.md'), 'SECOND')
+  return { workspacePath, legacyDir, state }
+}
+
+test('a failed migration keeps all sources and resumes the same complete book', t => {
+  const input = legacyFixture(t, true)
+  assert.throws(() => migrateLegacyProject(input), error => ['EISDIR', 'EPERM', 'EACCES'].includes(error.code))
+  const journal = JSON.parse(readFileSync(join(input.legacyDir, 'migration.json'), 'utf8'))
+  const pendingBook = join(input.workspacePath, journal.folder)
+  assert.equal(readFileSync(join(input.workspacePath, 'first.md'), 'utf8'), 'FIRST', 'the original survives a later copy failure')
+  assert.equal(readFileSync(join(pendingBook, 'first.md'), 'utf8'), 'FIRST')
+  assert.equal(readFileSync(join(input.legacyDir, 'history', 'r6.json'), 'utf8'), '{"revision":6}')
+  assert.equal(existsSync(join(input.legacyDir, 'project.json')), true)
+  assert.equal(existsSync(join(input.legacyDir, 'migrated.json')), false)
+  assert.deepEqual(scanNovels(input.workspacePath), [], 'a partial book is not selectable')
+
+  rmdirSync(join(input.workspacePath, 'second.md'))
+  writeFileSync(join(input.workspacePath, 'second.md'), 'SECOND')
+  const result = migrateLegacyProject(input)
+  assert.equal(result.novel.folder, journal.folder, 'retry reuses its reserved folder')
+  assert.equal(result.novel.id, journal.novelId)
+  assert.equal(readFileSync(join(result.novel.dir, 'first.md'), 'utf8'), 'FIRST')
+  assert.equal(readFileSync(join(result.novel.dir, 'second.md'), 'utf8'), 'SECOND')
+  assert.equal(readFileSync(join(result.novel.dir, '.novel', 'history', 'r6.json'), 'utf8'), '{"revision":6}')
+  assert.deepEqual(scanNovels(input.workspacePath).map(book => book.id), [journal.novelId])
+  assert.equal(existsSync(join(input.legacyDir, 'project.json')), false)
+  assert.equal(existsSync(join(input.legacyDir, 'project.json.migrated')), true)
+  assert.equal(readFileSync(join(input.workspacePath, 'first.md'), 'utf8'), 'FIRST', 'source manuscripts remain available as backups')
+  assert.equal(readFileSync(join(input.legacyDir, 'history', 'r6.json'), 'utf8'), '{"revision":6}')
+})
+
+test('retry preserves a changed destination instead of overwriting it or splitting the book', t => {
+  const input = legacyFixture(t, true)
+  assert.throws(() => migrateLegacyProject(input))
+  const journal = JSON.parse(readFileSync(join(input.legacyDir, 'migration.json'), 'utf8'))
+  const destination = join(input.workspacePath, journal.folder, 'first.md')
+  writeFileSync(destination, 'external edited copy')
+  rmdirSync(join(input.workspacePath, 'second.md'))
+  writeFileSync(join(input.workspacePath, 'second.md'), 'SECOND')
+  assert.throws(() => migrateLegacyProject(input), error => error.code === 'NOVEL_COPY_CONFLICT')
+  assert.equal(readFileSync(destination, 'utf8'), 'external edited copy')
+  assert.equal(readFileSync(join(input.workspacePath, 'first.md'), 'utf8'), 'FIRST')
+  assert.equal(existsSync(join(input.workspacePath, `${journal.folder} 2`)), false)
+  assert.equal(existsSync(join(input.legacyDir, 'project.json')), true)
+})
+
+test('migration reservations accept collision suffixes on maximum-length book names', t => {
+  const input = legacyFixture(t)
+  input.state.project.title = '长'.repeat(60)
+  writeFileSync(join(input.legacyDir, 'project.json'), JSON.stringify(input.state))
+  mkdirSync(join(input.workspacePath, input.state.project.title))
+  const result = migrateLegacyProject(input)
+  assert.equal(result.novel.folder, `${input.state.project.title} 2`)
+  assert.equal(scanNovels(input.workspacePath).length, 1)
+})
+
+function ownerCrashFixture(t) {
+  const input = legacyFixture(t, true)
+  assert.throws(() => migrateLegacyProject(input))
+  const journalPath = join(input.legacyDir, 'migration.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'))
+  const novelDirectory = join(input.workspacePath, journal.folder, '.novel')
+  unlinkSync(join(novelDirectory, 'migration.json'))
+  unlinkSync(join(input.workspacePath, journal.folder, 'first.md'))
+  for (const file of journal.files) delete file.sha256
+  writeFileSync(journalPath, JSON.stringify(journal))
+  rmdirSync(join(input.workspacePath, 'second.md'))
+  writeFileSync(join(input.workspacePath, 'second.md'), 'SECOND')
+  return { input, journal, journalPath, novelDirectory }
+}
+
+test('a crash during an empty or partial reserved owner write resumes the same novel', async t => {
+  for (const [label, content] of [['empty', ''], ['partial', '{"version":1,']]) {
+    await t.test(label, t => {
+      const { input, journal, novelDirectory } = ownerCrashFixture(t)
+      const temporary = join(novelDirectory, `migration.json.${journal.reservationToken}.tmp`)
+      writeFileSync(temporary, content)
+      const result = migrateLegacyProject(input)
+      assert.equal(result.novel.id, journal.novelId)
+      assert.equal(result.novel.folder, journal.folder)
+      assert.equal(readFileSync(join(result.novel.dir, 'first.md'), 'utf8'), 'FIRST')
+      assert.equal(readFileSync(join(result.novel.dir, 'second.md'), 'utf8'), 'SECOND')
+      assert.equal(readFileSync(join(result.novel.dir, '.novel', 'history', 'r6.json'), 'utf8'), '{"revision":6}')
+      assert.equal(scanNovels(input.workspacePath).length, 1)
+      assert.equal(existsSync(temporary), false)
+    })
+  }
+})
+
+test('legacy journals recover only complete temporary owners naming their exact reserved novel', t => {
+  const { input, journal, journalPath, novelDirectory } = ownerCrashFixture(t)
+  delete journal.reservationToken
+  writeFileSync(journalPath, JSON.stringify(journal))
+  const temporary = join(novelDirectory, `migration.json.12345.${randomUUID()}.tmp`)
+  writeFileSync(temporary, JSON.stringify({ version: 1, novelId: journal.novelId }))
+  assert.equal(migrateLegacyProject(input).novel.id, journal.novelId)
+  assert.equal(scanNovels(input.workspacePath).length, 1)
+})
+
+test('owner recovery refuses another book, extra metadata, or unrelated files in the reservation', async t => {
+  for (const label of ['another book', 'extra metadata', 'unrelated file']) {
+    await t.test(label, t => {
+      const { input, journal, novelDirectory } = ownerCrashFixture(t)
+      const filename = label === 'unrelated file' ? 'unrelated.txt' : `migration.json.${journal.reservationToken}.tmp`
+      const content = label === 'another book'
+        ? JSON.stringify({ version: 1, novelId: 'another-book-id' })
+        : label === 'extra metadata'
+          ? JSON.stringify({ version: 1, novelId: journal.novelId, unrelated: true })
+          : 'unrelated data'
+      const path = join(novelDirectory, filename)
+      writeFileSync(path, content)
+      assert.throws(() => migrateLegacyProject(input), error => error.code === 'NOVEL_MIGRATION_CONFLICT')
+      assert.equal(readFileSync(path, 'utf8'), content)
+      assert.equal(readFileSync(join(input.workspacePath, 'first.md'), 'utf8'), 'FIRST')
+      assert.equal(existsSync(join(input.legacyDir, 'project.json')), true)
+      assert.deepEqual(scanNovels(input.workspacePath), [])
+    })
+  }
+})
+
+test('Windows temporarily locked manuscripts resume without stranding the first chapter or history', { skip: process.platform !== 'win32' }, async t => {
+  const input = legacyFixture(t)
+  const filename = join(input.workspacePath, 'second.md').replaceAll("'", "''")
+  const script = `$stream=[System.IO.File]::Open('${filename}',[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::None); Write-Output 'LOCKED'; Start-Sleep -Seconds 30; $stream.Dispose()`
+  const child = spawn(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true })
+  let exited = false
+  const exit = new Promise(resolve => child.once('exit', () => { exited = true; resolve() }))
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('the test file-lock helper did not become ready')), 5000)
+      child.stdout.on('data', data => { if (String(data).includes('LOCKED')) { clearTimeout(timer); resolve() } })
+      child.once('error', error => { clearTimeout(timer); reject(error) })
+      child.once('exit', () => { clearTimeout(timer); reject(new Error('the test file-lock helper exited early')) })
+    })
+    assert.throws(() => migrateLegacyProject(input), error => ['EBUSY', 'EACCES', 'EPERM'].includes(error.code))
+    const journal = JSON.parse(readFileSync(join(input.legacyDir, 'migration.json'), 'utf8'))
+    assert.equal(readFileSync(join(input.workspacePath, 'first.md'), 'utf8'), 'FIRST')
+    assert.equal(readFileSync(join(input.legacyDir, 'history', 'r6.json'), 'utf8'), '{"revision":6}')
+    assert.deepEqual(scanNovels(input.workspacePath), [])
+    child.kill()
+    await exit
+    const result = migrateLegacyProject(input)
+    assert.equal(result.novel.id, journal.novelId)
+    assert.equal(readFileSync(join(result.novel.dir, 'first.md'), 'utf8'), 'FIRST')
+    assert.equal(readFileSync(join(result.novel.dir, 'second.md'), 'utf8'), 'SECOND')
+    assert.equal(readFileSync(join(result.novel.dir, '.novel', 'history', 'r6.json'), 'utf8'), '{"revision":6}')
+    assert.equal(scanNovels(input.workspacePath).length, 1)
+  } finally {
+    if (!exited) { child.kill(); await exit }
+  }
 })

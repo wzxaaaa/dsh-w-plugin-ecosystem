@@ -19,7 +19,7 @@ function loadClient(React = {}) {
     slice('    var UNSTARTED_CHAPTER_STATUS', '    var THREAD_DUE_SOON_CHAPTERS'),
     slice('    function chapterSequenceOf(project) {', '    function analyzeThreads(project) {'),
     slice('    // ── progression systems', '    // ── version history'),
-    'this.exports = { progressionOn, analyzeProgressionView, systemFromTemplateClient, ProgressionTab };',
+    'this.exports = { progressionOn, analyzeProgressionView, systemFromTemplateClient, ProgressionTab, emptyRecord, RecordRow };',
   ].join('\n')
   const stub = name => props => ({ type: name, props: props || {}, children: [] })
   const context = {
@@ -83,6 +83,36 @@ test('a template copied into a book gets a unique id and its own tiers', () => {
   assert.notEqual(first.tiers[0].id, undefined)
 })
 
+test('client snapshots preserve omitted values, clear explicit empty snapshots, and exclude ambiguous chapters', () => {
+  const client = loadClient()
+  const project = normalizeProject({
+    characters: [{ id: 'lin', name: '林默' }],
+    volumes: [{ id: 'v1', chapters: ['c1', 'c2', 'c3'].map(id => ({ id, status: 'done' })) }],
+    progression: { records: [
+      { id: 'r1', characterId: 'lin', chapterId: 'c1', holdings: '青玄剑', condition: '骨折' },
+      { id: 'r2', characterId: 'lin', chapterId: 'c2', holdings: '', condition: '' },
+      { id: 'r3', characterId: 'lin', chapterId: 'c3', holdings: '', holdingsSet: true, condition: '', conditionSet: true },
+      { id: 'amb', characterId: 'lin', chapterId: 'ambiguous:c1', holdings: '不应入账', holdingsSet: true },
+    ] },
+  })
+  for (const chapter of ['c1', 'c2', 'c3']) {
+    const clientState = client.analyzeProgressionView(project, chapter).states[0]
+    const hostState = analyzeProgression(project, { asOfChapterId: chapter }).states[0]
+    assert.equal(clientState.holdings, hostState.holdings)
+    assert.equal(clientState.condition, hostState.condition)
+    assert.equal(clientState.holdings, chapter === 'c3' ? '' : '青玄剑')
+    assert.equal(clientState.condition, chapter === 'c3' ? '' : '骨折')
+  }
+  assert.deepEqual([...client.analyzeProgressionView(project).warnedRecords.amb], ['ambiguous-chapter'])
+  const legacy = structuredClone(project)
+  legacy.progression.records = [
+    { id: 'old-1', characterId: 'lin', chapterId: 'c1', holdings: '剑', condition: '轻伤' },
+    { id: 'old-2', characterId: 'lin', chapterId: 'c2', holdings: '', condition: ' ' },
+  ]
+  assert.equal(client.analyzeProgressionView(legacy).states[0].holdings, '剑')
+  assert.equal(client.analyzeProgressionView(legacy).states[0].condition, '轻伤')
+})
+
 // A tiny hook runtime; function components render inline.
 function createReact() {
   const slots = []
@@ -122,6 +152,32 @@ function findAll(node, predicate, out = []) {
 
 const textOf = node => (node == null || node === false ? '' : typeof node !== 'object' ? String(node) : (node.children || []).map(textOf).join(''))
 const tick = () => new Promise(resolve => setImmediate(resolve))
+
+test('editing or clearing a record snapshot sets its marker, and opting out keeps the previous snapshot', () => {
+  const runtime = createReact(), client = loadClient(runtime.React)
+  const record = { ...client.emptyRecord(), id: 'r', characterId: 'lin', chapterId: 'c1' }
+  assert.equal(record.holdingsSet, false)
+  assert.equal(record.conditionSet, false)
+  const props = {
+    record, t: key => key, systems: [], characters: [{ id: 'lin', name: '林默' }], open: true,
+    view: { systemById: new Map(), position: new Map([['c1', 0]]), chapters: [{ id: 'c1' }], currentIndex: 0, warnedRecords: {} },
+    onUpdate: mutate => mutate(record), onToggle() {}, onDelete() {},
+  }
+  const render = () => runtime.render(client.RecordRow, props)
+  let tree = render()
+  findAll(tree, node => node.type === 'TextField' && node.props.label === 'recordHoldings')[0].props.onChange('剑')
+  assert.equal(record.holdings, '剑')
+  assert.equal(record.holdingsSet, true)
+  tree = render()
+  findAll(tree, node => node.type === 'TextField' && node.props.label === 'recordHoldings')[0].props.onChange('')
+  findAll(tree, node => node.type === 'TextField' && node.props.label === 'recordCondition')[0].props.onChange('')
+  assert.equal(record.holdings, '')
+  assert.equal(record.holdingsSet, true, 'empty means an explicit cleared inventory')
+  assert.equal(record.conditionSet, true, 'empty means an explicit cleared injury')
+  tree = render()
+  findAll(tree, node => node.type === 'input' && node.props['aria-label'] === 'recordHoldings · snapshotSet')[0].props.onChange({ target: { checked: false } })
+  assert.equal(record.holdingsSet, false, 'unchecked means the chapter did not update holdings')
+})
 
 test('the template library applies, saves, deletes and restores through the writer', async () => {
   const runtime = createReact()

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { extname, isAbsolute, join, resolve } from 'node:path'
+import { link, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 
 export const MAX_MANUSCRIPT_CHARS = 2_000_000
 
@@ -34,11 +34,35 @@ function digest(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex')
 }
 
-export async function saveWorkspaceManuscript(workspaceRoot, input = {}) {
+// Conversations can share a book. Keep a filename's existence check, commit,
+// and verification in the same queue, including Windows case aliases.
+const manuscriptWrites = new Map()
+
+async function serializedManuscriptWrite(path, operation) {
+  const key = process.platform === 'win32' ? path.toLowerCase() : path
+  const previous = manuscriptWrites.get(key) || Promise.resolve()
+  const result = previous.then(operation)
+  const tail = result.then(() => {}, () => {})
+  manuscriptWrites.set(key, tail)
+  try {
+    return await result
+  } finally {
+    if (manuscriptWrites.get(key) === tail) manuscriptWrites.delete(key)
+  }
+}
+
+async function readExistingManuscript(path) {
+  return readFile(path, 'utf8').catch(error => {
+    if (error?.code === 'ENOENT') return undefined
+    throw error
+  })
+}
+
+export async function saveWorkspaceManuscript(workspaceRoot, input = {}, { onSaved } = {}) {
   if (typeof workspaceRoot !== 'string' || !workspaceRoot.trim() || !isAbsolute(workspaceRoot)) {
     throw fileError('NOVEL_WORKSPACE_MISSING', 'the registered Harness Workspace has no absolute filesystem path')
   }
-  const root = resolve(workspaceRoot)
+  const root = await realpath(resolve(workspaceRoot)).catch(() => resolve(workspaceRoot))
   const rootInfo = await stat(root).catch(() => undefined)
   if (!rootInfo?.isDirectory()) throw fileError('NOVEL_WORKSPACE_MISSING', 'the registered Harness Workspace directory does not exist')
 
@@ -50,12 +74,51 @@ export async function saveWorkspaceManuscript(workspaceRoot, input = {}) {
   }
 
   const path = join(root, filename)
-  const existing = await readFile(path, 'utf8').catch(error => {
-    if (error?.code === 'ENOENT') return undefined
-    throw error
-  })
+  return serializedManuscriptWrite(path, () => saveManuscriptFile(path, filename, content, input, onSaved))
+}
+
+async function rollbackManuscript(path, filename, content, existing, originalBackupPath) {
+  // An external editor may have changed this file while the linked project
+  // was committing. Preserve that edit and keep the original as a backup.
+  const backupPath = existing === undefined ? undefined : originalBackupPath || join(dirname(path), `.${filename}.rollback.${randomUUID()}.bak`)
+  let backupWritten = Boolean(originalBackupPath)
+  try {
+    if (backupPath && !backupWritten) {
+      await writeFile(backupPath, existing, { encoding: 'utf8', flag: 'wx' })
+      backupWritten = true
+    }
+    const current = await readExistingManuscript(path)
+    if (current === undefined && existing === undefined) return { fileWritten: false }
+    if (current !== content) return { fileWritten: true, ...(backupWritten ? { backupPath } : {}) }
+    if (existing === undefined) await rm(path)
+    else {
+      const restoring = `${path}.${randomUUID()}.restore.tmp`
+      try {
+        await link(backupPath, restoring)
+        await rename(restoring, path)
+      } finally {
+        await rm(restoring, { force: true }).catch(() => {})
+      }
+    }
+    const restored = await readExistingManuscript(path)
+    if (restored !== existing) return { fileWritten: true, ...(backupWritten ? { backupPath } : {}) }
+    if (backupWritten) await rm(backupPath, { force: true }).catch(() => {})
+    return { fileWritten: false }
+  } catch (error) {
+    return { fileWritten: true, ...(backupWritten ? { backupPath } : {}), rollbackErrorCode: error?.code || 'NOVEL_FILE_ROLLBACK_FAILED' }
+  }
+}
+
+function saveFailure(error, path, recovery = { fileWritten: false }) {
+  const failure = error instanceof Error ? error : fileError('NOVEL_SAVE_COMMIT_FAILED', String(error))
+  Object.assign(failure, recovery, { path, noFileWritten: !recovery.fileWritten, partialWrite: recovery.fileWritten })
+  return failure
+}
+
+async function saveManuscriptFile(path, filename, content, input, onSaved) {
+  const existing = await readExistingManuscript(path)
   if (existing === content) {
-    return {
+    const saved = {
       changed: false,
       created: false,
       overwritten: false,
@@ -66,31 +129,67 @@ export async function saveWorkspaceManuscript(workspaceRoot, input = {}) {
       bytes: Buffer.byteLength(content, 'utf8'),
       sha256: digest(content),
     }
+    try {
+      if (typeof onSaved === 'function') await onSaved(saved)
+      return saved
+    } catch (error) {
+      throw saveFailure(error, path)
+    }
   }
   if (existing !== undefined && input.overwrite !== true) {
     throw fileError('NOVEL_FILE_EXISTS', `file already exists: ${path}; read it first and pass overwrite: true only when replacement is intended`)
   }
 
-  const temp = join(root, `.${filename}.${process.pid}.${randomUUID()}.tmp`)
+  const temp = `${path}.${process.pid}.${randomUUID()}.tmp`
+  let committed = false
+  let originalBackupPath
   try {
     await writeFile(temp, content, 'utf8')
-    await rename(temp, path)
+    if (existing === undefined) {
+      // Unlike rename(), link() fails atomically if any process creates the
+      // destination while this file is being prepared.
+      try {
+        await link(temp, path)
+      } catch (error) {
+        if (error?.code === 'EEXIST') throw fileError('NOVEL_FILE_EXISTS', `file already exists: ${path}; it was created while this save was being prepared`)
+        throw error
+      }
+    } else {
+      // Detect an external edit made while preparing the replacement. Plugin
+      // saves are serialized above, so they cannot cross this check.
+      if (await readExistingManuscript(path) !== existing) {
+        throw fileError('NOVEL_FILE_CONFLICT', `file changed while this save was being prepared: ${path}; read it again before overwriting`)
+      }
+      // Persist the original before replacing it. Even a full disk during the
+      // project commit must not prevent restoring the old manuscript.
+      originalBackupPath = join(dirname(path), `.${filename}.rollback.${randomUUID()}.bak`)
+      await writeFile(originalBackupPath, existing, { encoding: 'utf8', flag: 'wx' })
+      if (await readFile(originalBackupPath, 'utf8') !== existing) throw fileError('NOVEL_FILE_VERIFY_FAILED', `original manuscript backup could not be verified: ${path}`)
+      if (await readExistingManuscript(path) !== existing) throw fileError('NOVEL_FILE_CONFLICT', `file changed while backing up this save: ${path}; read it again before overwriting`)
+      await rename(temp, path)
+    }
+    committed = true
+    const persisted = await readFile(path, 'utf8')
+    if (persisted !== content) throw fileError('NOVEL_FILE_VERIFY_FAILED', `file verification failed after writing: ${path}`)
+    const saved = {
+      changed: true,
+      created: existing === undefined,
+      overwritten: existing !== undefined,
+      verified: true,
+      filename,
+      path,
+      characters: persisted.length,
+      bytes: Buffer.byteLength(persisted, 'utf8'),
+      sha256: digest(persisted),
+    }
+    if (typeof onSaved === 'function') await onSaved(saved)
+    if (originalBackupPath) await rm(originalBackupPath, { force: true }).catch(() => {})
+    return saved
+  } catch (error) {
+    const recovery = committed ? await rollbackManuscript(path, filename, content, existing, originalBackupPath) : { fileWritten: false, ...(originalBackupPath ? { backupPath: originalBackupPath } : {}) }
+    throw saveFailure(error, path, recovery)
   } finally {
     await rm(temp, { force: true }).catch(() => {})
-  }
-
-  const persisted = await readFile(path, 'utf8')
-  if (persisted !== content) throw fileError('NOVEL_FILE_VERIFY_FAILED', `file verification failed after writing: ${path}`)
-  return {
-    changed: true,
-    created: existing === undefined,
-    overwritten: existing !== undefined,
-    verified: true,
-    filename,
-    path,
-    characters: persisted.length,
-    bytes: Buffer.byteLength(persisted, 'utf8'),
-    sha256: digest(persisted),
   }
 }
 

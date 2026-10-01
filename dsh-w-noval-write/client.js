@@ -1458,7 +1458,8 @@ window.__ModuleLoader__.load({
         var stale = idleChapters >= THREAD_STALE_CHAPTERS;
         var referenced = [thread.plantedChapterId, thread.plannedPayoffChapterId, thread.resolvedChapterId].concat((thread.beats || []).map(function (beat) { return beat.chapterId; }));
         var warnings = [];
-        if (referenced.some(function (chapterId) { return chapterId && !position.has(chapterId); })) warnings.push("missing-chapter");
+        if (referenced.some(function (chapterId) { return String(chapterId || "").indexOf("ambiguous:") === 0; })) warnings.push("ambiguous-chapter");
+        if (referenced.some(function (chapterId) { return chapterId && String(chapterId).indexOf("ambiguous:") !== 0 && !position.has(chapterId); })) warnings.push("missing-chapter");
         if (plantedIndex >= 0 && payoffIndex >= 0 && payoffIndex < plantedIndex) warnings.push("payoff-before-plant");
         if (thread.status === "resolved" && !thread.resolvedChapterId) warnings.push("resolved-without-chapter");
         counts.total += 1;
@@ -1505,7 +1506,7 @@ window.__ModuleLoader__.load({
           onChange: function (event) { props.onChange(event.target.value); },
         },
           React.createElement("option", { value: "" }, chapters.length === 0 ? props.t("noOutlineChapters") : props.t("noChapter")),
-          known ? null : React.createElement("option", { value: props.value }, props.t("missingChapter")),
+          known ? null : React.createElement("option", { value: props.value }, props.t(String(props.value).indexOf("ambiguous:") === 0 ? "ambiguousChapter" : "missingChapter")),
           groups.map(function (group) {
             return React.createElement("optgroup", { key: group.volumeId, label: group.label }, group.items.map(function (chapter) {
               return React.createElement("option", { key: chapter.id, value: chapter.id }, chapterLong(chapter) + (chapter.index === props.currentIndex ? " · " + props.t("currentMarker") : ""));
@@ -1811,7 +1812,7 @@ window.__ModuleLoader__.load({
     }
 
     function emptyRecord() {
-      return { id: "", characterId: "", chapterId: "", systemId: "", tierId: "", stage: "", condition: "", holdings: "", revealed: "", gained: "", lost: "", note: "" };
+      return { id: "", characterId: "", chapterId: "", systemId: "", tierId: "", stage: "", condition: "", conditionSet: false, holdings: "", holdingsSet: false, revealed: "", gained: "", lost: "", note: "" };
     }
 
     function systemFromTemplateClient(template, systems) {
@@ -1846,7 +1847,7 @@ window.__ModuleLoader__.load({
       });
       entries.forEach(function (entry) {
         var record = entry.record;
-        if (entry.index < 0) warnings.push({ code: "missing-chapter", recordId: record.id });
+        if (entry.index < 0) warnings.push({ code: String(record.chapterId || "").indexOf("ambiguous:") === 0 ? "ambiguous-chapter" : "missing-chapter", recordId: record.id });
         if (!characters.has(record.characterId)) warnings.push({ code: "missing-character", recordId: record.id });
         if (record.systemId && !systemById.has(record.systemId)) warnings.push({ code: "missing-system", recordId: record.id });
         else if (record.tierId && rankOf(record) === undefined) warnings.push({ code: "missing-tier", recordId: record.id });
@@ -1873,8 +1874,8 @@ window.__ModuleLoader__.load({
         if (!state) { state = { characterId: record.characterId, standings: new Map(), condition: "", holdings: "", revealed: [], lastIndex: -1, records: 0 }; states.set(record.characterId, state); }
         if (record.systemId && record.tierId) state.standings.set(record.systemId, { tierId: record.tierId, stage: record.stage });
         else if (record.systemId && record.stage) state.standings.set(record.systemId, Object.assign({ tierId: "" }, state.standings.get(record.systemId) || {}, { stage: record.stage }));
-        if (record.condition) state.condition = record.condition;
-        if (record.holdings) state.holdings = record.holdings;
+        if (record.conditionSet === true || (record.conditionSet === undefined && String(record.condition || "").trim())) state.condition = record.condition || "";
+        if (record.holdingsSet === true || (record.holdingsSet === undefined && String(record.holdings || "").trim())) state.holdings = record.holdings || "";
         if (record.revealed) state.revealed.push({ chapter: chapters[entry.index], text: record.revealed });
         state.lastIndex = entry.index;
         state.records += 1;
@@ -2039,7 +2040,15 @@ window.__ModuleLoader__.load({
       var t = props.t;
       var view = props.view;
       var systems = props.systems;
-      function set(key, value) { props.onUpdate(function (item) { item[key] = value; }); }
+      function set(key, value) { props.onUpdate(function (item) { item[key] = value; if (key === "condition" || key === "holdings") item[key + "Set"] = true; }); }
+      function snapshotField(key, label) {
+        var marked = record[key + "Set"] === true || (record[key + "Set"] === undefined && Boolean(String(record[key] || "").trim()));
+        return React.createElement("div", null,
+          React.createElement(TextField, { label: label, value: record[key], rows: 2, onChange: function (value) { set(key, value); } }),
+          React.createElement("label", { className: "dshwnw-toggle" },
+            React.createElement("input", { type: "checkbox", checked: marked, "aria-label": label + " · " + t("snapshotSet"), onChange: function (event) { var checked = event.target.checked; props.onUpdate(function (item) { item[key + "Set"] = checked; }); } }),
+            t("snapshotSet")));
+      }
       var character = props.characters.find(function (item) { return item.id === record.characterId; });
       var index = view.position.has(record.chapterId) ? view.position.get(record.chapterId) : -1;
       var system = view.systemById.get(record.systemId);
@@ -2070,8 +2079,9 @@ window.__ModuleLoader__.load({
             React.createElement(SelectField, { label: t("recordTier"), value: record.tierId, empty: t("tierUnchanged"), options: (system ? system.tiers || [] : []).map(function (item) { return { value: item.id, label: item.name || t("unnamedTier") }; }), onChange: function (v) { set("tierId", v); } }),
             React.createElement(InputField, { label: t("recordStage"), value: record.stage, onChange: function (v) { set("stage", v); } })
           ),
-          React.createElement(TextField, { label: t("recordCondition"), value: record.condition, rows: 2, onChange: function (v) { set("condition", v); } }),
-          React.createElement(TextField, { label: t("recordHoldings"), value: record.holdings, rows: 2, onChange: function (v) { set("holdings", v); } }),
+          snapshotField("condition", t("recordCondition")),
+          snapshotField("holdings", t("recordHoldings")),
+          React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, t("snapshotHint")),
           React.createElement(TextField, { label: t("recordRevealed"), value: record.revealed, rows: 2, onChange: function (v) { set("revealed", v); } }),
           React.createElement("div", { className: "dshwnw-grid" },
             React.createElement(TextField, { label: t("recordGained"), value: record.gained, rows: 2, onChange: function (v) { set("gained", v); } }),
@@ -2341,6 +2351,15 @@ window.__ModuleLoader__.load({
       var restoringSlot = React.useState(false);
       var restoring = restoringSlot[0];
       var setRestoring = restoringSlot[1];
+      var restoreRequestRef = React.useRef(0);
+      var restoreTargetRef = React.useRef(props.workspaceId);
+      restoreTargetRef.current = props.workspaceId;
+      React.useEffect(function () {
+        setRestoring(false);
+        setArmed(null);
+        setOpen(null);
+        return function () { restoreRequestRef.current += 1; };
+      }, [props.workspaceId]);
       var available = Boolean(writer && typeof writer.listHistory === "function");
       React.useEffect(function () {
         if (!available) return;
@@ -2365,13 +2384,17 @@ window.__ModuleLoader__.load({
         });
       }
       function restore(revision) {
+        if (restoring || props.locked || typeof props.onRestore !== "function") return;
+        var request = ++restoreRequestRef.current;
+        var target = props.workspaceId;
         setRestoring(true);
-        writer.restoreSnapshot(props.workspaceId, revision, props.revision).then(function (next) {
+        props.onRestore(revision).then(function () {
+          if (request !== restoreRequestRef.current || target !== restoreTargetRef.current) return;
           setRestoring(false);
           setArmed(null);
           setOpen(null);
-          props.onRestored(next, revision);
         }).catch(function (error) {
+          if (request !== restoreRequestRef.current || target !== restoreTargetRef.current) return;
           setRestoring(false);
           props.onError(t("restoreFailed") + ": " + failureText(error));
         });
@@ -2486,7 +2509,7 @@ window.__ModuleLoader__.load({
           React.createElement("div", { className: "dshwnw-section-hint", style: { marginTop: 0 } }, props.t("historyHint")),
           React.createElement(HistoryPanel, {
             t: props.t, writer: props.writer, workspaceId: props.workspaceId, revision: props.revision, locked: locked,
-            onRestored: props.onRestored, onError: props.onError,
+            onRestore: props.onRestore, onError: props.onError,
           })
         ),
         React.createElement("div", { className: "dshwnw-settings" },
@@ -2737,16 +2760,30 @@ window.__ModuleLoader__.load({
       var libraryBusySlot = React.useState(false);
       var libraryBusy = libraryBusySlot[0];
       var setLibraryBusy = libraryBusySlot[1];
+      var libraryBusyRef = React.useRef(false);
+      libraryBusyRef.current = libraryBusy;
+      var panelAliveRef = React.useRef(true);
+      var bindingKeyRef = React.useRef(bindingKey);
+      bindingKeyRef.current = bindingKey;
+      var bindingRequestRef = React.useRef(0);
       var refreshBinding = React.useCallback(function () {
         if (!canBind || !hostWorkspaceId) return Promise.resolve();
         var key = bindingKey;
+        var request = ++bindingRequestRef.current;
+        libraryBusyRef.current = false;
+        setLibraryBusy(false);
         return writer.getBinding(sessionId, hostWorkspaceId).then(function (value) {
+          if (!panelAliveRef.current || request !== bindingRequestRef.current || key !== bindingKeyRef.current) return;
           setBindingInfo({ status: "ready", key: key, binding: value.binding || null, novels: value.novels || [], missing: value.missing || null });
         }).catch(function (error) {
+          if (!panelAliveRef.current || request !== bindingRequestRef.current || key !== bindingKeyRef.current) return;
           setBindingInfo({ status: "error", key: key, binding: null, novels: [], missing: null, error: failureText(error) });
         });
       }, [writer, sessionId, hostWorkspaceId]);
-      React.useEffect(function () { if (canBind) refreshBinding(); }, [refreshBinding]);
+      React.useEffect(function () {
+        if (canBind) refreshBinding();
+        return function () { bindingRequestRef.current += 1; };
+      }, [refreshBinding]);
       var bindingReady = bindingInfo.key === bindingKey && bindingInfo.status !== "idle";
       var workspaceId = !canBind ? hostWorkspaceId : bindingReady && bindingInfo.binding ? bindingInfo.binding.handle : null;
       var stateSlot = React.useState(null);
@@ -2771,6 +2808,9 @@ window.__ModuleLoader__.load({
       var notice = noticeSlot[0];
       var setNotice = noticeSlot[1];
       var requestRef = React.useRef(0);
+      var activeWorkspaceRef = React.useRef(workspaceId);
+      activeWorkspaceRef.current = workspaceId;
+      var editVersionRef = React.useRef(0);
       var dirtyRef = React.useRef(false);
       var draftCacheRef = React.useRef(new Map());
       var externalSlot = React.useState(null);
@@ -2787,6 +2827,14 @@ window.__ModuleLoader__.load({
       var discardSlot = React.useState(null);
       var pendingDiscard = discardSlot[0];
       var setPendingDiscard = discardSlot[1];
+      React.useEffect(function () {
+        panelAliveRef.current = true;
+        return function () { panelAliveRef.current = false; requestRef.current += 1; bindingRequestRef.current += 1; };
+      }, []);
+      React.useEffect(function () { setPendingDiscard(null); }, [bindingKey, workspaceId]);
+      function currentRequest(request, target) {
+        return panelAliveRef.current && request === requestRef.current && target === activeWorkspaceRef.current;
+      }
       function askDiscard(run) {
         if (!dirtyRef.current) { run(); return; }
         setPendingDiscard({ run: run });
@@ -2796,10 +2844,15 @@ window.__ModuleLoader__.load({
 
       var load = React.useCallback(function (forceRemote) {
         var requestId = ++requestRef.current;
+        setExternal(null);
+        ignoredRevisionRef.current = -1;
         if (!workspaceId) {
           setState(null);
           setDraft(null);
           setBusy(false);
+          busyRef.current = false;
+          setDirty(false);
+          dirtyRef.current = false;
           setNotice(null);
           return;
         }
@@ -2810,13 +2863,15 @@ window.__ModuleLoader__.load({
           setDirty(true);
           dirtyRef.current = true;
           setBusy(false);
+          busyRef.current = false;
           setNotice({ kind: "ok", text: t("draftRestored") });
           return;
         }
         setNotice(null);
         setBusy(true);
+        busyRef.current = true;
         writer.getState(workspaceId).then(function (next) {
-          if (requestId !== requestRef.current) return;
+          if (!currentRequest(requestId, workspaceId)) return;
           setState(next);
           setDraft(clone(next.project));
           setDirty(false);
@@ -2825,8 +2880,8 @@ window.__ModuleLoader__.load({
           setNotice(pendingNoticeRef.current ? { kind: "ok", text: pendingNoticeRef.current } : null);
           pendingNoticeRef.current = null;
         }).catch(function (error) {
-          if (requestId === requestRef.current) setNotice({ kind: "error", text: t("loadFailed") + ": " + failureText(error) });
-        }).finally(function () { if (requestId === requestRef.current) setBusy(false); });
+          if (currentRequest(requestId, workspaceId)) setNotice({ kind: "error", text: t("loadFailed") + ": " + failureText(error) });
+        }).finally(function () { if (currentRequest(requestId, workspaceId)) { busyRef.current = false; setBusy(false); } });
       }, [writer, t, workspaceId]);
 
       React.useEffect(function () {
@@ -2848,10 +2903,16 @@ window.__ModuleLoader__.load({
 
       // Take the stored project when something outside this panel (the AI,
       // another tab) saved a newer revision.
-      function pullRemote(info) {
+      function pullRemote(info, discardDraft) {
+        if (busyRef.current || libraryBusyRef.current) return;
         var requestId = ++requestRef.current;
+        var editVersion = editVersionRef.current;
         writer.getState(workspaceId).then(function (next) {
-          if (requestId !== requestRef.current) return;
+          if (!currentRequest(requestId, workspaceId)) return;
+          if (editVersion !== editVersionRef.current || (dirtyRef.current && !discardDraft)) {
+            setExternal(Object.assign({}, info, { revision: next.revision }));
+            return;
+          }
           setState(next);
           setDraft(clone(next.project));
           setDirty(false);
@@ -2860,7 +2921,7 @@ window.__ModuleLoader__.load({
           setExternal(null);
           setNotice({ kind: "ok", text: externalMessage(info) });
         }).catch(function (error) {
-          if (requestId === requestRef.current) setNotice({ kind: "error", text: t("loadFailed") + ": " + failureText(error) });
+          if (currentRequest(requestId, workspaceId)) setNotice({ kind: "error", text: t("loadFailed") + ": " + failureText(error) });
         });
       }
 
@@ -2871,7 +2932,7 @@ window.__ModuleLoader__.load({
           if (busyRef.current || revisionRef.current < 0) return;
           if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
           writer.getRevision(workspaceId).then(function (info) {
-            if (stopped || !info || info.revision <= revisionRef.current) return;
+            if (stopped || busyRef.current || libraryBusyRef.current || !info || info.revision <= revisionRef.current) return;
             if (!dirtyRef.current) { pullRemote(info); return; }
             if (info.revision > ignoredRevisionRef.current) setExternal(info);
           }).catch(function () {});
@@ -2889,7 +2950,8 @@ window.__ModuleLoader__.load({
       }, [workspaceId, writer]);
 
       function updateProject(mutator) {
-        if (!workspaceId || !state || String(state.workspace && state.workspace.id) !== workspaceId || busy) return;
+        if (!workspaceId || !state || String(state.workspace && state.workspace.id) !== workspaceId || busyRef.current || libraryBusyRef.current) return;
+        editVersionRef.current += 1;
         setDraft(function (current) {
           var next = clone(current);
           mutator(next);
@@ -2902,11 +2964,12 @@ window.__ModuleLoader__.load({
       }
 
       function save() {
-        if (!workspaceId || !state || String(state.workspace && state.workspace.id) !== workspaceId || !draft || busy) return;
+        if (!workspaceId || !state || String(state.workspace && state.workspace.id) !== workspaceId || !draft || busyRef.current || libraryBusyRef.current) return;
         var requestId = ++requestRef.current;
         setBusy(true);
+        busyRef.current = true;
         writer.saveProject(workspaceId, draft, state.revision).then(function (next) {
-          if (requestId !== requestRef.current) return;
+          if (!currentRequest(requestId, workspaceId)) return;
           setState(next);
           setDraft(clone(next.project));
           setDirty(false);
@@ -2914,8 +2977,8 @@ window.__ModuleLoader__.load({
           draftCacheRef.current.delete(workspaceId);
           setNotice({ kind: "ok", text: t("saved") });
         }).catch(function (error) {
-          if (requestId === requestRef.current) setNotice({ kind: "error", text: t("saveFailed") + ": " + failureText(error) });
-        }).finally(function () { if (requestId === requestRef.current) setBusy(false); });
+          if (currentRequest(requestId, workspaceId)) setNotice({ kind: "error", text: t("saveFailed") + ": " + failureText(error) });
+        }).finally(function () { if (currentRequest(requestId, workspaceId)) { busyRef.current = false; setBusy(false); } });
       }
 
       function replaceWith(next, message) {
@@ -2928,12 +2991,30 @@ window.__ModuleLoader__.load({
         setNotice({ kind: "ok", text: message });
       }
 
+      function restoreSnapshot(revision) {
+        if (!workspaceId || !state || workspaceId !== activeWorkspaceRef.current || String(state.workspace && state.workspace.id) !== workspaceId || busyRef.current || libraryBusyRef.current || dirtyRef.current) return Promise.resolve(null);
+        var requestId = ++requestRef.current;
+        busyRef.current = true;
+        setBusy(true);
+        return writer.restoreSnapshot(workspaceId, revision, state.revision).then(function (next) {
+          if (!currentRequest(requestId, workspaceId)) return null;
+          replaceWith(next, t("restored").replace("{n}", revision));
+          return next;
+        }).catch(function (error) {
+          if (currentRequest(requestId, workspaceId)) setNotice({ kind: "error", text: t("restoreFailed") + ": " + failureText(error) });
+          return null;
+        }).finally(function () {
+          if (currentRequest(requestId, workspaceId)) { busyRef.current = false; setBusy(false); }
+        });
+      }
+
       function exportProject() {
-        if (!workspaceId || busy || dirty) return;
+        if (!workspaceId || busyRef.current || libraryBusyRef.current || dirtyRef.current) return;
         var requestId = ++requestRef.current;
         setBusy(true);
+        busyRef.current = true;
         writer.exportProject(workspaceId).then(function (documentValue) {
-          if (requestId !== requestRef.current) return;
+          if (!currentRequest(requestId, workspaceId)) return;
           var rawName = (documentValue.project && documentValue.project.title) || workspaceTitle || "novel-framework";
           var filename = String(rawName).replace(/[\\/:*?\"<>|\x00-\x1f]+/g, "-").replace(/^\s+|\s+$/g, "").slice(0, 80) || "novel-framework";
           var blob = new Blob([JSON.stringify(documentValue, null, 2) + "\n"], { type: "application/json;charset=utf-8" });
@@ -2947,38 +3028,41 @@ window.__ModuleLoader__.load({
           setTimeout(function () { URL.revokeObjectURL(url); }, 0);
           setNotice({ kind: "ok", text: t("exported") });
         }).catch(function (error) {
-          if (requestId === requestRef.current) setNotice({ kind: "error", text: t("exportFailed") + ": " + failureText(error) });
-        }).finally(function () { if (requestId === requestRef.current) setBusy(false); });
+          if (currentRequest(requestId, workspaceId)) setNotice({ kind: "error", text: t("exportFailed") + ": " + failureText(error) });
+        }).finally(function () { if (currentRequest(requestId, workspaceId)) { busyRef.current = false; setBusy(false); } });
       }
 
       function importProject(file) {
-        if (!workspaceId || !state || busy || dirty || !file) return;
+        if (!workspaceId || !state || busyRef.current || libraryBusyRef.current || dirtyRef.current || !file) return;
         if (file.size > 5 * 1024 * 1024) {
           setNotice({ kind: "error", text: t("importTooLarge") });
           return;
         }
         var requestId = ++requestRef.current;
         setBusy(true);
+        busyRef.current = true;
         file.text().then(function (source) {
+          if (!currentRequest(requestId, workspaceId)) return null;
           var parsed;
           try { parsed = JSON.parse(source); } catch (_) { throw new Error(t("importInvalidJson")); }
           return writer.importProject(workspaceId, parsed, state.revision);
         }).then(function (next) {
-          if (requestId === requestRef.current) replaceWith(next, t("imported"));
+          if (currentRequest(requestId, workspaceId) && next) replaceWith(next, t("imported"));
         }).catch(function (error) {
-          if (requestId === requestRef.current) setNotice({ kind: "error", text: t("importFailed") + ": " + failureText(error) });
-        }).finally(function () { if (requestId === requestRef.current) setBusy(false); });
+          if (currentRequest(requestId, workspaceId)) setNotice({ kind: "error", text: t("importFailed") + ": " + failureText(error) });
+        }).finally(function () { if (currentRequest(requestId, workspaceId)) { busyRef.current = false; setBusy(false); } });
       }
 
       function resetProject() {
-        if (!workspaceId || !state || busy || dirty) return;
+        if (!workspaceId || !state || busyRef.current || libraryBusyRef.current || dirtyRef.current) return;
         var requestId = ++requestRef.current;
         setBusy(true);
+        busyRef.current = true;
         writer.resetProject(workspaceId, state.revision).then(function (next) {
-          if (requestId === requestRef.current) replaceWith(next, t("cleared"));
+          if (currentRequest(requestId, workspaceId)) replaceWith(next, t("cleared"));
         }).catch(function (error) {
-          if (requestId === requestRef.current) setNotice({ kind: "error", text: t("clearFailed") + ": " + failureText(error) });
-        }).finally(function () { if (requestId === requestRef.current) setBusy(false); });
+          if (currentRequest(requestId, workspaceId)) setNotice({ kind: "error", text: t("clearFailed") + ": " + failureText(error) });
+        }).finally(function () { if (currentRequest(requestId, workspaceId)) { busyRef.current = false; setBusy(false); } });
       }
 
       function applyBinding(value, message) {
@@ -2992,14 +3076,22 @@ window.__ModuleLoader__.load({
         askDiscard(function () { runLibraryAction(run, message); });
       }
       function runLibraryAction(run, message) {
+        if (!panelAliveRef.current || bindingKey !== bindingKeyRef.current || busyRef.current || libraryBusyRef.current) return;
+        var request = ++bindingRequestRef.current;
+        var key = bindingKey;
+        libraryBusyRef.current = true;
         setLibraryBusy(true);
         run().then(function (value) {
+          if (!panelAliveRef.current || request !== bindingRequestRef.current || key !== bindingKeyRef.current) return;
+          libraryBusyRef.current = false;
           setLibraryBusy(false);
           if (workspaceId) draftCacheRef.current.delete(workspaceId);
           setDirty(false);
           dirtyRef.current = false;
           applyBinding(value, typeof message === "function" ? message(value) : message);
         }).catch(function (error) {
+          if (!panelAliveRef.current || request !== bindingRequestRef.current || key !== bindingKeyRef.current) return;
+          libraryBusyRef.current = false;
           setLibraryBusy(false);
           setNotice({ kind: "error", text: failureText(error) });
         });
@@ -3193,7 +3285,7 @@ window.__ModuleLoader__.load({
           library: canBind ? Object.assign({
             novels: bindingInfo.novels, binding: bindingInfo.binding, sessionId: sessionId, workspaceTitle: workspaceTitle, busy: libraryBusy,
           }, libraryHandlers) : null,
-          onRestored: function (next, revision) { replaceWith(next, t("restored").replace("{n}", revision)); },
+          onRestore: restoreSnapshot,
           onError: function (text) { setNotice({ kind: "error", text: text }); },
           onExport: exportProject, onImport: importProject, onClear: resetProject,
         });
@@ -3221,15 +3313,16 @@ window.__ModuleLoader__.load({
           ? React.createElement("div", { className: "dshwnw-external", role: "alert" },
             React.createElement("span", null, t("externalChanged").replace("{what}", externalSummary(external) || t("externalSomething"))),
             React.createElement("div", { className: "dshwnw-actions" },
-              React.createElement("button", { type: "button", className: "dshwnw-primary", onClick: function () { pullRemote(external); } }, t("externalLoad")),
+              React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: busy || libraryBusy, onClick: function () { pullRemote(external, true); } }, t("externalLoad")),
               React.createElement("button", { type: "button", className: "dshwnw-button", onClick: function () { ignoredRevisionRef.current = external.revision; setExternal(null); } }, t("externalKeep"))
             ))
           : null,
-        React.createElement("div", { className: "dshwnw-body", key: tab, role: "tabpanel" }, content),
+        React.createElement("div", { className: "dshwnw-body", key: tab, role: "tabpanel", "aria-busy": busy || libraryBusy },
+          React.createElement("fieldset", { disabled: busy || libraryBusy, style: { border: 0, padding: 0, margin: 0, minWidth: 0 } }, content)),
         React.createElement("div", { className: "dshwnw-footer" },
           React.createElement("span", { className: "dshwnw-notice", role: "status", "data-kind": notice ? notice.kind : undefined, "data-dirty": dirty ? "true" : undefined, title: notice ? notice.text : undefined }, React.createElement("span", { className: "dshwnw-notice-text" }, notice ? notice.text : dirty ? t("unsaved") : t("synced"))),
-          React.createElement("button", { type: "button", className: "dshwnw-button", disabled: busy || !dirty, onClick: function () { askDiscard(function () { load(true); }); } }, t("reload")),
-          React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: busy || !dirty, onClick: save }, busy ? t("saving") : t("save"))
+          React.createElement("button", { type: "button", className: "dshwnw-button", disabled: busy || libraryBusy || !dirty, onClick: function () { askDiscard(function () { load(true); }); } }, t("reload")),
+          React.createElement("button", { type: "button", className: "dshwnw-primary", disabled: busy || libraryBusy || !dirty, onClick: save }, busy ? t("saving") : t("save"))
         )
       );
     }
@@ -3290,10 +3383,12 @@ window.__ModuleLoader__.load({
       addRecord: "新增记录", recordCharacter: "角色", chooseCharacter: "选择角色", recordChapter: "章节",
       recordSystem: "体系", noSystemChange: "不涉及等级", recordTier: "等级", tierUnchanged: "本章未变", recordStage: "小阶段",
       recordCondition: "伤势 / 状态", recordHoldings: "持有物（完整快照）", recordRevealed: "暴露的底牌", recordGained: "获得", recordLost: "消耗 / 失去",
+      snapshotSet: "本章更新快照", snapshotHint: "勾选后使用本章完整快照；内容为空会清空。取消勾选则沿用此前记录。", ambiguousChapter: "旧章节 ID 重复，请重选章节",
       recordNote: "原因 / 备注（跌级、跳级必须写）", revealedShort: "暴露：", missingCharacter: "角色已删除",
       pwarnBadge: "需复核", pwarnSummary: "成长账本有 {n} 处需要复核（跌级或跳级没写原因，或引用的章节、角色、体系、等级不存在）。",
       "pwarn_tier-regression": "等级比这套体系的上一条记录低，却没写原因。", "pwarn_tier-skip": "一次跨过了不止一级，却没写原因。",
       "pwarn_missing-chapter": "引用的章节不在大纲里。", "pwarn_missing-character": "引用的角色不存在。", "pwarn_missing-system": "引用的体系已不存在。",
+      "pwarn_ambiguous-chapter": "旧章节 ID 在多卷中重复，请重新选择章节。",
       "pwarn_missing-tier": "引用的等级不在这套体系里。", "pwarn_tier-without-system": "填了等级或小阶段，却没选体系。",
       title: "小说写作", rail: "打开小说写作工作台", cardDescription: "每本小说独立的角色、世界观、情节与连续性数据",
       writeActive: "小说写作", writeEdit: "编辑", writeClear: "解除", writeSave: "保存", writeCancel: "取消", writeObjectiveAria: "小说写作任务", writeCommandInput: "写作命令输入",
@@ -3336,6 +3431,7 @@ window.__ModuleLoader__.load({
       threadBeats: "中途呼应", threadBeatsHint: "每次在正文里重新提起这条线索就记一笔；超过 10 章没有呼应会被标为「久未呼应」。", addBeat: "新增呼应", beatNote: "这一章如何呼应", beatChapter: "呼应章节",
       trackPlanted: "埋", trackPayoff: "收", trackResolved: "已收", idleFor: "{n} 章未呼应", markResolved: "标记为已回收（记到当前章节）", reopen: "重新打开",
       "warn_missing-chapter": "引用的章节已被删除，请重新选择。", "warn_payoff-before-plant": "计划回收章节排在埋设章节之前。", "warn_resolved-without-chapter": "已回收，但没有填写实际回收章节。",
+      "warn_ambiguous-chapter": "旧章节 ID 在多卷中重复，请重新选择章节。",
       chapterAxis: "章节", timelineEmpty: "大纲还没有章节，无法绘制时间线。", timelineLegend: "实心点：埋设 · 小圆圈：中途呼应 · 空心圆：计划回收 · 绿点：已回收 · 红色虚线：逾期 · 高亮列：当前章节。点击一行可展开编辑。",
       numberStyle: "cjk", tenThousand: "万", draftedStatus: "初稿",
       bookProgress: "全书进度", scanning: "正在统计…", scanFailed: "统计失败", rescanManuscripts: "重新统计正文字数",
@@ -3398,10 +3494,12 @@ window.__ModuleLoader__.load({
       addRecord: "Add record", recordCharacter: "Character", chooseCharacter: "Choose a character", recordChapter: "Chapter",
       recordSystem: "System", noSystemChange: "No tier change", recordTier: "Tier", tierUnchanged: "Unchanged", recordStage: "Sub-stage",
       recordCondition: "Injury / condition", recordHoldings: "Holdings (full snapshot)", recordRevealed: "Cards revealed", recordGained: "Gained", recordLost: "Spent / lost",
+      snapshotSet: "Update snapshot in this chapter", snapshotHint: "Checked uses this chapter's full snapshot; an empty value clears it. Unchecked keeps the previous snapshot.", ambiguousChapter: "Duplicate old chapter ID; choose again",
       recordNote: "Why (required for a drop or a skip)", revealedShort: "Revealed: ", missingCharacter: "Deleted character",
       pwarnBadge: "Review", pwarnSummary: "{n} progression records need review (a drop or skip without a note, or a missing chapter, character, system or tier).",
       "pwarn_tier-regression": "Lower than the previous record in this system, with no note.", "pwarn_tier-skip": "Skips more than one tier, with no note.",
       "pwarn_missing-chapter": "The chapter is not in the outline.", "pwarn_missing-character": "The character no longer exists.", "pwarn_missing-system": "The system no longer exists.",
+      "pwarn_ambiguous-chapter": "The old chapter ID was used in several volumes; select its chapter again.",
       "pwarn_missing-tier": "The tier is not in this system.", "pwarn_tier-without-system": "A tier or sub-stage is set without a system.",
       title: "Novel Writing", rail: "Open Novel Writing", cardDescription: "Characters, world, plot, and continuity for each novel",
       writeActive: "Novel Writing", writeEdit: "Edit", writeClear: "Unlink", writeSave: "Save", writeCancel: "Cancel", writeObjectiveAria: "Novel writing objective", writeCommandInput: "Writing command input",
@@ -3444,6 +3542,7 @@ window.__ModuleLoader__.load({
       threadBeats: "Echoes", threadBeatsHint: "Log each time the prose brings the thread back; 10+ chapters without one marks it idle.", addBeat: "Add echo", beatNote: "How this chapter echoes it", beatChapter: "Echo chapter",
       trackPlanted: "in", trackPayoff: "out", trackResolved: "paid", idleFor: "idle {n} ch", markResolved: "Mark resolved (at the current chapter)", reopen: "Reopen",
       "warn_missing-chapter": "A referenced chapter was deleted; pick another.", "warn_payoff-before-plant": "The planned payoff comes before the setup.", "warn_resolved-without-chapter": "Resolved without a payoff chapter.",
+      "warn_ambiguous-chapter": "The old chapter ID was used in several volumes; select its chapter again.",
       chapterAxis: "Chapter", timelineEmpty: "The outline has no chapters to draw.", timelineLegend: "Filled dot: setup · small ring: echo · hollow ring: planned payoff · green: paid off · red dashes: overdue · shaded column: current chapter. Click a row to edit.",
       numberStyle: "latin", tenThousand: "", draftedStatus: "drafted",
       bookProgress: "Book progress", scanning: "Counting…", scanFailed: "Count failed", rescanManuscripts: "Recount manuscript words",

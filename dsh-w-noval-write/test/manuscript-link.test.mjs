@@ -63,7 +63,7 @@ test('reading a manuscript returns an excerpt and reports missing files without 
 
 test('linking gives a file to exactly one chapter and starts unstarted chapters', () => {
   let project = outline(['计划', 'planned', '定稿'])
-  project = linkChapterManuscript(project, 'v1', 'c1', '第1章.md')
+  project = linkChapterManuscript(project, 'v1', 'v1-c1', '第1章.md')
   assert.equal(project.volumes[0].chapters[0].manuscriptFile, '第1章.md')
   assert.equal(project.volumes[0].chapters[0].status, '初稿', 'Chinese books get a Chinese status')
   project = linkChapterManuscript(project, 'v1', 'c3', '第1章.md')
@@ -78,14 +78,16 @@ test('linking gives a file to exactly one chapter and starts unstarted chapters'
   assert.equal(english.volumes[0].chapters[1].status, 'drafted')
   assert.equal(analyzeThreads(english).currentIndex, 1, 'the ledger now sees chapter 2 as reached')
 
-  assert.throws(() => findChapter(project, '', 'c1'), /several volumes; pass volume_id/)
+  assert.throws(() => findChapter(project, '', 'c1'), /call novel_outline_read/, 'legacy duplicate ids require re-reading the migrated outline')
+  assert.equal(findChapter(project, '', 'v1-c1').volume.id, 'v1')
+  assert.equal(findChapter(project, '', 'v2-c1').volume.id, 'v2')
   assert.equal(findChapter(project, '', 'c2').volume.id, 'v1')
   assert.throws(() => findChapter(project, 'v9', 'c1'), /unknown volume/)
   assert.throws(() => findChapter(project, 'v1', 'c9'), /unknown chapter/)
 })
 
 test('the prompt shows linked manuscripts with live word counts', () => {
-  const project = linkChapterManuscript(outline(), 'v1', 'c1', '第1章.md')
+  const project = linkChapterManuscript(outline(), 'v1', 'v1-c1', '第1章.md')
   assert.match(projectPrompt(project, 20_000, { manuscripts: new Map([['第1章.md', 4213]]) }), /manuscript 第1章\.md \(4213 words\)/)
   assert.match(projectPrompt(project, 20_000), /manuscript 第1章\.md(?! \()/, 'without stats the file is still named')
 })

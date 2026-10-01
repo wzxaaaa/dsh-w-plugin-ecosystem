@@ -98,7 +98,7 @@ const THREAD_BEAT_KEYS = Object.freeze(['id', 'chapterId', 'note'])
 const PROGRESSION_SYSTEM_KEYS = Object.freeze(['id', 'name', 'notes', 'tiers'])
 const TIER_KEYS = Object.freeze(['id', 'name', 'stages', 'advance', 'cost', 'gap', 'notes'])
 const PROGRESSION_RECORD_KEYS = Object.freeze([
-  'id', 'characterId', 'chapterId', 'systemId', 'tierId', 'stage', 'condition', 'holdings', 'revealed', 'gained', 'lost', 'note',
+  'id', 'characterId', 'chapterId', 'systemId', 'tierId', 'stage', 'condition', 'conditionSet', 'holdings', 'holdingsSet', 'revealed', 'gained', 'lost', 'note',
 ])
 export const PROGRESSION_TEMPLATE_STORE_VERSION = 1
 /** A chapter counts as reached once its status says writing has begun. */
@@ -116,6 +116,9 @@ export const NOVEL_TOOL_RETRY_PROTOCOL = Object.freeze([
   'Genre-specific data belongs in customFields as string key/value pairs. Structured long-form outlines belong in volumes[].chapters[], not one long chapterPlan string.',
   'When the user requests a chapter file, call novel_save_chapter with the full prose. Never claim a file exists unless it returns ok: true and verified: true.',
   'When saving prose for an outline chapter, pass volume_id and chapter_id to novel_save_chapter so the outline links the file and tracks its word count.',
+  'When the outline contains chapter word targets, novel_save_chapter requires a chapter_id. Always choose the intended chapter with novel_outline_read; never omit chapter linkage or use another tool to bypass its length requirement.',
+  'Before drafting a chapter, read that chapter with novel_outline_read, including its detailed outline, scenes and targetWords. Follow its outline rather than substituting a summary. Its targetWords controls this chapter; the project targetWords is the length of the entire book, never a per-chapter fallback.',
+  'Meet the chapter target using the plugin manuscript word counter, not a self-estimate: a bare target such as 3000字 means at least 3000 words, a range sets both bounds, and an explicit maximum sets an upper bound. novel_save_chapter rejects prose outside those bounds before writing. Expand or revise the actual prose and retry until it passes; never report an under-length chapter as complete or bypass the check with another file tool.',
   'Foreshadowing, mysteries, and promises live in threads[]. Use novel_threads to see what is due and novel_thread_upsert / novel_thread_remove for targeted changes; chapter references are outline chapter ids.',
   'Books may track one or more progression systems (e.g. 修为境界, 炼丹品级, 宗门职位) in progression.systems, each an ordered tier ladder, lowest first; edit systems with novel_patch. Per-chapter character state lives in progression.records; use novel_progression_read, novel_progression_record and novel_progression_remove. novel_progression_templates lists reusable system templates.',
   'Use novel_search to find earlier details in the written chapters; it returns hits in outline order with chapter labels.',
@@ -319,7 +322,9 @@ export function progressionRecordPatchToolSchema({ required = true } = {}) {
       tierId: { type: 'string', description: 'Tier id or name within that system the character is in from this chapter on.' },
       stage: { type: 'string', description: 'Sub-stage within the tier, e.g. 中期.' },
       condition: { type: 'string', description: 'Injury, illness, curse, disgrace or other lasting condition from this chapter on; write the recovery when it ends.' },
+      conditionSet: { type: 'boolean', description: 'True means condition is a snapshot, including an empty string to clear it. False means no condition change. Explicitly passing condition defaults this marker to true.' },
       holdings: { type: 'string', description: 'Complete snapshot of items, assets, subordinates or resources held after this chapter.' },
+      holdingsSet: { type: 'boolean', description: 'True means holdings is a complete snapshot, including an empty string for no holdings. False means no holdings change. Explicitly passing holdings defaults this marker to true.' },
       revealed: { type: 'string', description: 'Hidden cards, abilities or secrets exposed to others in this chapter.' },
       gained: { type: 'string', description: 'What was gained in this chapter.' },
       lost: { type: 'string', description: 'What was spent, lost or destroyed in this chapter.' },
@@ -496,7 +501,9 @@ function validateFlexibleRecord(value, path, keys, requiredKeys, issues) {
   for (const key of keys) {
     if (!Object.hasOwn(value, key)) continue
     if (key === 'customFields') validateCustomFields(value[key], `${path}.customFields`, issues)
-    else if (typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
+    else if (key === 'holdingsSet' || key === 'conditionSet') {
+      if (typeof value[key] !== 'boolean') issues.push(`${path}.${key} must be a boolean; received ${receivedType(value[key])}`)
+    } else if (typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
   }
 }
 
@@ -935,6 +942,161 @@ function normalizeOutlineScene(value, index, characterReferences) {
   }
 }
 
+function wordTargetError(raw, message) {
+  const error = new TypeError(`INVALID_NOVEL_WORD_TARGET: ${message}; received '${raw}'. Use a target such as 3000字, 3000-4000字, 至少3千字 or 最多1.5万字.`)
+  error.code = 'INVALID_NOVEL_WORD_TARGET'
+  error.rule = raw
+  error.retryable = true
+  return error
+}
+
+const WORD_TARGET_NUMBER = '(?:\\d+(?:\\.\\d+)?(?:[千万kK])?|[零〇一二两三四五六七八九十百千万]+)'
+function wordTargetNumber(token, inheritedUnit = '') {
+  const arabic = /^(\d+(?:\.\d+)?)([千万kK]?)$/u.exec(token)
+  let value
+  if (arabic) {
+    const unit = arabic[2] || inheritedUnit
+    value = Number(arabic[1]) * (unit === '万' ? 10000 : /[千kK]/u.test(unit) ? 1000 : 1)
+  } else {
+    const digits = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 }
+    const units = { 十: 10, 百: 100, 千: 1000, 万: 10000 }
+    // Digit-by-digit Chinese spelling is positional, just like 2026. It must
+    // not enter the unit parser and accidentally reduce 二〇二六 to its last 6.
+    if (![...token].some(char => Object.hasOwn(units, char))) {
+      value = Number([...token].map(char => digits[char]).join(''))
+      return Number.isSafeInteger(value) && value > 0 ? value : NaN
+    }
+    let total = 0
+    let section = 0
+    let digit = 0
+    let hasDigit = false
+    let lastUnit = 0
+    let explicitZero = false
+    let previousSmallUnit = Infinity
+    for (const char of token) {
+      if (Object.hasOwn(digits, char)) {
+        const nextDigit = digits[char]
+        // Within a unit expression adjacent nonzero digits are malformed;
+        // explicit zeros, however, distinguish 三千零五 from 三千五.
+        if (hasDigit && digit !== 0 && nextDigit !== 0) return NaN
+        digit = nextDigit
+        hasDigit = true
+        if (digit === 0) explicitZero = true
+        continue
+      }
+      const unit = units[char]
+      if (!unit) return NaN
+      if (unit === 10000) {
+        if (total !== 0) return NaN
+        total += (section + (hasDigit ? digit : 0) || 1) * unit
+        section = 0
+        previousSmallUnit = Infinity
+      } else {
+        if (unit >= previousSmallUnit) return NaN
+        section += (hasDigit ? digit : 1) * unit
+        previousSmallUnit = unit
+      }
+      lastUnit = unit
+      digit = 0
+      hasDigit = false
+      explicitZero = false
+    }
+    // Common omitted-unit shorthand: 三千五=3500, 一万五=15000,
+    // 一千二百三=1230. An explicit zero keeps the literal final units.
+    const tail = hasDigit && !explicitZero && lastUnit >= 100 ? digit * (lastUnit / 10) : digit
+    value = total + section + tail
+  }
+  return Number.isSafeInteger(value) && value > 0 ? value : NaN
+}
+
+/**
+ * Parse an explicit per-chapter target. Bare numbers are minimums, without an
+ * invented tolerance or ceiling. null means no chapter rule; nonempty rules
+ * that cannot be interpreted fail closed rather than accidentally bypassing it.
+ */
+export function parseChapterWordTarget(value) {
+  const raw = typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim()
+  if (!raw) return null
+  let rule = raw.normalize('NFKC').replace(/\s+/gu, '').replace(/(\d),(?=\d{3}(?:\D|$))/gu, '$1')
+  rule = rule.replace(/^(?:(?:每章|本章|单章|章节|正文|目标|篇幅|字数|要求)[:：]?)+/u, '')
+  const number = WORD_TARGET_NUMBER
+  const range = new RegExp(`^(${number})(?:字|words?)?[-~～—–至到](${number})(?:字|words?)?$`, 'iu').exec(rule)
+  let minWords = null
+  let maxWords = null
+  if (range) {
+    const sharedUnit = /[千万kK]$/u.exec(range[2])?.[0] || ''
+    const rightCoefficient = /^(\d+(?:\.\d+)?)[千万kK]$/u.exec(range[2])
+    // A trailing unit is shared by compact coefficients (3-4千), not by
+    // an already expressed absolute count (3000-4千 or 15000-2万).
+    // Small reversed coefficients stay a reversed range and fail validation;
+    // do not reinterpret 4-3千 as an unintended 4-to-3000-word requirement.
+    const sharesUnit = rightCoefficient && /^\d+(?:\.\d+)?$/u.test(range[1]) &&
+      (Number(range[1]) <= Number(rightCoefficient[1]) || Number(range[1]) < 100)
+    const inheritedUnit = sharesUnit ? sharedUnit : ''
+    minWords = wordTargetNumber(range[1], inheritedUnit)
+    maxWords = wordTargetNumber(range[2])
+  } else {
+    const minimum = `(?:至少|最少|最低|不少于|不低于|最低不少于|大于等于|>=|≥)`
+    const maximum = `(?:最多|至多|最高|不超过|不多于|上限|小于等于|<=|≤)`
+    const clauses = rule.split(/[，,；;]/u)
+    for (const clause of clauses) {
+      let match = new RegExp(`^(${minimum}|${maximum})(${number})(?:字|words?)?$`, 'iu').exec(clause)
+      if (match) {
+        const amount = wordTargetNumber(match[2])
+        if (new RegExp(`^${minimum}$`, 'u').test(match[1])) minWords = Math.max(minWords ?? 0, amount)
+        else maxWords = Math.min(maxWords ?? Number.MAX_SAFE_INTEGER, amount)
+        continue
+      }
+      match = new RegExp(`^(${number})(?:字|words?)?(以上|起|以内|以下)?$`, 'iu').exec(clause)
+      if (!match || clauses.length > 1) throw wordTargetError(raw, 'the chapter word target is not a supported rule')
+      const amount = wordTargetNumber(match[1])
+      if (match[2] === '以内' || match[2] === '以下') maxWords = amount
+      else minWords = amount
+    }
+  }
+  if ((minWords !== null && !Number.isSafeInteger(minWords)) || (maxWords !== null && !Number.isSafeInteger(maxWords)) ||
+      (minWords !== null && minWords <= 0) || (maxWords !== null && maxWords <= 0) ||
+      (minWords !== null && maxWords !== null && minWords > maxWords)) {
+    throw wordTargetError(raw, 'the target bounds must be positive whole word counts, with minimum no greater than maximum')
+  }
+  return { raw, minWords, maxWords }
+}
+
+/** Never substitute the whole-book project target for an unset chapter target. */
+export function chapterWordRequirement(chapter) {
+  try {
+    return parseChapterWordTarget(chapter?.targetWords)
+  } catch (error) {
+    error.chapterId = chapter?.id || ''
+    error.wordRequirement = { ok: false, chapterId: error.chapterId, rule: error.rule, minWords: null, maxWords: null }
+    throw error
+  }
+}
+
+export function validateChapterWordCount(chapter, actualWords) {
+  if (!Number.isSafeInteger(actualWords) || actualWords < 0) throw new TypeError('actualWords must be a nonnegative integer from the plugin manuscript counter')
+  let requirement
+  try { requirement = chapterWordRequirement(chapter) } catch (error) {
+    error.actualWords = actualWords
+    error.wordRequirement.actualWords = actualWords
+    throw error
+  }
+  const minWords = requirement?.minWords ?? null
+  const maxWords = requirement?.maxWords ?? null
+  const under = minWords !== null && actualWords < minWords
+  const over = maxWords !== null && actualWords > maxWords
+  return { ok: !under && !over, chapterId: chapter?.id || '', rule: requirement?.raw || '', actualWords, minWords, maxWords, missingWords: under ? minWords - actualWords : 0, excessWords: over ? actualWords - maxWords : 0 }
+}
+
+/** Throws before a caller writes a manuscript; includes actionable retry data. */
+export function assertChapterWordCount(chapter, actualWords) {
+  const result = validateChapterWordCount(chapter, actualWords)
+  if (result.ok) return result
+  const error = new RangeError(`NOVEL_CHAPTER_WORD_COUNT: no manuscript was written. Chapter '${result.chapterId}' requires ${result.rule}; the plugin counted ${actualWords} words. ${result.missingWords ? `Add at least ${result.missingWords} words of actual prose` : `Remove at least ${result.excessWords} words`}, then retry novel_save_chapter with the same chapter_id. Do not bypass the target with an unlinked file.`)
+  Object.assign(error, result, { code: 'NOVEL_CHAPTER_WORD_COUNT', retryable: true, wordRequirement: result })
+  throw error
+}
+
 function normalizeChapter(value, index, characterReferences) {
   const item = isPlainObject(value) ? value : {}
   return {
@@ -959,13 +1121,6 @@ function normalizeVolume(value, index, characterReferences) {
   const item = isPlainObject(value) ? value : {}
   const chapters = boundedArray(item.chapters, MAX_CHAPTERS_PER_VOLUME, 'volume.chapters')
     .map((chapter, chapterIndex) => normalizeChapter(chapter, chapterIndex, characterReferences))
-  const used = new Set()
-  for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
-    let candidate = chapters[chapterIndex].id
-    while (used.has(candidate)) candidate = `${candidate}-${chapterIndex + 1}`
-    chapters[chapterIndex].id = candidate
-    used.add(candidate)
-  }
   return {
     id: id(item.id, 'volume', index),
     title: text(item.title, MAX_SHORT),
@@ -974,6 +1129,49 @@ function normalizeVolume(value, index, characterReferences) {
     chapters,
     customFields: normalizeCustomFields(item.customFields),
   }
+}
+
+/**
+ * Older outlines guaranteed chapter ids only within a volume. Rename every
+ * ambiguous chapter, including the first one, so an old bare id cannot quietly
+ * become a reference to an arbitrarily chosen volume. Unique existing ids are
+ * reserved before generating names, and the result is stable on subsequent reads.
+ */
+function normalizeOutlineChapterIds(volumes) {
+  uniqueIds(volumes)
+  const counts = new Map()
+  for (const volume of volumes) for (const chapter of volume.chapters) counts.set(chapter.id, (counts.get(chapter.id) || 0) + 1)
+  const ambiguousIds = new Set([...counts].filter(([, count]) => count > 1).map(([key]) => key))
+  const used = new Set(counts.keys())
+  for (const volume of volumes) {
+    for (const chapter of volume.chapters) {
+      if (!ambiguousIds.has(chapter.id)) continue
+      const base = `${volume.id}-${chapter.id}`.slice(0, 100)
+      let candidate = base
+      let suffix = 2
+      while (used.has(candidate)) {
+        const tail = `-${suffix++}`
+        candidate = base.slice(0, 100 - tail.length) + tail
+      }
+      chapter.id = candidate
+      used.add(candidate)
+    }
+  }
+  return ambiguousIds
+}
+
+const AMBIGUOUS_CHAPTER_PREFIX = 'ambiguous:'
+export function isAmbiguousChapterReference(value) {
+  return typeof value === 'string' && value.startsWith(AMBIGUOUS_CHAPTER_PREFIX)
+}
+
+function markAmbiguousChapterReferences(threads, records, ambiguousIds) {
+  const resolve = reference => ambiguousIds.has(reference) ? AMBIGUOUS_CHAPTER_PREFIX + reference : reference
+  for (const thread of threads) {
+    for (const key of THREAD_CHAPTER_KEYS) thread[key] = resolve(thread[key])
+    for (const beat of thread.beats) beat.chapterId = resolve(beat.chapterId)
+  }
+  for (const record of records) record.chapterId = resolve(record.chapterId)
 }
 
 export function defaultThread() {
@@ -992,7 +1190,11 @@ function enumValue(value, allowed, fallback) {
 // Chapter references are kept even when the chapter is later deleted, so a
 // thread never silently forgets where it was planted; analysis ignores them.
 function chapterReference(value) {
-  const raw = text(value, 100)
+  // This reserved prefix contains a colon, which can never occur in a canonical
+  // chapter id. Keep unresolved migration references intact until the user
+  // selects the intended, now globally unique chapter.
+  const raw = text(value, 110)
+  if (isAmbiguousChapterReference(raw)) return raw
   return raw ? id(raw, 'chapter', 0) : ''
 }
 
@@ -1109,7 +1311,9 @@ function normalizeProgression(value, characterReferences) {
       tierId: namedReference(item.tierId, system ? system.tiers : [], 'tier'),
       stage: text(item.stage, MAX_SHORT),
       condition: text(item.condition),
+      conditionSet: Object.hasOwn(item, 'conditionSet') ? item.conditionSet === true : text(item.condition) !== '',
       holdings: text(item.holdings),
+      holdingsSet: Object.hasOwn(item, 'holdingsSet') ? item.holdingsSet === true : text(item.holdings) !== '',
       revealed: text(item.revealed),
       gained: text(item.gained),
       lost: text(item.lost),
@@ -1160,6 +1364,11 @@ export function normalizeProject(value) {
   const progress = boundedArray(input.progress, MAX_PROGRESS, 'progress').map(normalizeProgress)
   const threads = boundedArray(input.threads, MAX_THREADS, 'threads')
     .map((thread, index) => normalizeThread(thread, index, characterReferences))
+  const volumes = boundedArray(input.volumes, MAX_VOLUMES, 'volumes')
+    .map((volume, index) => normalizeVolume(volume, index, characterReferences))
+  const ambiguousChapterIds = normalizeOutlineChapterIds(volumes)
+  const progression = normalizeProgression(input.progression, characterReferences)
+  markAmbiguousChapterReferences(threads, progression.records, ambiguousChapterIds)
   const usedThreads = new Set()
   for (let index = 0; index < threads.length; index += 1) {
     let candidate = threads[index].id
@@ -1185,10 +1394,9 @@ export function normalizeProject(value) {
     },
     characters,
     relationships,
-    volumes: boundedArray(input.volumes, MAX_VOLUMES, 'volumes')
-      .map((volume, index) => normalizeVolume(volume, index, characterReferences)),
+    volumes,
     threads,
-    progression: normalizeProgression(input.progression, characterReferences),
+    progression,
     world: Object.fromEntries(Object.keys(base.world).map(key => [key, text(world[key])])),
     plot: Object.fromEntries(Object.keys(base.plot).map(key => [key, text(plot[key])])),
     scene: {
@@ -1386,7 +1594,18 @@ export function upsertChapter(projectValue, volumeId, chapterId, patchValue) {
   const volumeKey = text(volumeId, 100)
   const volumeIndex = project.volumes.findIndex(volume => volume.id === volumeKey)
   if (volumeIndex < 0) throw new Error(`unknown volume '${volumeKey}'`)
-  const chapterKey = id(chapterId, 'chapter', project.volumes[volumeIndex].chapters.length)
+  let chapterKey = id(chapterId, 'chapter', project.volumes[volumeIndex].chapters.length)
+  const usedChapterIds = new Set(chapterSequence(project).map(chapter => chapter.id))
+  if (!project.volumes[volumeIndex].chapters.some(chapter => chapter.id === chapterKey) && usedChapterIds.has(chapterKey)) {
+    if (text(chapterId, 100)) throw threadArgumentError([`chapter id '${chapterKey}' already belongs to another volume; choose a globally unique chapter id`])
+    const base = `${volumeKey}-${chapterKey}`.slice(0, 100)
+    chapterKey = base
+    let suffix = 2
+    while (usedChapterIds.has(chapterKey)) {
+      const tail = `-${suffix++}`
+      chapterKey = base.slice(0, 100 - tail.length) + tail
+    }
+  }
   const patch = isPlainObject(patchValue) ? patchValue : {}
   if (Object.keys(patch).length === 0) throw new Error('chapter patch must not be empty')
   const volumes = [...project.volumes]
@@ -1496,7 +1715,8 @@ export function analyzeThreads(projectValue) {
     const stale = idleChapters >= THREAD_STALE_CHAPTERS
     const warnings = []
     const referenced = [thread.plantedChapterId, thread.plannedPayoffChapterId, thread.resolvedChapterId, ...thread.beats.map(beat => beat.chapterId)]
-    if (referenced.some(chapterId => chapterId && !position.has(chapterId))) warnings.push('missing-chapter')
+    if (referenced.some(isAmbiguousChapterReference)) warnings.push('ambiguous-chapter')
+    if (referenced.some(chapterId => chapterId && !isAmbiguousChapterReference(chapterId) && !position.has(chapterId))) warnings.push('missing-chapter')
     if (plantedIndex >= 0 && payoffIndex >= 0 && payoffIndex < plantedIndex) warnings.push('payoff-before-plant')
     if (thread.status === 'resolved' && !thread.resolvedChapterId) warnings.push('resolved-without-chapter')
     if (active) counts.active += 1
@@ -1674,7 +1894,7 @@ export function analyzeProgression(projectValue, { asOfChapterId, characterIds }
   }))
   for (const { record, index } of entries) {
     const base = { recordId: record.id, characterId: record.characterId, chapterId: record.chapterId }
-    if (index < 0) warnings.push({ code: 'missing-chapter', ...base })
+    if (index < 0) warnings.push({ code: isAmbiguousChapterReference(record.chapterId) ? 'ambiguous-chapter' : 'missing-chapter', ...base })
     if (!characters.has(record.characterId)) warnings.push({ code: 'missing-character', ...base })
     if (record.systemId && !systemById.has(record.systemId)) warnings.push({ code: 'missing-system', ...base, systemId: record.systemId })
     else if (record.tierId && rankOf(record) === undefined) warnings.push({ code: 'missing-tier', ...base, systemId: record.systemId, tierId: record.tierId })
@@ -1705,8 +1925,8 @@ export function analyzeProgression(projectValue, { asOfChapterId, characterIds }
       const standing = state.standings.get(record.systemId) || { tierId: '', stage: '' }
       state.standings.set(record.systemId, { ...standing, stage: record.stage })
     }
-    if (record.condition) state.condition = record.condition
-    if (record.holdings) state.holdings = record.holdings
+    if (record.conditionSet) state.condition = record.condition
+    if (record.holdingsSet) state.holdings = record.holdings
     if (record.revealed) state.revealed.push({ chapterId: record.chapterId, chapter: label(index), text: record.revealed })
     if (record.gained || record.lost || record.note) {
       state.changes.push({ chapterId: record.chapterId, chapter: label(index), gained: record.gained, lost: record.lost, note: record.note })
@@ -1797,8 +2017,11 @@ export function upsertProgressionRecord(projectValue, recordIdValue, patchValue)
   if (requestedId && index < 0) throw new Error(`unknown progression record '${requestedId}'; omit record_id to create a new record`)
   const current = index >= 0 ? records[index] : null
   const next = {
-    ...(current || { id: '', characterId: '', chapterId: '', systemId: '', tierId: '', stage: '', condition: '', holdings: '', revealed: '', gained: '', lost: '', note: '' }),
+    ...(current || { id: '', characterId: '', chapterId: '', systemId: '', tierId: '', stage: '', condition: '', conditionSet: false, holdings: '', holdingsSet: false, revealed: '', gained: '', lost: '', note: '' }),
     ...patch,
+  }
+  for (const key of ['condition', 'holdings']) {
+    if (Object.hasOwn(patch, key) && !Object.hasOwn(patch, `${key}Set`)) next[`${key}Set`] = true
   }
   const problems = []
   const character = uniqueCharacterResolver(project)(next.characterId)
@@ -1948,7 +2171,10 @@ export function restoreBuiltInProgressionTemplates(libraryValue) {
   const builtIns = builtInProgressionTemplates().map(normalizeTemplate)
   const builtInIds = new Set(builtIns.map(template => template.id))
   const custom = library.templates.filter(template => !builtInIds.has(template.id))
-  return normalizeProgressionTemplates({ templates: [...builtIns, ...custom].slice(0, MAX_PROGRESSION_TEMPLATES) })
+  if (builtIns.length + custom.length > MAX_PROGRESSION_TEMPLATES) {
+    throw new RangeError(`Cannot restore built-ins without deleting custom templates: ${custom.length} custom templates plus ${builtIns.length} built-ins exceeds the ${MAX_PROGRESSION_TEMPLATES} template limit. Remove unused custom templates first; no template was changed.`)
+  }
+  return normalizeProgressionTemplates({ templates: [...builtIns, ...custom] })
 }
 
 /** A new book system copied from a template, with an id unique among `existingSystems`. */
@@ -2337,25 +2563,25 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts } =
   const protocol = [
     '',
     'Writing protocol:',
-    '- Established facts are canon. Surface conflicts before changing them; ask when a missing decision materially changes the story.',
-    '- Use kb_search/kb_read for stylistic texture when useful, but never copy distinctive wording, characters, or plot.',
-    '- Draft requested prose directly; preserve viewpoint, voice, causality, and continuity.',
-    '- If the user asks to create/save/export a chapter file, call novel_save_chapter with the complete prose. Project mutations do not create manuscript files.',
-    '- Never say a file was created or provide a path unless novel_save_chapter returned ok: true and verified: true. Report its exact returned path, bytes, and sha256.',
-    '- Durable canon and story progress must be written back with the novel tools. Use outline/character/relationship tools for targeted changes instead of replacing arrays.',
-    ...(project.threads.length > 0 ? ['- Threads: before a chapter call novel_threads(chapter_id); pay off due/overdue threads or move their payoff; never reveal a truth early. After it, novel_thread_upsert new setups, add_beat echoes, resolved + resolvedChapterId for payoffs.'] : []),
+    '- Preserve canon; surface conflicts and ask about material story decisions.',
+    '- Use kb_search/kb_read for style; never copy distinctive wording, characters, or plot.',
+    '- Draft actual prose; preserve voice, viewpoint, causality and continuity.',
+    '- Save full prose with novel_save_chapter. Claim creation only after ok: true and verified: true; report path, bytes, sha256.',
+    '- Before drafting, novel_outline_read the chapter detailed outline/scenes/targetWords and follow them; never use whole-book targetWords as a per-chapter fallback.',
+    '- With outline targets, novel_save_chapter requires a chapter_id and volume_id.',
+    '- Length: 3000字 means at least 3000, no ceiling; ranges obey min/max. Use plugin-counted words. If rejected, expand/revise prose and retry until it passes. No unlinked-file or other-tool bypass.',
+    '- Persist canon/progress; use outline/character/relationship tools rather than replacing arrays.',
+    ...(project.threads.length > 0 ? ['- Threads: novel_threads(chapter_id) before writing; pay off or reschedule. Afterwards novel_thread_upsert setups/echoes/payoffs; keep truths hidden.'] : []),
     ...(isProgressionProject(project) && project.progression.systems.length > 0 ? [
-      '- Progression: before drafting a chapter call novel_progression_read(as_of_chapter_id, character_ids of the cast) and keep each character\'s tier and stage in every system, condition, holdings and already revealed hidden cards consistent. Beating someone a tier higher needs a cost, a setup or a stated counter; never reuse a revealed card as a surprise.',
-      '- After the chapter, call novel_progression_record for each change (rise or fall in a system, injury or recovery, hidden card revealed, something gained or spent). A tier drop or a skipped tier needs a note.',
+      '- Progression: novel_progression_read(as_of_chapter_id, character_ids of the cast) before writing; preserve state. Afterwards novel_progression_record changes; drops/skips need notes.',
     ] : []),
-    '- Before reusing an earlier detail (what someone said, where an object is, an old promise or injury), call novel_search on the written chapters instead of relying on memory. The prose wins over the canon summary; fix the canon when they disagree.',
+    '- Before reusing earlier details, novel_search the prose; prose wins over canon summaries. Fix conflicts.',
     '- Before every mutation, novel_read; pass its exact revision as expected_revision.',
-    '- Object arguments are direct JSON objects, never strings, Markdown, or nested outer arguments.',
+    '- Arguments are direct JSON objects, never strings, Markdown or wrappers.',
     '- Prefer novel_patch. novel_write is complete canon replacement and preserves progress unless replace_progress is true.',
     '- Validation failure: novel_schema, rebuild, retry once. Success requires ok: true and a newer revision.',
     '- changed: false or stop: true: stop tool calls and answer the user.',
-    '- novel_write and novel_advance are mutually exclusive inside one model turn; plan one canonical mutation and never oscillate between them.',
-    '- Never alternate novel_write and novel_advance for one change; advance only an actual new story event.',
+    '- novel_write and novel_advance are mutually exclusive per turn; advance only new story events.',
   ].join('\n')
   const facts = lines.join('\n')
   const result = facts + '\n' + protocol

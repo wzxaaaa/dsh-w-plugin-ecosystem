@@ -42,3 +42,19 @@ test('client and host classify every thread the same way', () => {
     assert.deepEqual([...mirror.warnings], info.warnings, `${info.id}.warnings`)
   }
 })
+
+test('client and host leave old ambiguous chapter references unresolved and warn explicitly', () => {
+  const project = normalizeProject({
+    volumes: [
+      { id: 'v1', chapters: [{ id: 'c1', status: 'done' }] },
+      { id: 'v2', chapters: [{ id: 'c1', status: 'planned' }] },
+    ],
+    threads: [{ id: 'old-thread', title: '旧伏笔', plantedChapterId: 'c1', plannedPayoffChapterId: 'gone' }],
+  })
+  const host = analyzeThreads(project).threads[0]
+  const client = clientAnalyzer()(project).byId['old-thread']
+  assert.equal(client.plantedIndex, -1)
+  assert.equal(client.payoffIndex, -1)
+  assert.deepEqual([...client.warnings], host.warnings)
+  assert.deepEqual([...client.warnings], ['ambiguous-chapter', 'missing-chapter'])
+})

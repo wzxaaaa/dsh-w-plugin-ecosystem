@@ -1,6 +1,6 @@
 # 官方 Harness 兼容说明
 
-验证环境：Windows 官方 DeepSeek Harness **0.2.0-rc.2**（2026-09-30），使用独立临时 profile，通过官方插件安装服务安装以下包。
+验证环境：Windows 官方 DeepSeek Harness **0.2.0-rc.2**，使用独立临时 profile，通过官方插件安装服务安装以下包。首次验证于 2026-09-30，小说插件 `0.14.3` 于 2026-10-01 补充验证。
 
 | 插件 | 适配版本 | 安装包 |
 | --- | --- | --- |
@@ -8,7 +8,7 @@
 | camera-watch | 0.2.4 | [安装包](./dsh-w-camera-watch/dsh-w-camera-watch-0.2.4.tgz) |
 | deslop | 0.1.1 | [安装包](./dsh-w-deslop/dsh-w-deslop-0.1.1.tgz) |
 | knowledge-base | 0.5.2 | [安装包](./dsh-w-knowledge-base/dsh-w-knowledge-base-0.5.2.tgz) |
-| noval-write | 0.14.2 | [安装包](./dsh-w-noval-write/dsh-w-noval-write-0.14.2.tgz) |
+| noval-write | 0.14.3 | [安装包](./dsh-w-noval-write/dsh-w-noval-write-0.14.3.tgz) |
 | persona | 0.3.7 | [安装包](./dsh-w-persona/dsh-w-persona-0.3.7.tgz) |
 | right-sidebar | 0.8.3 | [安装包](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.8.3.tgz) |
 | wallpaper | 0.2.1 | [安装包](./dsh-w-wallpaper/dsh-w-wallpaper-0.2.1.tgz) |
@@ -43,3 +43,13 @@
 上一轮八个插件加管理器的单元测试共 **279 项通过**。本轮受影响的四个插件加管理器回归测试共 **150 项通过**；Host/Client 入口通过语法检查，`git diff --check` 通过。四个新版本经官方 CLI 在全新隔离 desktop profile 安装，并通过桌面窗口和浏览器桥接验证；逐个解包核对安装包内容与最终源码一致。
 
 通过管理器刷新仓库目录即可下载发布版本；安装完成后完全退出并重启官方 Harness。人设插件会自动导入同一 Harness home 下旧 web profile 的缺失人设文件并备份，无需手工复制模板。
+
+## 2026-10-01：小说插件 0.14.3
+
+- 修复自动同步覆盖请求期间的新草稿、历史恢复与绑定响应过期、同名正文并发覆盖、正文保存成功但章节关联失败、旧项目迁移中断、跨卷章节 ID 歧义、空持有物快照、恢复模板丢失自建项，以及倒序搜索笔记顺序等问题。
+- 章节字数在 `novel_save_chapter` 写入前校验：裸 `3000字` 表示至少 3000 字；明确范围同时检查上下限。未达标返回实际字数及差额，要求模型修改正文后重试。无法解析的非空规则会明确报错，全书目标不会套用到单章。该保护适用于插件保存工具；聊天草稿和其他文件工具写入仍须提交校验。
+- 受影响插件完整 **151 项回归测试通过**，覆盖真实文件系统、写入回滚、迁移崩溃续传、Host 保存和 Client 异步竞态；语法检查及 `git diff --check` 通过。
+- 最终安装包经官方 CLI 安装到隔离 desktop profile，逐字节核对安装后的源码。官方 Host 实际拒绝 2999/3000 字且不创建文件，接受 3100 字；范围 3000—4000 字拒绝 4001 字并保留旧稿，接受 3500 字且关联大纲章节。
+- 官方桌面窗口实际创建与绑定小说、编辑设定、恢复旧历史为新版本、重载后保留数据；大纲显示已关联正文的 3500 字。桌面宽窗口和窄窗口均无横向溢出，Renderer 与 Console 无错误。Browser 插件不可用，因此使用现有 Playwright Electron 驱动验证。
+
+本轮模型回复采用临时本地适配器，章节保存验证通过仅安装在临时 profile 的测试桥调用真实小说服务；两者均不包含在发布包中。没有使用用户的密钥、修改真实 profile 或重启正在使用的 Harness。

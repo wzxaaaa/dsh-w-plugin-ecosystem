@@ -18,12 +18,14 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { dshHomePath, expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
   advanceProject,
+  assertChapterWordCount,
   analyzeProgression,
   analyzeThreads,
   assertProjectShape,
   compareThreadUrgency,
   chapterPatchToolSchema,
   chapterSequence,
+  chapterWordRequirement,
   characterPatchToolSchema,
   progressionRecordPatchToolSchema,
   defaultProject,
@@ -80,7 +82,7 @@ import {
   updateNovelTitle,
   writeBindingStore,
 } from './noval-library.js'
-import { listWorkspaceManuscripts, readWorkspaceManuscript, saveWorkspaceManuscript } from './noval-file-core.js'
+import { countManuscriptWords, listWorkspaceManuscripts, normalizeManuscriptFilename, readWorkspaceManuscript, saveWorkspaceManuscript } from './noval-file-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -222,10 +224,14 @@ function manuscriptFailureContent(_exec, result) {
     text: JSON.stringify({
       ok: false,
       verified: false,
-      noFileWritten: true,
+      noFileWritten: result.error?.fileWritten !== true,
+      ...(result.error?.fileWritten === true ? { fileWritten: true, path: result.error.path, backupPath: result.error.backupPath } : {}),
+      ...(result.error?.wordRequirement ? { wordRequirement: result.error.wordRequirement } : {}),
       code: result.error && typeof result.error.code === 'string' ? result.error.code : 'NOVEL_FILE_WRITE_FAILED',
       message,
-      instruction: 'Do not claim that a file was created. Correct the filename/content or inspect the existing file, then retry once.',
+      instruction: result.error?.fileWritten === true
+        ? 'The file changed but the complete operation failed. Inspect the file and preserved backup before retrying; do not overwrite either blindly.'
+        : 'No file was changed. Read the chapter outline, correct the arguments and meet its word requirement before retrying. Never lower the target or omit chapter_id to bypass validation.',
     }, null, 2),
   }]
 }
@@ -658,25 +664,42 @@ let NovalWriterService = (() => {
     ensureMigrated(workspace) {
       const key = String(workspace.id)
       if (this.migrationChecked.has(key)) return
-      this.migrationChecked.add(key)
       const legacyDir = join(this.root, 'workspaces', key)
       const legacyPath = join(legacyDir, NOVEL_STATE_FILE)
-      if (!existsSync(legacyPath) || typeof workspace.path !== 'string' || !existsSync(workspace.path)) return
+      const completedPath = join(legacyDir, 'migrated.json')
+      if (typeof workspace.path !== 'string' || !existsSync(workspace.path)) return
       try {
-        const state = readStateSync(legacyPath)
-        if (state.revision === 0 && JSON.stringify(state.project) === JSON.stringify(defaultProject())) {
-          renameSync(legacyPath, `${legacyPath}.migrated`)
+        let novel
+        let migration
+        if (existsSync(legacyPath)) {
+          const state = readStateSync(legacyPath)
+          if (state.revision === 0 && JSON.stringify(state.project) === JSON.stringify(defaultProject())) {
+            renameSync(legacyPath, `${legacyPath}.migrated`)
+            this.migrationChecked.add(key)
+            return
+          }
+          migration = migrateLegacyProject({ legacyDir, workspacePath: workspace.path, state })
+          novel = migration.novel
+        } else if (existsSync(completedPath)) {
+          // A process may have exited after migration completed but before the
+          // conversation binding was committed. Recover that last step too.
+          const completed = JSON.parse(readFileSync(completedPath, 'utf8'))
+          novel = findNovel(workspace.path, completed.novelId, completed.folder)
+          if (!novel) throw new Error('the completed migration target is missing; original backups were preserved')
+        } else {
+          this.migrationChecked.add(key)
           return
         }
-        const { novel, moved, skipped } = migrateLegacyProject({ legacyDir, workspacePath: workspace.path, state })
+        const nextBindings = { ...this.bindings, bindings: { ...this.bindings.bindings } }
         for (const [sessionId, link] of Object.entries(this.writeLinks.links)) {
-          if (link.workspaceId === key && !this.bindings.bindings[sessionId]) {
-            this.bindings.bindings[sessionId] = { workspaceId: key, novelId: novel.id, folder: novel.folder, boundAt: new Date().toISOString() }
+          if (link.workspaceId === key && !nextBindings.bindings[sessionId]) {
+            nextBindings.bindings[sessionId] = { workspaceId: key, novelId: novel.id, folder: novel.folder, boundAt: new Date().toISOString() }
           }
         }
-        writeBindingStore(this.bindingsPath, this.bindings)
-        const note = `migrated workspace '${workspace.title}' into novel folder '${novel.folder}' (moved ${moved.length} chapter files${skipped.length ? `, left ${skipped.length} in place because the name was taken` : ''})`
-        if (typeof this.ctx.logger === 'function') this.ctx.logger('dsh-w-noval-write').info(note)
+        writeBindingStore(this.bindingsPath, nextBindings)
+        this.bindings = nextBindings
+        this.migrationChecked.add(key)
+        if (migration && typeof this.ctx.logger === 'function') this.ctx.logger('dsh-w-noval-write').info(`migrated workspace '${workspace.title}' into novel folder '${novel.folder}' (${migration.moved.length} chapter files verified; original files preserved)`)
       } catch (error) {
         this.report(`legacy project of workspace '${workspace.title}' was not migrated`, error)
       }
@@ -814,33 +837,91 @@ let NovalWriterService = (() => {
       return this.mutate(workspaceId, expectedRevision, callback, meta)
     }
 
-    async mutate(workspaceId, expectedRevision, callback, meta = { actor: 'user', operation: 'unknown' }) {
-      const workspace = this.workspaceRecord(workspaceId)
-      const key = String(workspace.id)
+    queueWorkspaceWrite(workspaceId, callback) {
+      const key = String(workspaceId)
       const priorTail = this.writeTails.get(key) ?? Promise.resolve()
-      const operation = priorTail.then(async () => {
+      const operation = priorTail.then(() => callback(this.workspaceRecord(key)))
+      this.writeTails.set(key, operation.then(() => {}, () => {}))
+      return operation
+    }
+
+    async commitProjectState(workspace, current, nextValue, meta, recordHistory = true) {
+      const key = String(workspace.id)
+      const next = normalizeState(nextValue)
+      if (JSON.stringify(next.project) === JSON.stringify(current.project)) {
+        return { ok: true, changed: false, stop: true, ...this.view(workspace, current) }
+      }
+      next.revision = current.revision + 1
+      next.updatedAt = new Date().toISOString()
+      await writeAtomic(this.statePath(key), next)
+      this.states.set(key, next)
+      if (next.project.title !== current.project.title) {
+        try { updateNovelTitle({ id: workspace.novelId, dir: workspace.path }, next.project.title) } catch (error) { this.report('novel title not updated', error) }
+      }
+      if (recordHistory) await this.recordHistory(key, current, next, meta).catch(error => this.report(`history for '${key}' not recorded`, error))
+      return { ok: true, changed: true, ...this.view(workspace, next) }
+    }
+
+    async mutate(workspaceId, expectedRevision, callback, meta = { actor: 'user', operation: 'unknown' }) {
+      return this.queueWorkspaceWrite(workspaceId, async workspace => {
+        const key = String(workspace.id)
         const current = normalizeState(this.stateForWorkspace(key))
         if (Number.isSafeInteger(expectedRevision) && expectedRevision !== current.revision) {
           throw new Error('project changed in another conversation, tab, or model tool; reload before saving')
         }
-        const next = normalizeState(callback(current))
-        if (JSON.stringify(next.project) === JSON.stringify(current.project)) {
-          return { ok: true, changed: false, stop: true, ...this.view(workspace, current) }
-        }
-        next.revision = current.revision + 1
-        next.updatedAt = new Date().toISOString()
-        await writeAtomic(this.statePath(key), next)
-        this.states.set(key, next)
-        // Keep the folder's metadata title in step for the novel list.
-        if (next.project.title !== current.project.title) {
-          try { updateNovelTitle({ id: workspace.novelId, dir: workspace.path }, next.project.title) } catch (error) { this.report('novel title not updated', error) }
-        }
-        // History is a safety net: a failure to record it never fails the edit.
-        await this.recordHistory(key, current, next, meta).catch(error => this.report(`history for '${key}' not recorded`, error))
-        return { ok: true, changed: true, ...this.view(workspace, next) }
+        return this.commitProjectState(workspace, current, callback(current), meta)
       })
-      this.writeTails.set(key, operation.then(() => {}, () => {}))
-      return operation
+    }
+
+    async saveChapter(workspaceId, args) {
+      return this.queueWorkspaceWrite(workspaceId, async workspace => {
+        const key = String(workspace.id)
+        const current = normalizeState(this.stateForWorkspace(key))
+        if (args?.expected_revision !== undefined && assertExpectedRevision(args.expected_revision) !== current.revision) {
+          throw new Error('project changed before the chapter was saved; read its outline and revision again')
+        }
+        const filename = normalizeManuscriptFilename(args?.filename)
+        const chapterId = typeof args?.chapter_id === 'string' ? args.chapter_id.trim() : ''
+        if (!chapterId && current.project.volumes.some(volume => volume.chapters.some(chapter => chapter.targetWords.trim()))) {
+          const error = new Error('NOVEL_CHAPTER_REQUIRED: this outline specifies chapter word requirements. Call novel_outline_read and pass chapter_id (and volume_id) so the chapter can be validated; no file was written.')
+          error.code = 'NOVEL_CHAPTER_REQUIRED'
+          throw error
+        }
+        const target = chapterId ? findChapter(current.project, args?.volume_id, chapterId) : null
+        const words = countManuscriptWords(args?.content)
+        if (target) assertChapterWordCount(target.chapter, words)
+        // Validate the entire prospective project before touching the prose.
+        const next = target ? normalizeState({
+          ...current,
+          project: linkChapterManuscript(current.project, target.volume.id, target.chapter.id, filename, { status: args?.chapter_status }),
+        }) : current
+        const meta = { actor: 'ai', operation: 'novel_save_chapter' }
+        let projectResult
+        const saved = await saveWorkspaceManuscript(workspace.path, {
+          filename,
+          content: args?.content,
+          overwrite: args?.overwrite === true,
+        }, {
+          onSaved: async () => {
+            if (target) projectResult = await this.commitProjectState(workspace, current, next, meta, false)
+          },
+        })
+        if (projectResult?.changed) {
+          await this.recordHistory(key, current, this.stateForWorkspace(key), meta).catch(error => this.report(`history for '${key}' not recorded`, error))
+        }
+        const chapter = target ? findChapter(projectResult.project, target.volume.id, target.chapter.id).chapter : null
+        await this.manuscriptStats(workspace).catch(() => {})
+        return {
+          ok: true,
+          ...saved,
+          words,
+          ...(chapter ? {
+            linked: { volumeId: target.volume.id, chapterId: chapter.id, status: chapter.status, revision: projectResult.revision },
+            wordRequirement: chapterWordRequirement(chapter),
+          } : {}),
+          workspace: { id: key, title: workspace.title, path: workspace.path },
+        }
+      })
     }
 
     historyDir(key) {
@@ -1158,45 +1239,21 @@ let NovalWriterService = (() => {
 
       this.ctx.tools.register(defineTool({
         name: 'novel_save_chapter',
-        description: '把已经完成的小说章节正文真实写入当前 Harness Workspace。用户要求创建、生成、保存或导出章节文件时必须调用；只有返回 ok: true 且 verified: true 后才能声称文件已生成。filename 只能是工作区根目录下的单个 .md/.txt 文件名。正文属于大纲中的某一章时，同时传 chapter_id（必要时加 volume_id），大纲会关联这个文件、统计字数，并把尚未开始的章节标为初稿。',
+        description: '把完整章节正文写入当前绑定小说的文件夹，保存前按插件字数统计校验该章大纲 targetWords。单个3000字表示至少3000字，明确范围同时限制上下限。有大纲字数要求时必须传 chapter_id（及 volume_id），不足时补写正文重试，禁止下调目标或省略章节参数绕过。只有返回 ok: true 且 verified: true 才能声称已保存；章节关联与正文一起提交。',
         parameters: {
           filename: { type: 'string', required: true, description: '工作区根目录下的文件名，例如 第1章_测试.md；禁止目录、绝对路径和路径穿越。无扩展名时自动补 .md。' },
           content: { type: 'string', required: true, description: '要落盘的完整章节正文，不是摘要、设定或 JSON。' },
           overwrite: { type: 'boolean', description: '默认 false。已有同名但内容不同的文件时，只有明确需要替换才传 true。' },
-          chapter_id: { type: 'string', description: '可选；这份正文对应的大纲章节 id（见 novel_outline_read）。' },
+          chapter_id: { type: 'string', description: '这份正文对应的大纲章节 id（见 novel_outline_read）。书中有大纲字数要求时必填。' },
           volume_id: { type: 'string', description: '可选；章节所在的卷 id。chapter_id 在多卷中重复时必填。' },
           chapter_status: { type: 'string', description: '可选；关联后要写入的章节状态，例如 初稿、修改中、定稿。省略时只把未开始的章节改为初稿。' },
+          expected_revision: { type: 'integer', description: '建议提供最近一次 novel_outline_read 返回的 revision；大纲已改动时拒绝旧稿写入。' },
         },
         output: toolOutput('小说章节文件已核验', { includeValue: true }),
         finalizeContent: manuscriptFailureContent,
         async execute(args, exec) {
-          const { workspace, state } = await self.modelState(exec)
-          const chapterId = typeof args?.chapter_id === 'string' ? args.chapter_id.trim() : ''
-          // Resolve the chapter before touching the disk so a bad id writes nothing.
-          const target = chapterId ? findChapter(state.project, args?.volume_id, chapterId) : null
-          const saved = await saveWorkspaceManuscript(workspace.path, {
-            filename: args?.filename,
-            content: args?.content,
-            overwrite: args?.overwrite === true,
-          })
-          let linked
-          if (target) {
-            const result = await self.mutateAs({ actor: 'ai', operation: 'novel_save_chapter' }, String(workspace.id), undefined, current => ({
-              ...current,
-              project: linkChapterManuscript(current.project, target.volume.id, target.chapter.id, saved.filename, { status: args?.chapter_status }),
-            }))
-            const chapter = findChapter(result.project, target.volume.id, target.chapter.id).chapter
-            linked = { volumeId: target.volume.id, chapterId: chapter.id, status: chapter.status, revision: result.revision }
-          }
-          const listing = await self.manuscriptStats(workspace).catch(() => undefined)
-          const words = listing?.files.find(file => file.filename === saved.filename)?.words
-          return {
-            ok: true,
-            ...saved,
-            ...(Number.isFinite(words) ? { words } : {}),
-            ...(linked ? { linked } : {}),
-            workspace: { id: String(workspace.id), title: workspace.title, path: workspace.path },
-          }
+          const { workspace } = await self.modelState(exec)
+          return self.saveChapter(String(workspace.id), args)
         },
       }))
 
@@ -1288,9 +1345,14 @@ let NovalWriterService = (() => {
             : undefined
           const files = new Map((listing?.files || []).map(file => [file.filename, file]))
           const withManuscript = chapter => {
-            if (!chapter.manuscriptFile) return chapter
+            let wordRequirement
+            try { wordRequirement = chapterWordRequirement(chapter) } catch (error) {
+              wordRequirement = { ok: false, rule: chapter.targetWords, code: error.code, message: error.message }
+            }
+            const outlined = { ...chapter, wordRequirement }
+            if (!chapter.manuscriptFile) return outlined
             const file = files.get(chapter.manuscriptFile)
-            return { ...chapter, manuscript: file ? { exists: true, words: file.words, bytes: file.bytes, updatedAt: file.updatedAt } : { exists: listing ? false : undefined } }
+            return { ...outlined, manuscript: file ? { exists: true, words: file.words, bytes: file.bytes, updatedAt: file.updatedAt } : { exists: listing ? false : undefined } }
           }
           const value = volumes.map(volume => {
             if (chapterId) {
