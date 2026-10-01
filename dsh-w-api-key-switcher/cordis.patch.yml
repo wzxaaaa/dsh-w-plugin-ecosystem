@@ -1,0 +1,5 @@
+# dsh-w-api-key-switcher contributes a Host credential-vault Remote service
+# and a provider-card Client extension on the Models settings page.
+- insert:
+    - id: dsh-w-api-key-switcher
+      name: dsh-w-api-key-switcher
