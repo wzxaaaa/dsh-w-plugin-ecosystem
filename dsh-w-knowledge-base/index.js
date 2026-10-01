@@ -45,6 +45,16 @@ import {
   styleIndexText,
   writingGuidanceText,
 } from './kb-writing.js'
+import {
+  DEFAULT_PINNED_CHARS,
+  PINNED_CONTEXT_ORDER,
+  PINNED_FILE,
+  movePinned,
+  normalizePinned,
+  pinnedPromptText,
+  planPinned,
+  setPinned,
+} from './kb-pinned.js'
 
 // Node 22 does not enable stage-3 decorator syntax, so the two tsdown helpers
 // that the Remote decorator compiles to are inlined here (the same shape the
@@ -162,6 +172,8 @@ export const Config = Schema.object({
   promptIndex: Schema.boolean().default(true),
   promptIndexNotes: Schema.number().default(24),
   promptIndexChars: Schema.number().default(2400),
+  // Writing mode only: character budget for pinned notes injected in full.
+  pinnedChars: Schema.number().default(DEFAULT_PINNED_CHARS),
 })
 
 let KnowledgeBaseService = (() => {
@@ -183,6 +195,9 @@ let KnowledgeBaseService = (() => {
   let _deleteCorpus_decorators
   let _setActiveCorpus_decorators
   let _moveNotes_decorators
+  let _getPinned_decorators
+  let _setPinned_decorators
+  let _movePinned_decorators
   return class KnowledgeBaseService extends _classSuper {
     static {
       const _metadata = typeof Symbol === 'function' && Symbol.metadata
@@ -284,6 +299,24 @@ let KnowledgeBaseService = (() => {
         access: { has: obj => 'moveNotes' in obj, get: obj => obj.moveNotes },
         metadata: _metadata,
       }, null, _instanceExtraInitializers)
+      _getPinned_decorators = [Remote('getPinned')]
+      __esDecorate(this, null, _getPinned_decorators, {
+        kind: 'method', name: 'getPinned', static: false, private: false,
+        access: { has: obj => 'getPinned' in obj, get: obj => obj.getPinned },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _setPinned_decorators = [Remote('setPinned')]
+      __esDecorate(this, null, _setPinned_decorators, {
+        kind: 'method', name: 'setPinned', static: false, private: false,
+        access: { has: obj => 'setPinned' in obj, get: obj => obj.setPinned },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
+      _movePinned_decorators = [Remote('movePinned')]
+      __esDecorate(this, null, _movePinned_decorators, {
+        kind: 'method', name: 'movePinned', static: false, private: false,
+        access: { has: obj => 'movePinned' in obj, get: obj => obj.movePinned },
+        metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       if (_metadata) {
         Object.defineProperty(this, Symbol.metadata, {
           enumerable: true,
@@ -357,6 +390,8 @@ let KnowledgeBaseService = (() => {
           scope.systemPrompt.section({ name: 'dsh-w-knowledge-base:guidance', order: GUIDANCE_ORDER, text: (context) => this.guidanceTextForMode(context && context.agent) })
         }
         if (settings.promptIndex !== false) {
+          // Writing mode only: pinned notes, read before the style index.
+          scope.systemPrompt.context({ name: 'dsh-w-knowledge-base:pinned', order: PINNED_CONTEXT_ORDER, text: (context) => this.pinnedText(context && context.agent) })
           scope.systemPrompt.context({ name: 'dsh-w-knowledge-base:index', order: INDEX_CONTEXT_ORDER, text: (context) => this.indexText(context && context.agent) })
           scope.systemPrompt.context({ name: 'dsh-w-knowledge-base:banned', order: BANNED_CONTEXT_ORDER, text: (context) => this.bannedText(context && context.agent) })
         }
@@ -441,6 +476,61 @@ let KnowledgeBaseService = (() => {
 
     storeForScope(scope) {
       return scope.mode === 'writing' ? this.corpusStore(scope.corpus.id) : this.assistantStore
+    }
+
+    pinnedPathFor(corpusId) {
+      const entry = findCorpus(this.registry, corpusId) || findCorpus(this.registry, this.registry.active)
+      return join(this.location.root, entry.dir, PINNED_FILE)
+    }
+
+    /** One corpus's ordered pin list; a missing or unreadable file means no pins. */
+    readPinned(corpusId) {
+      try {
+        return normalizePinned(JSON.parse(readFileSync(this.pinnedPathFor(corpusId), 'utf8')))
+      } catch (error) {
+        if (!error || error.code !== 'ENOENT') this.report('pin list read failed', error)
+        return normalizePinned(null)
+      }
+    }
+
+    writePinned(corpusId, list) {
+      const path = this.pinnedPathFor(corpusId)
+      mkdirSync(join(path, '..'), { recursive: true })
+      const temporary = path + '.tmp'
+      writeFileSync(temporary, JSON.stringify(normalizePinned(list), null, 2) + '\n', 'utf8')
+      renameSync(temporary, path)
+    }
+
+    /** Pinned notes of one corpus that still exist, in pin order, plus the ids whose note is gone. */
+    pinnedNotes(corpusId) {
+      const store = this.corpusStore(corpusId)
+      const notes = []
+      const missing = []
+      for (const id of this.readPinned(corpusId).ids) {
+        const note = store.get(id)
+        if (note) notes.push(note)
+        else missing.push(id)
+      }
+      return { notes, missing }
+    }
+
+    /**
+     * The pinned-notes runtime context: writing-mode conversations only, using
+     * the conversation's own corpus (a novel bound to a corpus gets that
+     * corpus's pins). Empty in assistant mode or when nothing is pinned.
+     * @param {object} [agent] - the conversation's agent.
+     * @returns {string} the injected text.
+     */
+    pinnedText(agent) {
+      const scope = this.scopeFor(agent)
+      if (scope.mode !== 'writing') return ''
+      const { notes } = this.pinnedNotes(scope.corpus.id)
+      return pinnedPromptText(notes, { budget: this.settings.pinnedChars, corpusName: scope.corpus.name })
+    }
+
+    assertWritingPanel() {
+      if (this.mode !== 'writing') throw new Error('pinned notes are only available in writing mode')
+      return this.registry.active
     }
 
     bannedPathFor(corpusId) {
@@ -545,13 +635,14 @@ let KnowledgeBaseService = (() => {
         ? Math.min(Math.floor(limit), MAX_PANEL_LIMIT)
         : DEFAULT_PANEL_LIMIT
       const stats = await this.store.stats()
+      const pinned = new Set(this.mode === 'writing' ? this.readPinned(this.registry.active).ids : [])
       if (text === '') {
         const page = await this.store.list({ tag: tagFilter, limit: size })
         return {
           query: '',
           tag: tagFilter,
           total: page.total,
-          notes: page.notes.map((note) => ({ ...summaryOf(note), preview: firstLine(note.body, 160), score: 0 })),
+          notes: page.notes.map((note) => ({ ...summaryOf(note), preview: firstLine(note.body, 160), score: 0, pinned: pinned.has(note.id) })),
           tags: page.tags,
           root: this.store.displayRoot,
           warnings: stats.warnings,
@@ -570,6 +661,7 @@ let KnowledgeBaseService = (() => {
           ...summaryOf(entry.note),
           preview: entry.snippet === '' ? firstLine(entry.note.body, 160) : entry.snippet,
           score: entry.score,
+          pinned: pinned.has(entry.note.id),
         })),
         tags: stats.tags,
         root: this.store.displayRoot,
@@ -593,6 +685,7 @@ let KnowledgeBaseService = (() => {
           source: note.source,
           workspace: note.workspace,
           path: 'notes/' + note.file,
+          pinned: this.mode === 'writing' && this.readPinned(this.registry.active).ids.includes(note.id),
         },
       }
     }
@@ -791,6 +884,45 @@ let KnowledgeBaseService = (() => {
       this._writeRegistry(setActiveCorpus(this.registry, corpusId))
       await this.corpusStore(corpusId).sync({ force: true }).catch(() => {})
       return { active: corpusId }
+    }
+
+    /**
+     * The active corpus's pinned notes for the panel, with the prompt budget
+     * so the panel can show which ones are injected in full.
+     * @returns {Promise<object>} pins in order, missing ids, and budget usage.
+     */
+    async getPinned() {
+      const corpusId = this.assertWritingPanel()
+      await this.corpusStore(corpusId).sync({ force: true }).catch(() => {})
+      const { notes, missing } = this.pinnedNotes(corpusId)
+      const plan = planPinned(notes, this.settings.pinnedChars)
+      const included = new Set(plan.included.map(note => note.id))
+      return {
+        corpusId,
+        notes: notes.map(note => ({ ...summaryOf(note), injected: included.has(note.id) })),
+        missing,
+        budget: plan.budget,
+        used: plan.used,
+      }
+    }
+
+    /** Pin or unpin one note of the active corpus. */
+    async setPinned(id, pinned) {
+      const corpusId = this.assertWritingPanel()
+      const key = typeof id === 'string' ? id.trim() : ''
+      if (pinned === true) {
+        await this.corpusStore(corpusId).sync({ force: true }).catch(() => {})
+        if (!this.corpusStore(corpusId).get(key)) throw new Error(`unknown note '${key}'`)
+      }
+      this.writePinned(corpusId, setPinned(this.readPinned(corpusId), key, pinned === true))
+      return this.getPinned()
+    }
+
+    /** Move one pinned note up (-1) or down (1) in the reading order. */
+    async movePinned(id, delta) {
+      const corpusId = this.assertWritingPanel()
+      this.writePinned(corpusId, movePinned(this.readPinned(corpusId), id, delta))
+      return this.getPinned()
     }
 
     /** Move every note carrying `tag` (usually one source book) between corpora. */

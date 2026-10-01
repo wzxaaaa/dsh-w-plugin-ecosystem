@@ -2,7 +2,7 @@
 
 ## 官方 Harness 兼容
 
-`0.5.2` 已适配官方 Windows Harness `0.2.0-rc.2`。在远程连接完成前注册独立的 **设置 → 知识库** 入口，面板加载会等待连接；不依赖 right-sidebar。右侧工具栏只是另一个可选入口。安装更新后请完全退出并重启 Harness，刷新已打开的设置导航。
+`0.5.3` 已适配官方 Windows Harness `0.2.0-rc.2`。在远程连接完成前注册独立的 **设置 → 知识库** 入口，面板加载会等待连接；不依赖 right-sidebar。右侧工具栏只是另一个可选入口。安装更新后请完全退出并重启 Harness，刷新已打开的设置导航。
 
 官方桌面版使用独立的 `desktop` profile，旧 `web` profile 的插件不会自动迁入。可在官方「添加插件」填写本包 `.tgz` 的绝对路径，或通过 W 管理器拖入本包；安装后重启 Harness。以下 `--profile web` 命令用于旧版 Web 环境。
 
@@ -22,6 +22,16 @@
   - 注入一张**禁用套路表**（面板里可编辑，内置一份常见 AI 腔默认表如"五味杂陈""嘴角勾起一抹弧度"），让模型避开这些被写烂的表达；存在 `knowledge-base/style-corpus/banned-phrases.txt`，一行一个、可手改。
 
 > 素材是用来学**怎么写**的，不是用来抄**写了什么**——借语感，别搬情节。
+
+## 置顶笔记（写作模式，0.5.3 起）
+
+写作模式下可以把笔记**置顶**，作为写作前必读的内容，比如这本书的文风规范、必须遵守的大纲、写作禁忌。打开一条笔记点「置顶」即可；笔记列表顶部的「置顶」区可以调整阅读顺序、取消置顶。标签栏可以用滚轮左右滚、按住拖动，或点「展开」查看全部标签。
+
+- 写作模式的对话里，置顶笔记会按顺序**整篇放进模型上下文**，排在素材索引前面，并要求模型动笔和检索前先读、与检索到的素材冲突时以置顶为准。
+- 每个素材库各有自己的置顶，存放在该库目录下的 `pinned.json`；`dsh-w-noval-write` 给某本书绑定了素材库时，这本书的对话用的是那个库的置顶。
+- 置顶内容每一轮都会占用上下文，所以有字数预算（默认 12000 字，配置项 `pinnedChars`）。整篇放不下的置顶笔记不会被截断，而是只列标题，并要求模型先用 `kb_read` 读完再动笔；面板会标出哪些是"整篇展开"、哪些"超出预算"。
+- 置顶的笔记被删除或移到别的库后，会从模型上下文里消失，面板提示可一键清理。
+- **助手模式没有置顶功能**，也不会读取置顶列表。
 
 ## 多个素材库（0.5.0 起）
 
@@ -100,7 +110,7 @@ id 用 UTC 时间生成，所以文件名天然按时间排序；标题只用于
 ```powershell
 npm test
 pnpm pack --config.ignore-scripts=true
-node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.5.2.tgz
+node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js" plugin --profile web add ./dsh-w-knowledge-base-0.5.3.tgz
 ```
 
 装好以后重启桌面版（或重新启动 `dsh web`）；重装同一个版本号之前记得先 `remove`，否则 pnpm 不会重新解包。
@@ -118,6 +128,7 @@ node "<桌面版安装目录>\DeepSeek-Harness-Desktop\resources\runtime\node_mo
     importMaxChars: 10000000 # 单份整本文档的安全上限；导入后仍会自动按章节/段落拆分
     searchLimit: 8          # kb_search 默认返回条数
     readChars: 20000        # kb_read 单条默认字符预算
+    pinnedChars: 12000      # 写作模式置顶笔记整篇展开的字数预算
     syncIntervalMs: 1500    # 两次磁盘校验之间的最小间隔
     promptGuidance: true    # 注入使用协议（order 150）
     promptIndex: true       # 注入实时索引（运行上下文）

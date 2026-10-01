@@ -7,6 +7,18 @@ window.__ModuleLoader__.load({
 
     // ── styles ───────────────────────────────────────────────────────────
     var CSS = [
+      ".dshwkb-pins{display:flex;flex-direction:column;gap:6px;padding:10px;margin-bottom:8px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-business-primary,#3978e8) 35%,transparent);border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#3978e8) 6%,transparent)}",
+      ".dshwkb-pins-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}",
+      ".dshwkb-pins-title{font-weight:600;font-size:13px}",
+      ".dshwkb-pins-budget,.dshwkb-pins-hint,.dshwkb-pins-missing{font-size:12px;color:var(--dsw-alias-label-secondary,#646a73)}",
+      ".dshwkb-pins-missing{display:flex;gap:8px;align-items:center}",
+      ".dshwkb-pin{display:flex;align-items:center;gap:4px}",
+      ".dshwkb-pin-open{flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:6px 8px;border:0;border-radius:7px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit;font:inherit;text-align:left;cursor:pointer}",
+      ".dshwkb-pin[data-deferred=true] .dshwkb-pin-state{color:#d98a1f}",
+      ".dshwkb-pin-order{flex:none;width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;background:var(--dsw-alias-state-business-primary,#3978e8);color:#fff}",
+      ".dshwkb-pin-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}",
+      ".dshwkb-pin-state{flex:none;font-size:11px;color:var(--dsw-alias-label-secondary,#646a73)}",
+      ".dshwkb-pin-mark{display:inline-block;margin-right:6px;padding:0 5px;border-radius:4px;font-size:11px;font-weight:500;background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#3978e8) 14%,transparent);color:var(--dsw-alias-state-business-primary,#3978e8)}",
       ".dshwkb-panel{--kb-accent:var(--dsw-alias-state-business-primary,#3978e8);--kb-fg:var(--dsw-alias-label-primary,#1f2329);--kb-fg2:var(--dsw-alias-label-secondary,#646a73);--kb-fg3:var(--dsw-alias-label-tertiary,#8f959e);--kb-surface:var(--dsw-alias-bg-layer-1,#fff);--kb-border:var(--dsw-alias-border-l1,#e5e7eb);--kb-hover:var(--dsw-alias-interactive-bg-hover,#f2f5fa);--kb-fill:color-mix(in srgb,var(--kb-fg) 5%,transparent);--kb-accent-soft:color-mix(in srgb,var(--kb-accent) 11%,transparent);--kb-danger:var(--dsw-alias-state-error-primary,#d64545);--kb-ok:#2e9d6a;container:knowledge-panel / inline-size;display:flex;flex-direction:column;gap:10px;min-height:0;height:100%;box-sizing:border-box;padding:4px 2px;color:var(--kb-fg);font-family:var(--dsw-font-ui,ui-sans-serif,system-ui,sans-serif);font-size:13px}",
       ".dshwkb-panel *,.dshwkb-panel *:before,.dshwkb-panel *:after{box-sizing:border-box}",
       ".dshwkb-panel button{font-family:inherit}",
@@ -50,6 +62,13 @@ window.__ModuleLoader__.load({
       ".dshwkb-searchrow .dshwkb-input,.dshwkb-searchrow .dshwkb-input:focus{height:32px;padding:0 6px;border:0;background:transparent;box-shadow:none}",
       ".dshwkb-input::placeholder,.dshwkb-textarea::placeholder{color:var(--kb-fg3)}",
       ".dshwkb-textarea{width:100%;min-height:200px;flex:1;padding:10px 12px;border:1px solid var(--kb-border);border-radius:8px;background:var(--kb-surface);color:var(--kb-fg);font-size:12.5px;line-height:1.7;font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);resize:vertical;transition:border-color .15s,box-shadow .15s}",
+      ".dshwkb-tagbar{display:flex;align-items:flex-start;gap:6px;flex:none;min-width:0}",
+      ".dshwkb-tagbar>.dshwkb-tags{flex:1;min-width:0}",
+      ".dshwkb-tags[data-dragging=true]{cursor:grabbing;user-select:none}",
+      ".dshwkb-tags[data-dragging=true] .dshwkb-chip{cursor:grabbing}",
+      ".dshwkb-tags[data-expanded=true]{flex-wrap:wrap;max-height:132px;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;-webkit-mask-image:none;mask-image:none}",
+      ".dshwkb-tags-toggle{flex:none;height:24px;padding:0 8px;border:1px solid var(--kb-border);border-radius:999px;background:var(--kb-surface);color:var(--kb-fg2);font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}",
+      ".dshwkb-tags-toggle:hover{color:var(--kb-fg)}",
       ".dshwkb-tags{display:flex;flex-wrap:nowrap;flex:none;gap:6px;min-height:24px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-snap-type:x proximity;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent)}",
       ".dshwkb-tags::-webkit-scrollbar{display:none}",
       ".dshwkb-chip{display:inline-flex;align-items:center;gap:4px;height:24px;flex:none;padding:0 9px;border:1px solid var(--kb-border);border-radius:999px;background:var(--kb-surface);color:var(--kb-fg2);font-size:12px;white-space:nowrap;scroll-snap-align:start;cursor:pointer;transition:border-color .15s,color .15s,background .15s}",
@@ -225,6 +244,9 @@ window.__ModuleLoader__.load({
         descriptor("deleteCorpus", [parameter("corpusId")]),
         descriptor("setActiveCorpus", [parameter("corpusId")]),
         descriptor("moveNotes", [parameter("fromId"), parameter("toId"), parameter("tag")]),
+        descriptor("getPinned", []),
+        descriptor("setPinned", [parameter("id"), parameter("pinned")]),
+        descriptor("movePinned", [parameter("id"), parameter("delta")]),
       ],
     };
 
@@ -295,7 +317,9 @@ window.__ModuleLoader__.load({
         className: "dshwkb-row",
         onClick: function () { props.onOpen(note.id); },
       },
-        React.createElement("span", { className: "dshwkb-row-title" }, note.title),
+        React.createElement("span", { className: "dshwkb-row-title" },
+          note.pinned ? React.createElement("span", { className: "dshwkb-pin-mark", title: t("pinnedMark") }, t("pinnedMark")) : null,
+          note.title),
         note.preview ? React.createElement("span", { className: "dshwkb-row-preview" }, note.preview) : null,
         React.createElement("span", { className: "dshwkb-row-foot" }, foot)
       );
@@ -326,6 +350,9 @@ window.__ModuleLoader__.load({
           React.createElement("button", { key: "save", type: "button", className: "dshwkb-primary", disabled: props.busy, onClick: props.onSave }, props.busy ? t("saving") : t("save")),
         ]
         : [
+          props.onTogglePin && note.id
+            ? React.createElement("button", { key: "pin", type: "button", className: "dshwkb-ghost", "data-active": note.pinned || undefined, disabled: props.busy, onClick: props.onTogglePin }, note.pinned ? t("unpin") : t("pin"))
+            : null,
           React.createElement("button", { key: "edit", type: "button", className: "dshwkb-ghost", onClick: props.onEdit }, t("edit")),
           React.createElement("button", {
             key: "delete",
@@ -600,6 +627,132 @@ window.__ModuleLoader__.load({
     }
 
     // ── the panel, mounted in Settings and in the right sidebar ───────────
+    // ── pinned notes (writing mode only) ─────────────────────────────────
+    // Pinned notes are injected in full into writing-mode conversations, in
+    // this order, within the host's character budget.
+    function PinnedSection(props) {
+      var t = props.t;
+      var pins = props.pins;
+      if (pins.status !== "ready" || (pins.notes.length === 0 && pins.missing.length === 0)) return null;
+      return React.createElement("div", { className: "dshwkb-pins" },
+        React.createElement("div", { className: "dshwkb-pins-head" },
+          React.createElement("span", { className: "dshwkb-pins-title", title: t("pinnedHint") }, t("pinnedTitle")),
+          React.createElement("span", { className: "dshwkb-pins-budget" }, t("pinnedBudget").replace("{used}", pins.used).replace("{budget}", pins.budget))
+        ),
+        pins.notes.map(function (note, index) {
+          return React.createElement("div", { className: "dshwkb-pin", key: note.id, "data-deferred": note.injected ? undefined : "true" },
+            React.createElement("button", { type: "button", className: "dshwkb-pin-open", onClick: function () { props.onOpen(note.id); } },
+              React.createElement("span", { className: "dshwkb-pin-order" }, index + 1),
+              React.createElement("span", { className: "dshwkb-pin-name" }, note.title),
+              React.createElement("span", { className: "dshwkb-pin-state" }, note.injected ? t("pinnedInjected").replace("{n}", note.chars) : t("pinnedDeferred").replace("{n}", note.chars))
+            ),
+            React.createElement("button", { type: "button", className: "dshwkb-icon-btn", title: t("moveUp"), "aria-label": t("moveUp"), disabled: props.busy || index === 0, onClick: function () { props.onMove(note.id, -1); } }, "↑"),
+            React.createElement("button", { type: "button", className: "dshwkb-icon-btn", title: t("moveDown"), "aria-label": t("moveDown"), disabled: props.busy || index === pins.notes.length - 1, onClick: function () { props.onMove(note.id, 1); } }, "↓"),
+            React.createElement("button", { type: "button", className: "dshwkb-icon-btn", title: t("unpin"), "aria-label": t("unpin"), disabled: props.busy, onClick: function () { props.onUnpin(note.id); } }, React.createElement(Icon, { name: "close", size: 13 }))
+          );
+        }),
+        pins.missing.length > 0
+          ? React.createElement("div", { className: "dshwkb-pins-missing" },
+            React.createElement("span", null, t("pinnedMissing").replace("{n}", pins.missing.length)),
+            React.createElement("button", { type: "button", className: "dshwkb-link", disabled: props.busy, onClick: props.onPrune }, t("pinnedPrune")))
+          : null
+      );
+    }
+
+    // The tag filter strip. One row scrolls sideways: the mouse wheel and a
+    // click-drag both move it (its scrollbar is hidden to save height), and
+    // the toggle wraps every tag into view.
+    function TagStrip(props) {
+      var t = props.t;
+      var ref = React.useRef(null);
+      var dragRef = React.useRef(null);
+      var expandedSlot = React.useState(false);
+      var expanded = expandedSlot[0];
+      var setExpanded = expandedSlot[1];
+      var draggingSlot = React.useState(false);
+      var dragging = draggingSlot[0];
+      var setDragging = draggingSlot[1];
+      var overflowSlot = React.useState(false);
+      var overflow = overflowSlot[0];
+      var setOverflow = overflowSlot[1];
+
+      // React registers wheel listeners as passive, so preventDefault needs a
+      // native listener: turn vertical wheel motion into sideways scrolling.
+      React.useEffect(function () {
+        var node = ref.current;
+        if (!node || expanded) return undefined;
+        function onWheel(event) {
+          if (node.scrollWidth <= node.clientWidth) return;
+          var delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+          if (delta === 0) return;
+          event.preventDefault();
+          node.scrollLeft += delta;
+        }
+        node.addEventListener("wheel", onWheel, { passive: false });
+        return function () { node.removeEventListener("wheel", onWheel); };
+      }, [expanded]);
+
+      React.useEffect(function () {
+        var node = ref.current;
+        if (!node) return;
+        setOverflow(node.scrollWidth > node.clientWidth + 1 || expanded);
+      });
+
+      function onPointerDown(event) {
+        var node = ref.current;
+        if (!node || expanded || event.button !== 0 || node.scrollWidth <= node.clientWidth) return;
+        dragRef.current = { x: event.clientX, left: node.scrollLeft, moved: false, id: event.pointerId };
+      }
+      function onPointerMove(event) {
+        var drag = dragRef.current;
+        var node = ref.current;
+        if (!drag || !node) return;
+        var dx = event.clientX - drag.x;
+        if (!drag.moved && Math.abs(dx) < 4) return;
+        if (!drag.moved) {
+          drag.moved = true;
+          setDragging(true);
+          if (node.setPointerCapture) { try { node.setPointerCapture(drag.id); } catch (error) { /* already released */ } }
+        }
+        node.scrollLeft = drag.left - dx;
+      }
+      function endDrag() {
+        var drag = dragRef.current;
+        dragRef.current = null;
+        if (drag && drag.moved) {
+          setDragging(false);
+          // Swallow the click that ends a drag so it does not toggle a tag.
+          var node = ref.current;
+          if (node) {
+            var swallow = function (event) { event.stopPropagation(); event.preventDefault(); };
+            node.addEventListener("click", swallow, { capture: true, once: true });
+            window.setTimeout(function () { node.removeEventListener("click", swallow, { capture: true }); }, 0);
+          }
+        }
+      }
+
+      return React.createElement("div", { className: "dshwkb-tagbar" },
+        React.createElement("div", {
+          ref: ref,
+          className: "dshwkb-tags",
+          "data-expanded": expanded || undefined,
+          "data-dragging": dragging || undefined,
+          onPointerDown: onPointerDown,
+          onPointerMove: onPointerMove,
+          onPointerUp: endDrag,
+          onPointerCancel: endDrag,
+        }, props.children),
+        overflow
+          ? React.createElement("button", {
+            type: "button",
+            className: "dshwkb-tags-toggle",
+            "aria-expanded": expanded,
+            onClick: function () { setExpanded(!expanded); },
+          }, expanded ? t("tagsCollapse") : t("tagsExpand").replace("{n}", props.count))
+          : null
+      );
+    }
+
     function KnowledgeBasePanel(props) {
       var t = typeof props.t === "function" ? props.t : function (key) { return key; };
       var kb = props.kb;
@@ -667,6 +820,12 @@ window.__ModuleLoader__.load({
       var creatingSlot = React.useState(false);
       var creatingCorpus = creatingSlot[0];
       var setCreatingCorpus = creatingSlot[1];
+      var pinsSlot = React.useState({ status: "idle", notes: [], missing: [], budget: 0, used: 0 });
+      var pins = pinsSlot[0];
+      var setPins = pinsSlot[1];
+      var pinBusySlot = React.useState(false);
+      var pinBusy = pinBusySlot[0];
+      var setPinBusy = pinBusySlot[1];
       var mountedRef = React.useRef(true);
       var requestRef = React.useRef(0);
 
@@ -703,6 +862,47 @@ window.__ModuleLoader__.load({
       }, [kb, t]);
 
       React.useEffect(function () { if (workMode === "writing") loadCorpora(); }, [workMode]);
+
+      var canPin = typeof kb.getPinned === "function";
+      function acceptPins(value) {
+        setPins({ status: "ready", notes: (value && value.notes) || [], missing: (value && value.missing) || [], budget: (value && value.budget) || 0, used: (value && value.used) || 0 });
+      }
+      var loadPins = React.useCallback(function () {
+        if (!canPin || workMode !== "writing") { setPins({ status: "idle", notes: [], missing: [], budget: 0, used: 0 }); return; }
+        kb.getPinned().then(function (value) { if (mountedRef.current) acceptPins(value); }, function () {});
+      }, [kb, workMode]);
+      // view.root changes when the active corpus changes, so pins follow it.
+      React.useEffect(function () { loadPins(); }, [loadPins, view.root]);
+
+      function pinCall(run) {
+        setPinBusy(true);
+        return run().then(function (value) {
+          if (!mountedRef.current) return value;
+          setPinBusy(false);
+          acceptPins(value);
+          load(query, activeTag);
+          return value;
+        }, function (error) {
+          if (!mountedRef.current) return null;
+          setPinBusy(false);
+          setNotice({ kind: "error", text: t("error") + ": " + failureText(error) });
+          return null;
+        });
+      }
+      function togglePin(note) {
+        var next = !note.pinned;
+        pinCall(function () { return kb.setPinned(note.id, next); }).then(function (value) {
+          if (!value || !mountedRef.current) return;
+          setSelected(function (current) { return current && current.id === note.id ? Object.assign({}, current, { pinned: next }) : current; });
+          setNotice({ kind: "ok", text: next ? t("pinnedOn") : t("pinnedOff") });
+        });
+      }
+      function prunePins() {
+        var ids = pins.missing.slice();
+        pinCall(function () {
+          return ids.reduce(function (chain, id) { return chain.then(function () { return kb.setPinned(id, false); }); }, Promise.resolve());
+        });
+      }
 
       var load = React.useCallback(function (nextQuery, nextTag) {
         var requestId = ++requestRef.current;
@@ -916,7 +1116,7 @@ window.__ModuleLoader__.load({
         );
       }
 
-      var chips = view.tags.length === 0 ? null : React.createElement("div", { className: "dshwkb-tags" },
+      var chips = view.tags.length === 0 ? null : React.createElement(TagStrip, { t: t, count: view.tags.length },
         React.createElement("button", {
           type: "button",
           className: "dshwkb-chip",
@@ -951,6 +1151,7 @@ window.__ModuleLoader__.load({
             else setEditing(false);
           },
           onDelete: removeNote,
+          onTogglePin: workMode === "writing" && canPin ? function () { togglePin(selected); } : undefined,
           onDraft: function (patch) {
             setDraft(function (current) {
               return {
@@ -977,6 +1178,17 @@ window.__ModuleLoader__.load({
           view.notes.map(function (note) {
             return React.createElement(NoteRow, { key: note.id, note: note, t: t, onOpen: openNote });
           })
+        );
+      }
+      if (selected === null && workMode === "writing" && view.status !== "loading") {
+        body = React.createElement(React.Fragment, null,
+          React.createElement(PinnedSection, {
+            t: t, pins: pins, busy: pinBusy, onOpen: openNote,
+            onMove: function (id, delta) { pinCall(function () { return kb.movePinned(id, delta); }); },
+            onUnpin: function (id) { pinCall(function () { return kb.setPinned(id, false); }); },
+            onPrune: prunePins,
+          }),
+          body
         );
       }
 
@@ -1469,6 +1681,22 @@ window.__ModuleLoader__.load({
         "importResults": "\u672c\u6b21\u6295\u5582",
         "clearResults": "\u6e05\u7a7a\u8bb0\u5f55",
         "modeCorpora": "\u7d20\u6750\u5e93",
+        "pin": "置顶",
+        "unpin": "取消置顶",
+        "pinnedMark": "置顶",
+        "pinnedTitle": "置顶",
+        "tagsExpand": "展开 {n}",
+        "tagsCollapse": "收起",
+        "pinnedHint": "写作模式的对话里，置顶笔记会按这个顺序整篇放进模型上下文，要求它动笔和检索前先读、并以此为准。助手模式不受影响。",
+        "pinnedBudget": "已展开 {used} / {budget} 字",
+        "pinnedInjected": "整篇展开 · {n} 字",
+        "pinnedDeferred": "超出预算，需先 kb_read · {n} 字",
+        "pinnedMissing": "有 {n} 条置顶笔记已被删除或移走。",
+        "pinnedPrune": "清理",
+        "pinnedOn": "已置顶，下一轮对话开始生效。",
+        "pinnedOff": "已取消置顶。",
+        "moveUp": "上移",
+        "moveDown": "下移",
         "corpusLabel": "\u7d20\u6750\u5e93",
         "corpusNotesUnit": "\u6bb5",
         "corpusSourcesUnit": "\u4e2a\u6765\u6e90",
@@ -1582,6 +1810,22 @@ window.__ModuleLoader__.load({
         "importResults": "This session's feeds",
         "clearResults": "Clear list",
         "modeCorpora": "Libraries",
+        "pin": "Pin",
+        "unpin": "Unpin",
+        "pinnedMark": "Pinned",
+        "pinnedTitle": "Pinned",
+        "tagsExpand": "All {n}",
+        "tagsCollapse": "Less",
+        "pinnedHint": "In writing-mode conversations, pinned notes are injected in full in this order, and the model reads and follows them before drafting or searching. Assistant mode is unaffected.",
+        "pinnedBudget": "{used} / {budget} chars injected",
+        "pinnedInjected": "Injected in full · {n} chars",
+        "pinnedDeferred": "Over budget, kb_read first · {n} chars",
+        "pinnedMissing": "{n} pinned notes were deleted or moved.",
+        "pinnedPrune": "Clean up",
+        "pinnedOn": "Pinned. Applies from the next turn.",
+        "pinnedOff": "Unpinned.",
+        "moveUp": "Move up",
+        "moveDown": "Move down",
         "corpusLabel": "Library",
         "corpusNotesUnit": "passages",
         "corpusSourcesUnit": "sources",
@@ -1667,6 +1911,9 @@ window.__ModuleLoader__.load({
             deleteCorpus: function (id) { return unwrap("deleteCorpus", [id]); },
             setActiveCorpus: function (id) { return unwrap("setActiveCorpus", [id]); },
             moveNotes: function (fromId, toId, tag) { return unwrap("moveNotes", [fromId, toId, tag]); },
+            getPinned: function () { return unwrap("getPinned", []); },
+            setPinned: function (id, pinned) { return unwrap("setPinned", [id, pinned === true]); },
+            movePinned: function (id, delta) { return unwrap("movePinned", [id, delta]); },
           },
         };
       }
