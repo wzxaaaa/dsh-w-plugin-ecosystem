@@ -144,6 +144,8 @@ function MeetingThread({ meeting, state, busy, error, t, command, onOpenProject 
   const name = (id: string): string => id === 'user' ? t('client') : employee(id)?.name ?? t('unknownEmployee')
   const project = meeting.projectId ? state.projects.find(value => value.id === meeting.projectId) : undefined
   const active = meeting.speaking !== null || meeting.queue.length > 0
+  // Ending a meeting does not lose it: until it creates a project it can still produce minutes or reopen.
+  const ended = meeting.status === 'closed' && !meeting.projectId
   // A queued speaker is shown at once so sending never leaves a silent gap before the turn starts.
   const next = meeting.speaking ?? (meeting.status === 'drafting' ? meeting.hostId : meeting.queue[0])
   // Follow new messages only while the reader is already at the bottom of the thread.
@@ -186,10 +188,16 @@ function MeetingThread({ meeting, state, busy, error, t, command, onOpenProject 
         {meeting.status !== 'closed' && (confirmEnd
           ? <><button className={css.dangerSolid} disabled={busy} onClick={() => { setConfirmEnd(false); act('end', 'closeMeeting')() }}>{t('confirmEnd')}</button><button className={css.ghost} onClick={() => { setConfirmEnd(false) }}>{t('cancelAction')}</button></>
           : <button className={css.ghost} disabled={busy} onClick={() => { setConfirmEnd(true) }}>{t('endMeeting')}</button>)}
+        {ended && (meeting.minutes
+          ? <><button className={css.primary} disabled={busy} onClick={act('review', 'reviewMinutes')}><Busy on={pending === 'review'} />{t('editMinutes')}</button>
+            <button disabled={busy || !meeting.messages.length} onClick={act('minutes', 'draftMinutes')}><Busy on={pending === 'minutes'} />{t('redraftMinutes')}</button></>
+          : <button className={css.primary} disabled={busy || !meeting.messages.length} onClick={act('minutes', 'draftMinutes')}><Busy on={pending === 'minutes'} />{t('draftMinutes')}</button>)}
+        {ended && <button className={css.ghost} disabled={busy} onClick={act('reopen', 'resumeMeeting')}><Busy on={pending === 'reopen'} />{t('reopenMeeting')}</button>}
         {project && <button className={css.primary} onClick={() => { onOpenProject(project.id) }}>{t('viewProject')}</button>}
       </div>
     </header>
 
+    {ended && <div className={css.notice}><strong>{t('meetingEndedTitle')}</strong><p>{t('meetingEndedHelp')}</p></div>}
     {meeting.error && <div className={css.alert} role="alert"><p>{meeting.error}</p></div>}
 
     <ol className={css.chat} ref={list} aria-live="polite">

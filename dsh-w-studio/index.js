@@ -565,6 +565,7 @@ var liveCheckedActions = /* @__PURE__ */ new Set([
   "draftMinutes",
   "saveMinutes",
   "resumeMeeting",
+  "reviewMinutes",
   "meetingProject",
   "closeMeeting"
 ]);
@@ -888,7 +889,8 @@ var Studio = class _Studio {
           }
           case "draftMinutes": {
             const meeting2 = this.meeting(identity(command.input));
-            if (meeting2.status !== "open" && meeting2.status !== "review") throw new Error("The meeting has ended");
+            if (meeting2.projectId !== null) throw new Error("This meeting already created a project");
+            if (meeting2.status === "drafting") throw new Error("The minutes are already being drafted");
             if (this.meetingRuns.has(meeting2.id)) throw new Error("Wait for the current speaker or stop the turn first");
             if (!meeting2.messages.length) throw new Error("Discuss something before drafting minutes");
             meeting2.status = "drafting";
@@ -907,8 +909,17 @@ var Studio = class _Studio {
           }
           case "resumeMeeting": {
             const meeting2 = this.meeting(identity(command.input));
-            if (meeting2.status !== "review") throw new Error("Only meetings awaiting minutes confirmation can resume");
+            if (meeting2.status !== "review" && !(meeting2.status === "closed" && meeting2.projectId === null)) {
+              throw new Error("Only meetings awaiting minutes confirmation or ended without a project can resume");
+            }
             meeting2.status = "open";
+            meeting2.error = "";
+            break;
+          }
+          case "reviewMinutes": {
+            const meeting2 = this.meeting(identity(command.input));
+            if (meeting2.status !== "closed" || meeting2.projectId !== null || !meeting2.minutes) throw new Error("Only ended meetings with minutes and no project can reopen their minutes");
+            meeting2.status = "review";
             break;
           }
           case "meetingProject": {

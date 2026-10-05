@@ -468,6 +468,36 @@ describe('meeting room', () => {
     expect(parseState(state).meetings).toHaveLength(1)
   })
 
+  it('lets an ended meeting without a project still draft minutes, reopen, and create its project', async () => {
+    const fixture = await setup({ async run(_employee, _project, task) {
+      if (!task.assignment.includes('会议纪要')) return { message: '开干！', files: [], handoffs: [] }
+      return { files: [], handoffs: [], message: JSON.stringify({ summary: 'Agreed scope.', decisions: [], projectName: 'After meeting',
+        objective: 'Ship it', acceptanceCriteria: '', tasks: [{ employeeId: fixture.roster[0]!.id, title: 'Write PRD', instruction: 'Write it' }] }) }
+    } })
+    const { id } = await meeting(fixture)
+    await fixture.command('meetingMessage', { id, message: 'OK, start working.', mentions: [] })
+    await spoken(fixture.studio, 1)
+    await fixture.command('closeMeeting', { id })
+    await expect(fixture.command('meetingMessage', { id, message: 'late', mentions: [] })).rejects.toThrow('not open')
+    // Ended without a project: minutes can still be drafted.
+    await fixture.command('draftMinutes', { id })
+    await vi.waitFor(() => { expect(fixture.studio.snapshot().meetings[0]!.status).toBe('review') })
+    // Ending again keeps the minutes; they can be reopened for editing without redrafting, or the meeting reopened.
+    await fixture.command('closeMeeting', { id })
+    expect((await fixture.command('reviewMinutes', { id })).meetings[0]!.status).toBe('review')
+    await fixture.command('closeMeeting', { id })
+    expect((await fixture.command('resumeMeeting', { id })).meetings[0]!.status).toBe('open')
+    await fixture.command('closeMeeting', { id })
+    await fixture.command('reviewMinutes', { id })
+    const minutes = fixture.studio.snapshot().meetings[0]!.minutes!
+    const state = await fixture.command('meetingProject', { id, minutes, cwd: '', sessionMode: 'new-task' })
+    expect(state.projects.some(project => project.name === 'After meeting')).toBe(true)
+    // Once a project exists the meeting is final.
+    await expect(fixture.command('draftMinutes', { id })).rejects.toThrow('already created a project')
+    await expect(fixture.command('resumeMeeting', { id })).rejects.toThrow()
+    await expect(fixture.command('reviewMinutes', { id })).rejects.toThrow()
+  })
+
   it('keeps unstructured minutes as text, and stops or restarts a speaker without leaving a stale turn', async () => {
     const started = Promise.withResolvers<undefined>()
     let block = false

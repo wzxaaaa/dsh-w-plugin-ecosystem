@@ -33,7 +33,7 @@ const meetingChainLimit = 6
 /** Meeting actions validate against the live meeting (status, attendees, active turn) instead of the observed revision,
  * because background speaker turns advance the revision between every browser poll. */
 const liveCheckedActions = new Set(['createMeeting', 'updateMeeting', 'meetingMessage', 'stopMeeting', 'draftMinutes',
-  'saveMinutes', 'resumeMeeting', 'meetingProject', 'closeMeeting'])
+  'saveMinutes', 'resumeMeeting', 'reviewMinutes', 'meetingProject', 'closeMeeting'])
 
 function identity(input: unknown): string {
   const schema = z.object({ id: z.string().min(1).required() })
@@ -304,7 +304,9 @@ export class Studio {
           }
           case 'draftMinutes': {
             const meeting = this.meeting(identity(command.input))
-            if (meeting.status !== 'open' && meeting.status !== 'review') throw new Error('The meeting has ended')
+            // An ended meeting can still produce minutes until it has created a project.
+            if (meeting.projectId !== null) throw new Error('This meeting already created a project')
+            if (meeting.status === 'drafting') throw new Error('The minutes are already being drafted')
             if (this.meetingRuns.has(meeting.id)) throw new Error('Wait for the current speaker or stop the turn first')
             if (!meeting.messages.length) throw new Error('Discuss something before drafting minutes')
             meeting.status = 'drafting'; meeting.queue = []; meeting.error = ''
@@ -321,8 +323,17 @@ export class Studio {
           }
           case 'resumeMeeting': {
             const meeting = this.meeting(identity(command.input))
-            if (meeting.status !== 'review') throw new Error('Only meetings awaiting minutes confirmation can resume')
-            meeting.status = 'open'
+            if (meeting.status !== 'review' && !(meeting.status === 'closed' && meeting.projectId === null)) {
+              throw new Error('Only meetings awaiting minutes confirmation or ended without a project can resume')
+            }
+            meeting.status = 'open'; meeting.error = ''
+            break
+          }
+          case 'reviewMinutes': {
+            // Reopen existing minutes of an ended meeting for editing without drafting them again.
+            const meeting = this.meeting(identity(command.input))
+            if (meeting.status !== 'closed' || meeting.projectId !== null || !meeting.minutes) throw new Error('Only ended meetings with minutes and no project can reopen their minutes')
+            meeting.status = 'review'
             break
           }
           case 'meetingProject': {
