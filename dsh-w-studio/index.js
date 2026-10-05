@@ -81,7 +81,48 @@ async function writeFileAtomic(filename, content, options) {
 
 // src/validation.ts
 import { isAbsolute, normalize, relative } from "node:path";
+import { randomUUID as randomUUID2 } from "node:crypto";
+
+// src/templates.ts
 import { randomUUID } from "node:crypto";
+var lean = [
+  ["\u4EA7\u54C1\u8D1F\u8D23\u4EBA", "codex", "\u660E\u786E\u7528\u6237\u3001\u76EE\u6807\u3001\u8303\u56F4\u548C\u9A8C\u6536\u6807\u51C6\uFF0C\u7F16\u5199\u4EA7\u54C1\u6587\u6863\uFF1B\u4E3A\u540E\u7EED\u5C97\u4F4D\u4EA4\u63A5\u53EF\u6267\u884C\u4EFB\u52A1\u3002"],
+  ["UI\u8BBE\u8BA1\u5E08", "claude", "\u6839\u636E\u4EA7\u54C1\u6587\u6863\u8BBE\u8BA1\u9875\u9762\u3001\u4EA4\u4E92\u548C\u89C6\u89C9\u89C4\u8303\uFF0C\u4EA4\u4ED8\u53EF\u4F9B\u5DE5\u7A0B\u5E08\u4F7F\u7528\u7684\u8BBE\u8BA1\u6587\u4EF6\u3002"],
+  ["\u5168\u6808\u5DE5\u7A0B\u5E08", "codex", "\u6839\u636E\u4EA7\u54C1\u548C\u8BBE\u8BA1\u6587\u6863\u5B9E\u73B0\u8F6F\u4EF6\uFF0C\u8FD0\u884C\u6784\u5EFA\u4E0E\u76F8\u5173\u6D4B\u8BD5\uFF0C\u4EA4\u4ED8\u53EF\u542F\u52A8\u7684\u4EE3\u7801\u3002"],
+  ["\u6D4B\u8BD5\u5DE5\u7A0B\u5E08", "harness", "\u9A8C\u8BC1\u529F\u80FD\u4E0E\u9A8C\u6536\u6807\u51C6\uFF0C\u590D\u73B0\u7F3A\u9677\uFF0C\u4FEE\u590D\u6388\u6743\u8303\u56F4\u5185\u7684\u95EE\u9898\uFF0C\u4EA4\u4ED8\u6D4B\u8BD5\u62A5\u544A\u3002"]
+];
+var full = [
+  ["\u4EA7\u54C1\u8D1F\u8D23\u4EBA", "codex", "\u68B3\u7406\u4EA7\u54C1\u76EE\u6807\u3001\u7528\u6237\u6D41\u7A0B\u3001\u9700\u6C42\u4F18\u5148\u7EA7\u548C\u9A8C\u6536\u6807\u51C6\uFF0C\u4EA4\u4ED8\u4EA7\u54C1\u6587\u6863\u3002"],
+  ["\u6280\u672F\u8D1F\u8D23\u4EBA", "codex", "\u5B9A\u4E49\u6280\u672F\u65B9\u6848\u3001\u6A21\u5757\u5206\u5DE5\u3001\u6570\u636E\u63A5\u53E3\u548C\u98CE\u9669\uFF0C\u4EA4\u4ED8\u67B6\u6784\u4E0E\u63A5\u53E3\u6587\u6863\u3002"],
+  ["UI\u8BBE\u8BA1\u5E08", "claude", "\u8BBE\u8BA1\u754C\u9762\u3001\u4EA4\u4E92\u3001\u54CD\u5E94\u5F0F\u5E03\u5C40\u548C\u7EC4\u4EF6\u89C4\u8303\uFF0C\u4EA4\u4ED8\u8BBE\u8BA1\u6587\u4EF6\u3002"],
+  ["\u524D\u7AEF\u5DE5\u7A0B\u5E08", "claude", "\u5B9E\u73B0\u9875\u9762\u548C\u4EA4\u4E92\uFF0C\u5BF9\u63A5\u63A5\u53E3\uFF0C\u9A8C\u8BC1\u54CD\u5E94\u5F0F\u5E03\u5C40\u3001\u65E0\u969C\u788D\u548C\u524D\u7AEF\u6784\u5EFA\u3002"],
+  ["\u540E\u7AEF\u5DE5\u7A0B\u5E08", "codex", "\u5B9E\u73B0\u670D\u52A1\u3001\u5B58\u50A8\u548C\u63A5\u53E3\uFF0C\u5904\u7406\u9519\u8BEF\u8DEF\u5F84\uFF0C\u8FD0\u884C\u540E\u7AEF\u6D4B\u8BD5\u3002"],
+  ["\u6D4B\u8BD5\u5DE5\u7A0B\u5E08", "harness", "\u6267\u884C\u529F\u80FD\u548C\u96C6\u6210\u9A8C\u6536\uFF0C\u590D\u73B0\u5E76\u4FEE\u590D\u7F3A\u9677\uFF0C\u4EA4\u4ED8\u6D4B\u8BD5\u4E0E\u5269\u4F59\u95EE\u9898\u62A5\u544A\u3002"],
+  ["\u4EA4\u4ED8\u8D1F\u8D23\u4EBA", "harness", "\u68C0\u67E5\u4EA4\u4ED8\u7269\u3001\u8FD0\u884C\u65B9\u5F0F\u548C\u6D4B\u8BD5\u8BC1\u636E\uFF0C\u7F16\u5199\u90E8\u7F72\u8BF4\u660E\u4E0E\u4EA4\u4ED8\u6E05\u5355\u3002"]
+];
+function members(roles) {
+  return roles.map(([role, engine2, responsibilities]) => ({
+    name: role,
+    role,
+    responsibilities,
+    engine: engine2,
+    model: engine2 === "claude" ? "sonnet" : "",
+    effort: "",
+    permission: "workspace-write",
+    baseURL: "",
+    apiKeyEnv: "",
+    thinkingFormat: "none",
+    contextWindow: 262144,
+    maxTokens: 32768
+  }));
+}
+function defaultTemplates() {
+  const createdAt = (/* @__PURE__ */ new Date()).toISOString();
+  return [
+    { id: randomUUID(), name: "\u7CBE\u7B80\u4EA7\u54C1\u56E2\u961F", description: "4 \u4EBA\uFF1A\u4EA7\u54C1\u3001UI \u8BBE\u8BA1\u3001\u5168\u6808\u5F00\u53D1\u3001\u6D4B\u8BD5", members: members(lean), createdAt },
+    { id: randomUUID(), name: "\u5B8C\u6574\u7814\u53D1\u56E2\u961F", description: "7 \u4EBA\uFF1A\u4EA7\u54C1\u3001\u6280\u672F\u8D1F\u8D23\u4EBA\u3001UI \u8BBE\u8BA1\u3001\u524D\u7AEF\u3001\u540E\u7AEF\u3001\u6D4B\u8BD5\u3001\u4EA4\u4ED8", members: members(full), createdAt }
+  ];
+}
 
 // src/schema.ts
 import z from "@deepseek-ai/schemastery";
@@ -109,8 +150,7 @@ var text = z.string().max(1e5).required();
 var short = z.string().max(500).required();
 var engine = z.union(["codex", "claude", "harness", "compatible"]).required();
 var permission = z.union(["read-only", "workspace-write", "full-access"]).required();
-var employeeSchema = z.object({
-  id,
+var memberFields = {
   name: short,
   role: short,
   responsibilities: text,
@@ -118,14 +158,14 @@ var employeeSchema = z.object({
   model: short,
   effort: short,
   permission,
-  cwd: short,
-  enabled: z.boolean().required(),
   baseURL: short,
   apiKeyEnv: short,
   thinkingFormat: z.union(["none", "deepseek", "zai"]).required(),
   contextWindow: z.number().step(1).min(1024).max(1e7).required(),
   maxTokens: z.number().step(1).min(1).max(1e6).required()
-});
+};
+var employeeSchema = z.object({ ...memberFields, id, cwd: short, enabled: z.boolean().required() });
+var memberSchema = z.object(memberFields);
 var projectFields = {
   id,
   name: short,
@@ -233,7 +273,10 @@ var meeting = z.object({
   projectId: z.union([id, z.const(null)]),
   createdAt: short
 });
-var stateSchema = z.object({ ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() });
+var stateV3Fields = { ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() };
+var stateV3Schema = z.object(stateV3Fields);
+var templateSchema = z.object({ id, name: short, description: text, members: z.array(memberSchema).required(), createdAt: short });
+var stateSchema = z.object({ ...stateV3Fields, version: z.const(4).required(), templates: z.array(templateSchema).required() });
 
 // src/validation.ts
 function parseState(input) {
@@ -300,10 +343,18 @@ function parseState(input) {
       if (meeting2.minutes.tasks.some((task) => !employees.has(task.employeeId))) throw new Error("Stored meeting minutes refer to a missing employee");
     }
   }
+  identities(state.templates);
+  for (const template of state.templates) {
+    if (!template.name.trim() || !template.members.length) throw new Error("Stored team template needs a name and members");
+    for (const member of template.members) validateMember(member);
+  }
   return state;
 }
 function migrateStateV2(input) {
-  return parseState({ ...parseFields(stateV2Schema, input), version: 3, meetings: [] });
+  return migrateStateV3({ ...parseFields(stateV2Schema, input), version: 3, meetings: [] });
+}
+function migrateStateV3(input) {
+  return parseState({ ...parseFields(stateV3Schema, input), version: 4, templates: defaultTemplates() });
 }
 function migrateStateV1(input) {
   const old = parseFields(stateV1Schema, input);
@@ -311,7 +362,7 @@ function migrateStateV1(input) {
   const projects = old.projects.map((project) => {
     let workspace = workspaces.find((value) => value.path === project.cwd);
     if (!workspace) {
-      workspace = { id: randomUUID(), name: project.name, path: project.cwd, createdAt: project.createdAt };
+      workspace = { id: randomUUID2(), name: project.name, path: project.cwd, createdAt: project.createdAt };
       workspaces.push(workspace);
     }
     return { ...project, workspaceId: workspace.id, acceptanceCriteria: "", sessionMode: "new-task" };
@@ -345,6 +396,9 @@ function validateEmployee(employee) {
     if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) throw new Error("Provider URL must use HTTP(S) without embedded credentials");
     if (!employee.model || !employee.apiKeyEnv) throw new Error("Compatible providers require a model and credential reference");
   }
+}
+function validateMember(member) {
+  validateEmployee({ ...member, id: "template-member", cwd: "", enabled: true });
 }
 function outputName(name2) {
   if (!name2 || isAbsolute(name2) || name2.includes("\0") || name2.includes(":")) throw new Error("Output files must be project-relative paths");
@@ -437,40 +491,30 @@ ${value.message}`).join("\n\n")}
   }
 }
 
-// src/templates.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
-function teamTemplate(kind) {
-  const roles = kind === "lean" ? [
-    ["\u4EA7\u54C1\u8D1F\u8D23\u4EBA", "codex", "\u660E\u786E\u7528\u6237\u3001\u76EE\u6807\u3001\u8303\u56F4\u548C\u9A8C\u6536\u6807\u51C6\uFF0C\u7F16\u5199\u4EA7\u54C1\u6587\u6863\uFF1B\u4E3A\u540E\u7EED\u5C97\u4F4D\u4EA4\u63A5\u53EF\u6267\u884C\u4EFB\u52A1\u3002"],
-    ["UI\u8BBE\u8BA1\u5E08", "claude", "\u6839\u636E\u4EA7\u54C1\u6587\u6863\u8BBE\u8BA1\u9875\u9762\u3001\u4EA4\u4E92\u548C\u89C6\u89C9\u89C4\u8303\uFF0C\u4EA4\u4ED8\u53EF\u4F9B\u5DE5\u7A0B\u5E08\u4F7F\u7528\u7684\u8BBE\u8BA1\u6587\u4EF6\u3002"],
-    ["\u5168\u6808\u5DE5\u7A0B\u5E08", "codex", "\u6839\u636E\u4EA7\u54C1\u548C\u8BBE\u8BA1\u6587\u6863\u5B9E\u73B0\u8F6F\u4EF6\uFF0C\u8FD0\u884C\u6784\u5EFA\u4E0E\u76F8\u5173\u6D4B\u8BD5\uFF0C\u4EA4\u4ED8\u53EF\u542F\u52A8\u7684\u4EE3\u7801\u3002"],
-    ["\u6D4B\u8BD5\u5DE5\u7A0B\u5E08", "harness", "\u9A8C\u8BC1\u529F\u80FD\u4E0E\u9A8C\u6536\u6807\u51C6\uFF0C\u590D\u73B0\u7F3A\u9677\uFF0C\u4FEE\u590D\u6388\u6743\u8303\u56F4\u5185\u7684\u95EE\u9898\uFF0C\u4EA4\u4ED8\u6D4B\u8BD5\u62A5\u544A\u3002"]
-  ] : [
-    ["\u4EA7\u54C1\u8D1F\u8D23\u4EBA", "codex", "\u68B3\u7406\u4EA7\u54C1\u76EE\u6807\u3001\u7528\u6237\u6D41\u7A0B\u3001\u9700\u6C42\u4F18\u5148\u7EA7\u548C\u9A8C\u6536\u6807\u51C6\uFF0C\u4EA4\u4ED8\u4EA7\u54C1\u6587\u6863\u3002"],
-    ["\u6280\u672F\u8D1F\u8D23\u4EBA", "codex", "\u5B9A\u4E49\u6280\u672F\u65B9\u6848\u3001\u6A21\u5757\u5206\u5DE5\u3001\u6570\u636E\u63A5\u53E3\u548C\u98CE\u9669\uFF0C\u4EA4\u4ED8\u67B6\u6784\u4E0E\u63A5\u53E3\u6587\u6863\u3002"],
-    ["UI\u8BBE\u8BA1\u5E08", "claude", "\u8BBE\u8BA1\u754C\u9762\u3001\u4EA4\u4E92\u3001\u54CD\u5E94\u5F0F\u5E03\u5C40\u548C\u7EC4\u4EF6\u89C4\u8303\uFF0C\u4EA4\u4ED8\u8BBE\u8BA1\u6587\u4EF6\u3002"],
-    ["\u524D\u7AEF\u5DE5\u7A0B\u5E08", "claude", "\u5B9E\u73B0\u9875\u9762\u548C\u4EA4\u4E92\uFF0C\u5BF9\u63A5\u63A5\u53E3\uFF0C\u9A8C\u8BC1\u54CD\u5E94\u5F0F\u5E03\u5C40\u3001\u65E0\u969C\u788D\u548C\u524D\u7AEF\u6784\u5EFA\u3002"],
-    ["\u540E\u7AEF\u5DE5\u7A0B\u5E08", "codex", "\u5B9E\u73B0\u670D\u52A1\u3001\u5B58\u50A8\u548C\u63A5\u53E3\uFF0C\u5904\u7406\u9519\u8BEF\u8DEF\u5F84\uFF0C\u8FD0\u884C\u540E\u7AEF\u6D4B\u8BD5\u3002"],
-    ["\u6D4B\u8BD5\u5DE5\u7A0B\u5E08", "harness", "\u6267\u884C\u529F\u80FD\u548C\u96C6\u6210\u9A8C\u6536\uFF0C\u590D\u73B0\u5E76\u4FEE\u590D\u7F3A\u9677\uFF0C\u4EA4\u4ED8\u6D4B\u8BD5\u4E0E\u5269\u4F59\u95EE\u9898\u62A5\u544A\u3002"],
-    ["\u4EA4\u4ED8\u8D1F\u8D23\u4EBA", "harness", "\u68C0\u67E5\u4EA4\u4ED8\u7269\u3001\u8FD0\u884C\u65B9\u5F0F\u548C\u6D4B\u8BD5\u8BC1\u636E\uFF0C\u7F16\u5199\u90E8\u7F72\u8BF4\u660E\u4E0E\u4EA4\u4ED8\u6E05\u5355\u3002"]
-  ];
-  return roles.map(([role, engine2, responsibilities]) => ({
-    id: randomUUID2(),
-    name: role,
-    role,
-    responsibilities,
-    engine: engine2,
-    model: engine2 === "claude" ? "sonnet" : "",
-    effort: "",
-    permission: "workspace-write",
-    cwd: "",
-    enabled: true,
-    baseURL: "",
-    apiKeyEnv: "",
-    thinkingFormat: "none",
-    contextWindow: 262144,
-    maxTokens: 32768
-  }));
+// src/roster.ts
+function hasHistory(state, id2) {
+  return state.tasks.some((task) => task.employeeId === id2) || state.meetings.some((meeting2) => meeting2.attendeeIds.some((value) => value === id2) || meeting2.messages.some((message) => message.from === id2) || meeting2.minutes?.tasks.some((task) => task.employeeId === id2) === true);
+}
+function seat(value) {
+  return `${value.name.trim()}\0${value.role.trim()}`;
+}
+function planTemplate(state, template) {
+  const plan = { keep: [], add: [], remove: [], disable: [] };
+  const claimed = /* @__PURE__ */ new Set();
+  for (const member of template.members) {
+    const match = state.employees.find((employee) => !claimed.has(employee.id) && seat(employee) === seat(member));
+    if (match) {
+      claimed.add(match.id);
+      plan.keep.push(match);
+    } else plan.add.push(member);
+  }
+  for (const employee of state.employees) {
+    if (claimed.has(employee.id)) continue;
+    if (hasHistory(state, employee.id)) {
+      if (employee.enabled) plan.disable.push(employee);
+    } else plan.remove.push(employee);
+  }
+  return plan;
 }
 
 // src/studio.ts
@@ -530,7 +574,7 @@ function identity(input) {
 }
 function freshState() {
   return {
-    version: 3,
+    version: 4,
     revision: 0,
     workspaces: [],
     activeWorkspaceId: null,
@@ -539,7 +583,8 @@ function freshState() {
     tasks: [],
     messages: [],
     artifacts: [],
-    meetings: []
+    meetings: [],
+    templates: defaultTemplates()
   };
 }
 function within(root, path) {
@@ -574,15 +619,17 @@ var Studio = class _Studio {
         throw error;
       }
     };
-    const v3 = await read("studio.v3.json");
-    if (v3 !== void 0) studio.state = parseState(v3);
-    else {
-      const v2 = await read("studio.v2.json");
-      if (v2 !== void 0) studio.state = migrateStateV2(v2);
-      else {
-        const v1 = await read("studio.v1.json");
-        if (v1 !== void 0) studio.state = migrateStateV1(v1);
-      }
+    const journals = [
+      ["studio.v4.json", parseState],
+      ["studio.v3.json", migrateStateV3],
+      ["studio.v2.json", migrateStateV2],
+      ["studio.v1.json", migrateStateV1]
+    ];
+    for (const [name2, load] of journals) {
+      const content = await read(name2);
+      if (content === void 0) continue;
+      studio.state = load(content);
+      break;
     }
     for (const task of studio.state.tasks) {
       if (task.status === "running") {
@@ -616,7 +663,7 @@ var Studio = class _Studio {
     return next;
   }
   async persist() {
-    const path = join3(this.config.storageRoot, "studio.v3.json");
+    const path = join3(this.config.storageRoot, "studio.v4.json");
     await writeFileAtomic(path, `${JSON.stringify(this.state, null, 2)}
 `, { mode: 384, dirMode: 448 });
   }
@@ -633,6 +680,11 @@ var Studio = class _Studio {
     const project = this.state.projects.find((value) => value.id === id2);
     if (!project) throw new Error("Project does not exist");
     return project;
+  }
+  template(id2) {
+    const template = this.state.templates.find((value) => value.id === id2);
+    if (!template) throw new Error("Team template does not exist");
+    return template;
   }
   meeting(id2) {
     const meeting2 = this.state.meetings.find((value) => value.id === id2);
@@ -699,9 +751,46 @@ var Studio = class _Studio {
             this.state.activeWorkspaceId = workspace.id;
             break;
           }
-          case "template": {
-            const kind = parseFields(z2.object({ kind: z2.union(["lean", "full"]).required() }), command.input).kind;
-            this.state.employees.push(...teamTemplate(kind));
+          case "applyTemplate": {
+            const template = this.template(identity(command.input));
+            const plan = planTemplate(this.state, template);
+            const affected = new Set([...plan.remove, ...plan.disable].map((employee) => employee.id));
+            if ([...this.active.values()].some((run) => affected.has(run.employeeId)) || this.state.meetings.some((meeting2) => meeting2.speaking !== null && affected.has(meeting2.speaking))) {
+              throw new Error("Stop running tasks and meeting turns of employees leaving the team first");
+            }
+            const removed = new Set(plan.remove.map((employee) => employee.id));
+            this.state.employees = this.state.employees.filter((employee) => !removed.has(employee.id));
+            for (const employee of this.state.employees) {
+              if (plan.disable.some((value) => value.id === employee.id)) employee.enabled = false;
+              if (plan.keep.some((value) => value.id === employee.id)) employee.enabled = true;
+            }
+            for (const meeting2 of this.state.meetings) meeting2.queue = meeting2.queue.filter((id2) => !affected.has(id2));
+            this.state.employees.push(...plan.add.map((member) => ({ ...member, id: randomUUID3(), cwd: "", enabled: true })));
+            break;
+          }
+          case "saveTemplate": {
+            const input = parseFields(templateSchema, command.input);
+            if (!input.name.trim() || !input.members.length) throw new Error("A team template needs a name and at least one member");
+            if (input.members.length > 50) throw new Error("A team template can have at most 50 members");
+            for (const member of input.members) validateMember(member);
+            const existing = this.state.templates.find((value) => value.id === input.id);
+            if (existing) Object.assign(existing, { name: input.name, description: input.description, members: input.members });
+            else this.state.templates.push({ ...input, id: input.id, createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+            break;
+          }
+          case "deleteTemplate": {
+            const id2 = identity(command.input);
+            this.template(id2);
+            this.state.templates = this.state.templates.filter((value) => value.id !== id2);
+            break;
+          }
+          case "deleteEmployees": {
+            const ids = [...new Set(parseFields(z2.object({ ids: z2.array(z2.string()).required() }), command.input).ids)];
+            for (const id2 of ids) {
+              this.employee(id2);
+              if (hasHistory(this.state, id2)) throw new Error("Employees with task or meeting history can be disabled but cannot be deleted");
+            }
+            this.state.employees = this.state.employees.filter((employee) => !ids.includes(employee.id));
             break;
           }
           case "saveEmployee": {

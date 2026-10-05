@@ -100,7 +100,7 @@ it('runs native employees through cordis.yml without leaking private progress in
   expect(partial.claude).toEqual([])
   expect(partial.claudeError).toContain('Claude model discovery failed')
   expect(JSON.stringify(partial)).not.toContain('PRIVATE_REASONING_SENTINEL')
-  const roster = (await command('template', { kind: 'lean' })).employees.slice(0, 2)
+  const roster = (await command('applyTemplate', { id: (await state()).templates[0]!.id })).employees.slice(0, 2)
   for (const employee of roster) await command('saveEmployee', { ...employee, model: employee.engine === 'codex' ? 'fixture-codex' : 'fixture-claude', effort: 'high' })
   const company = await command('createWorkspace', { name: 'Company', path: cwd })
   const created = await command('createProject', { name: 'Native delivery', objective: 'Deliver a document', cwd, workspaceId: company.activeWorkspaceId, acceptanceCriteria: 'Verified delivery', sessionMode: 'employee-project', employeeIds: roster.map(e => e.id) })

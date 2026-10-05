@@ -460,6 +460,27 @@ li[data-status="blocked"] .step { border-style: dashed; }
 .minutesTaskActions { display: grid; gap: 2px; }
 .studio .minutesTaskActions button { min-height: 26px; width: 28px; padding: 0; }
 
+/* Team templates and bulk roster management */
+.studio .rosterItem[data-bulk="true"] { grid-template-columns: auto auto minmax(0, 1fr) auto; cursor: pointer; }
+.studio .rosterItem[data-bulk="true"]:hover { background: var(--s-hover); }
+.studio .rosterItem[data-bulk="true"]:has(input:checked) { background: var(--s-bad-soft); border-color: transparent; }
+.rosterItem[data-locked="true"] { cursor: not-allowed; }
+.rosterItem[data-locked="true"] small { color: var(--s-faint); }
+.bulkBar { display: grid; gap: 8px; margin-bottom: 10px; padding: 10px 12px; border-radius: var(--s-radius-sm); background: var(--s-sunken); font-size: 12.5px; color: var(--s-ink-2); }
+.memberRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 4px 6px; border: 1px solid var(--s-line); border-radius: var(--s-radius-sm); }
+.memberRow[aria-current="true"] { border-color: var(--s-accent); background: var(--s-accent-soft); }
+.memberRow > .step { grid-area: auto; }
+.studio .memberMain { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 6px; border: 0; background: transparent; text-align: left; white-space: normal; font-weight: 400; }
+.memberEditor { padding: 14px; border: 1px solid var(--s-accent); border-radius: var(--s-radius); }
+.memberEditor .editorCard { max-width: none; }
+.memberEditor .formFooter { position: static; background: none; }
+.applyPlan { display: grid; gap: 12px; padding: 14px 16px; border-radius: var(--s-radius); border: 1px solid var(--s-warn-soft); background: color-mix(in srgb, var(--s-warn-soft) 40%, transparent); }
+.planRow { display: contents; }
+.applyPlan .facts { grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); }
+.planRow[data-kind="applyAdd"] dt { color: var(--s-ok); }
+.planRow[data-kind="applyRemove"] dt { color: var(--s-bad); }
+.planRow[data-kind="applyDisable"] dt { color: var(--s-warn); }
+
 /* Responsive */
 @media (max-width: 1100px) {
   .workArea { grid-template-columns: minmax(0, 1fr); }

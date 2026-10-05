@@ -17,6 +17,8 @@ export interface EmployeeEditorProps {
   t: T
   save: (employee: Employee) => Promise<boolean>
   remove: (id: Employee['id']) => Promise<boolean>
+  /** Template members have no working directory or enablement and are saved with their template. */
+  variant?: 'employee' | 'member'
 }
 const efforts: Record<Engine, readonly string[]> = {
   claude: ['', 'low', 'medium', 'high', 'xhigh', 'max'],
@@ -27,7 +29,8 @@ const efforts: Record<Engine, readonly string[]> = {
 const engines = ['codex', 'claude', 'harness', 'compatible'] as const
 
 /** Edit one employee without copying its native transcript into the form. */
-export function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove }: EmployeeEditorProps) {
+export function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove, variant = 'employee' }: EmployeeEditorProps) {
+  const member = variant === 'member'
   const [draft, setDraft] = useState(employee)
   const [customModel, setCustomModel] = useState(false)
   const [outcome, setOutcome] = useState<'idle' | 'saving' | 'saved' | 'failed' | 'deleting'>('idle')
@@ -58,7 +61,7 @@ export function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save,
       <Avatar id={draft.id} name={draft.name} size="lg" />
       <div>
         <h2 id={`${id}-title`}>{draft.name || t('newEmployee')}</h2>
-        <p>{draft.role || t('noRole')}{!draft.enabled && <> · {t('disabled')}</>}</p>
+        <p>{draft.role || t('noRole')}{!member && !draft.enabled && <> · {t('disabled')}</>}{member && <> · {t('templateMember')}</>}</p>
       </div>
     </header>
 
@@ -66,7 +69,7 @@ export function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save,
       <legend>{t('profile')}</legend>
       <div className={css.fieldPair}>{text('name', '', true)}{text('role')}</div>
       <label className={css.field}><span>{t('responsibilities')}</span><textarea rows={3} value={draft.responsibilities} onChange={(event) => { change('responsibilities', event.target.value) }} /></label>
-      <label className={css.switch}><input type="checkbox" checked={draft.enabled} onChange={(event) => { change('enabled', event.target.checked) }} /><span>{t('enabled')}</span></label>
+      {!member && <label className={css.switch}><input type="checkbox" checked={draft.enabled} onChange={(event) => { change('enabled', event.target.checked) }} /><span>{t('enabled')}</span></label>}
     </fieldset>
 
     <fieldset className={css.formGroup}>
@@ -106,8 +109,8 @@ export function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save,
     </fieldset>
 
     <fieldset className={css.formGroup}>
-      <legend>{t('workplace')}</legend>
-      {text('cwd', t('unassignedCwd'))}
+      <legend>{t(member ? 'permission' : 'workplace')}</legend>
+      {!member && text('cwd', t('unassignedCwd'))}
       <label className={css.field}><span>{t('permission')}</span><select aria-label={t('permission')} value={draft.permission} onChange={(event) => { change('permission', event.target.value as Permission) }}>
         <option value="read-only">{t('readOnly')}</option><option value="workspace-write">{t('workspaceWrite')}</option><option value="full-access">{t('fullAccess')}</option>
       </select></label>
@@ -115,16 +118,16 @@ export function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save,
 
     <footer className={css.formFooter}>
       <div className={css.actions}>
-        <button type="submit" className={css.primary} disabled={busy || !dirty}><Busy on={outcome === 'saving'} />{t(outcome === 'saving' ? 'saving' : 'save')}</button>
+        <button type="submit" className={css.primary} disabled={busy || !dirty}><Busy on={outcome === 'saving'} />{t(outcome === 'saving' ? 'saving' : member ? 'updateMember' : 'save')}</button>
         {confirmDelete
           ? <><button type="button" className={css.dangerSolid} disabled={busy} onClick={() => {
             setOutcome('deleting')
             void remove(draft.id).then((ok) => { setConfirmDelete(false); setOutcome(ok ? 'idle' : 'failed') })
           }}>{t('confirmDelete')}</button><button type="button" className={css.ghost} onClick={() => { setConfirmDelete(false) }}>{t('cancelAction')}</button></>
-          : <button type="button" className={css.ghostDanger} disabled={busy} onClick={() => { setConfirmDelete(true) }}>{t(isNew ? 'discard' : 'delete')}</button>}
+          : <button type="button" className={css.ghostDanger} disabled={busy} onClick={() => { setConfirmDelete(true) }}>{t(member ? 'removeMember' : isNew ? 'discard' : 'delete')}</button>}
       </div>
       <p className={css.formStatus} role="status" data-state={outcome === 'failed' ? 'error' : outcome === 'saved' && !dirty ? 'ok' : 'idle'}>
-        {outcome === 'failed' ? error || t('failure') : outcome === 'saved' && !dirty ? t('settingsSaved') : dirty && !isNew ? t('unsaved') : ''}
+        {outcome === 'failed' ? error || t('failure') : outcome === 'saved' && !dirty ? t(member ? 'memberUpdated' : 'settingsSaved') : dirty && !isNew ? t('unsaved') : ''}
       </p>
     </footer>
   </form>

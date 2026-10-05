@@ -146,9 +146,21 @@ export interface Meeting {
   projectId: StudioProjectId | null
   createdAt: string
 }
+/** Template identity minted by Studio or the browser editor. */
+export type StudioTemplateId = Branded<'StudioTemplateId'>
+/** Employee settings a template creates; directory and enablement belong to the company roster. */
+export type TemplateMember = Omit<Employee, 'id' | 'cwd' | 'enabled'>
+/** Editable team definition. Applying it replaces the roster instead of appending to it. */
+export interface TeamTemplate {
+  id: StudioTemplateId
+  name: string
+  description: string
+  members: TemplateMember[]
+  createdAt: string
+}
 /** Studio's versioned local document; public HTTP responses use the same records. */
 export interface StudioState {
-  version: 3
+  version: 4
   revision: number
   workspaces: StudioWorkspace[]
   activeWorkspaceId: StudioWorkspaceId | null
@@ -158,6 +170,7 @@ export interface StudioState {
   messages: Handoff[]
   artifacts: Artifact[]
   meetings: Meeting[]
+  templates: TeamTemplate[]
 }
 /** Explicit deployment limits and executable argv prefixes. */
 export interface StudioConfig {

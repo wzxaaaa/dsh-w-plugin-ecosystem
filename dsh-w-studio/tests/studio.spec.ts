@@ -9,6 +9,7 @@ import { Config } from '../src/index.ts'
 import { finalHandoff } from '../src/executor.ts'
 import { teamTemplate } from '../src/templates.ts'
 import { outputName, parseState } from '../src/validation.ts'
+import { planTemplate, redundantEmployees, toMember } from '../src/roster.ts'
 import type { EmployeeResult, StudioConfig, StudioExecutor, StudioState, Task, StudioNativeSessionId } from '../src/types.ts'
 
 const owners: { studio: Studio; root: string }[] = []
@@ -121,7 +122,7 @@ describe('public employee handoffs', () => {
     expect(run).not.toHaveBeenCalled()
     await symlink(fixture.config.storageRoot, join(fixture.cwd, '.studio'), process.platform === 'win32' ? 'junction' : 'dir')
     await expect(fixture.command('exportProject', { id: fixture.project.id })).rejects.toThrow('inside the company')
-    expect(await readdir(fixture.config.storageRoot)).toEqual(['studio.v3.json'])
+    expect(await readdir(fixture.config.storageRoot)).toEqual(['studio.v4.json'])
   })
 
   it('migrates the v1 journal into a successor while preserving the predecessor bytes', async () => {
@@ -134,7 +135,7 @@ describe('public employee handoffs', () => {
       tasks: current.tasks.map(({ nativeSessions: _sessions, reviewStatus: _review, ...task }) => task),
       messages: current.messages, artifacts: current.artifacts }
     const bytes = JSON.stringify(old)+'\n'
-    await rm(join(fixture.config.storageRoot, 'studio.v3.json'))
+    await rm(join(fixture.config.storageRoot, 'studio.v4.json'))
     await writeFile(join(fixture.config.storageRoot, 'studio.v1.json'), bytes)
     const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-migration-')) })
@@ -143,7 +144,7 @@ describe('public employee handoffs', () => {
     expect(reopened.snapshot().projects[0]!.sessionMode).toBe('new-task')
     expect(reopened.snapshot().workspaces[0]!.path).toBe(fixture.cwd)
     expect(await readFile(join(fixture.config.storageRoot, 'studio.v1.json'), 'utf8')).toBe(bytes)
-    expect(parseState(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v3.json'), 'utf8'))).version).toBe(3)
+    expect(parseState(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v4.json'), 'utf8'))).version).toBe(4)
   })
   it('publishes image bytes unchanged and gives a dependent employee the immutable image path', async () => {
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jOZkAAAAASUVORK5CYII=', 'base64')
@@ -216,9 +217,9 @@ describe('public employee handoffs', () => {
     const before = fixture.studio.snapshot()
     const task = fixture.tasks[0]!
     await expect(fixture.command('editTask', { id: task.id, task: { ...taskFields(task), dependsOn: [fixture.tasks[1]!.id] } })).rejects.toThrow('cycle')
-    await expect(fixture.studio.command({ action: 'template', input: { kind: 'full' }, expectedRevision: 0 })).rejects.toThrow('refresh')
+    await expect(fixture.studio.command({ action: 'applyTemplate', input: { id: 'stale' }, expectedRevision: 0 })).rejects.toThrow('refresh')
     expect(fixture.studio.snapshot()).toEqual(before)
-    expect(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v3.json'), 'utf8'))).toEqual(before)
+    expect(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v4.json'), 'utf8'))).toEqual(before)
     await expect(fixture.command('saveEmployee', { ...fixture.roster[0], id: '../bad' })).rejects.toThrow()
   })
 
@@ -228,15 +229,15 @@ describe('public employee handoffs', () => {
     const state = fixture.studio.snapshot()
     state.tasks[0]!.status = 'running'
     state.projects[0]!.status = 'running'
-    await writeFile(join(fixture.config.storageRoot, 'studio.v3.json'), JSON.stringify(state))
+    await writeFile(join(fixture.config.storageRoot, 'studio.v4.json'), JSON.stringify(state))
     const run = vi.fn(async () => summary)
     const reopened = await Studio.open(fixture.config, { run })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-reopen-')) })
     expect(reopened.snapshot().tasks[0]!.status).toBe('interrupted')
     expect(reopened.snapshot().projects[0]!.status).toBe('paused')
     expect(run).not.toHaveBeenCalled()
-    expect(parseState(reopened.snapshot()).version).toBe(3)
-    expect(() => parseState({ ...state, version: 4 })).toThrow()
+    expect(parseState(reopened.snapshot()).version).toBe(4)
+    expect(() => parseState({ ...state, version: 5 })).toThrow()
   })
 
   it('refuses malformed durable relationships and extra private protocol fields', async () => {
@@ -375,19 +376,19 @@ describe('meeting room', () => {
     expect(value.speaking).toBeNull()
   })
 
-  it('migrates the v2 journal into v3 while preserving the predecessor bytes', async () => {
+  it('migrates the v2 journal into the current file while preserving the predecessor bytes', async () => {
     const fixture = await setup({ async run() { return summary } })
     await fixture.studio.close()
-    const { meetings: _meetings, ...current } = fixture.studio.snapshot()
+    const { meetings: _meetings, templates: _templates, ...current } = fixture.studio.snapshot()
     const bytes = JSON.stringify({ ...current, version: 2 })+'\n'
-    await rm(join(fixture.config.storageRoot, 'studio.v3.json'))
+    await rm(join(fixture.config.storageRoot, 'studio.v4.json'))
     await writeFile(join(fixture.config.storageRoot, 'studio.v2.json'), bytes)
     const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-v2-')) })
     expect(reopened.snapshot().meetings).toEqual([])
     expect(reopened.snapshot().tasks).toEqual(current.tasks)
     expect(await readFile(join(fixture.config.storageRoot, 'studio.v2.json'), 'utf8')).toBe(bytes)
-    expect((await readdir(fixture.config.storageRoot)).sort()).toEqual(['studio.v2.json', 'studio.v3.json'])
+    expect((await readdir(fixture.config.storageRoot)).sort()).toEqual(['studio.v2.json', 'studio.v4.json'])
   })
 
   it('lets the host answer by default, follows mentions and handoffs, and runs every turn read-only in the company directory', async () => {
@@ -420,7 +421,7 @@ describe('meeting room', () => {
     await expect(fixture.command('meetingMessage', { id, message: 'x', mentions: [fixture.project.id] })).rejects.toThrow('attendees')
     // Background turns advance the revision; chat messages must not fail as stale while other edits still do.
     await fixture.studio.command({ action: 'meetingMessage', input: { id, message: 'Sent from a stale view.', mentions: [guest.id] }, expectedRevision: 0 })
-    await expect(fixture.studio.command({ action: 'template', input: { kind: 'lean' }, expectedRevision: 0 })).rejects.toThrow('refresh')
+    await expect(fixture.studio.command({ action: 'applyTemplate', input: { id: 'stale' }, expectedRevision: 0 })).rejects.toThrow('refresh')
   })
 
   it('caps employee-to-employee chains so the floor returns to the client', async () => {
@@ -499,12 +500,103 @@ describe('meeting room', () => {
     crashed.meetings[0]!.speaking = fixture.roster[0]!.id
     crashed.meetings[0]!.queue = [fixture.roster[1]!.id]
     await fixture.studio.close()
-    await writeFile(join(fixture.config.storageRoot, 'studio.v3.json'), JSON.stringify(crashed))
+    await writeFile(join(fixture.config.storageRoot, 'studio.v4.json'), JSON.stringify(crashed))
     const run = vi.fn(async () => summary)
     const reopened = await Studio.open(fixture.config, { run })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-meeting-')) })
     expect(reopened.snapshot().meetings[0]).toMatchObject({ speaking: null, queue: [] })
     expect(run).not.toHaveBeenCalled()
+  })
+})
+
+describe('team templates', () => {
+  it('replaces the roster instead of appending, so applying twice changes nothing', async () => {
+    const fixture = await setup({ async run(_employee, project, task) {
+      await report(project.cwd, task)
+      return summary
+    } })
+    const templates = fixture.studio.snapshot().templates
+    expect(templates.map(value => value.members.length)).toEqual([4, 7])
+    const [product, designer] = fixture.roster
+    // The fixture roster already worked on a project; give the product seat a custom model to prove it is kept.
+    await fixture.command('saveEmployee', { ...product, model: 'custom-model' })
+    const stray = { ...teamTemplate('full')[1]!, name: 'Temporary helper' }
+    await fixture.command('saveEmployee', stray)
+    const first = await fixture.command('applyTemplate', { id: templates[0]!.id })
+    expect(first.employees.map(value => value.name)).toEqual(['产品负责人', 'UI设计师', '全栈工程师', '测试工程师'])
+    expect(first.employees.find(value => value.id === product!.id)).toMatchObject({ model: 'custom-model', enabled: true })
+    expect(first.employees.some(value => value.id === stray.id)).toBe(false)
+    const again = await fixture.command('applyTemplate', { id: templates[0]!.id })
+    expect(again.employees).toEqual(first.employees)
+    const full = await fixture.command('applyTemplate', { id: templates[1]!.id })
+    expect(full.employees.filter(value => value.enabled)).toHaveLength(7)
+    // Employees with task history stay as disabled records; those without history are removed.
+    expect(full.employees.find(value => value.id === designer!.id)?.enabled).toBe(true)
+    expect(full.employees.some(value => value.name === '全栈工程师')).toBe(false)
+    expect(parseState(full).employees).toHaveLength(7)
+    const lean = planTemplate(full, templates[0]!)
+    expect(lean.add.map(value => value.name)).toEqual(['全栈工程师'])
+    expect(lean.disable).toEqual([])
+    expect(lean.remove.map(value => value.name)).toEqual(['技术负责人', '前端工程师', '后端工程师', '交付负责人'])
+  })
+
+  it('disables leaving employees with history and refuses to replace a team member who is working', async () => {
+    const started = Promise.withResolvers<undefined>()
+    const fixture = await setup({ async run(_employee, _project, _task, signal) {
+      started.resolve(undefined)
+      await new Promise<void>((resolve) => { signal.addEventListener('abort', () => { resolve() }, { once: true }) })
+      throw signal.reason
+    } })
+    const solo = await fixture.command('saveTemplate', { id: 'solo-template', name: 'Solo', description: '', createdAt: '',
+      members: [toMember({ ...fixture.roster[1]!, name: 'Reviewer', role: 'Reviewer' })] })
+    const id = solo.templates.at(-1)!.id
+    await fixture.command('startProject', { id: fixture.project.id })
+    await started.promise
+    await expect(fixture.command('applyTemplate', { id })).rejects.toThrow('Stop running tasks')
+    await fixture.command('stopProject', { id: fixture.project.id })
+    // The run leaves the active set just after its cancellation is recorded.
+    const state = await vi.waitFor(() => fixture.command('applyTemplate', { id }))
+    expect(state.employees.map(value => [value.name, value.enabled])).toEqual([['产品负责人', false], ['UI设计师', false], ['Reviewer', true]])
+  })
+
+  it('edits, validates, and deletes templates, and migrates v3 with seeded templates', async () => {
+    const fixture = await setup({ async run() { return summary } })
+    const member = toMember(fixture.roster[0]!)
+    await expect(fixture.command('saveTemplate', { id: 'empty', name: 'Empty', description: '', createdAt: '', members: [] })).rejects.toThrow('at least one member')
+    await expect(fixture.command('saveTemplate', { id: 'bad', name: 'Bad', description: '', createdAt: '',
+      members: [{ ...member, engine: 'compatible', model: '' }] })).rejects.toThrow()
+    await expect(fixture.command('saveTemplate', { id: 'private', name: 'Private', description: '', createdAt: '',
+      members: [{ ...member, apiKey: 'secret' }] })).rejects.toThrow('apiKey')
+    await fixture.command('saveTemplate', { id: 'mine', name: 'Mine', description: 'v1', createdAt: '', members: [member] })
+    const edited = await fixture.command('saveTemplate', { id: 'mine', name: 'Mine', description: 'v2', createdAt: '', members: [member, { ...member, name: 'Second' }] })
+    expect(edited.templates.filter(value => value.id === 'mine')).toHaveLength(1)
+    expect(edited.templates.find(value => value.id === 'mine')).toMatchObject({ description: 'v2' })
+    expect(edited.templates.find(value => value.id === 'mine')!.createdAt).not.toBe('')
+    expect((await fixture.command('deleteTemplate', { id: 'mine' })).templates.some(value => value.id === 'mine')).toBe(false)
+
+    await fixture.studio.close()
+    const { templates: _templates, ...current } = fixture.studio.snapshot()
+    const bytes = JSON.stringify({ ...current, version: 3 })+'\n'
+    await rm(join(fixture.config.storageRoot, 'studio.v4.json'))
+    await writeFile(join(fixture.config.storageRoot, 'studio.v3.json'), bytes)
+    const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
+    owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-v3-')) })
+    expect(reopened.snapshot().templates.map(value => value.name)).toEqual(['精简产品团队', '完整研发团队'])
+    expect(reopened.snapshot().employees).toEqual(current.employees)
+    expect(await readFile(join(fixture.config.storageRoot, 'studio.v3.json'), 'utf8')).toBe(bytes)
+  })
+
+  it('bulk-deletes redundant copies but never employees with history', async () => {
+    const fixture = await setup({ async run() { return summary } })
+    const copies = [teamTemplate('lean')[0]!, teamTemplate('lean')[0]!, teamTemplate('lean')[0]!]
+    for (const copy of copies) await fixture.command('saveEmployee', copy)
+    const redundant = redundantEmployees(fixture.studio.snapshot())
+    // The fixture's own product lead has task history, so all three later copies are redundant.
+    expect(redundant.map(value => value.id)).toEqual(copies.map(value => value.id))
+    await expect(fixture.command('deleteEmployees', { ids: [...redundant.map(value => value.id), fixture.roster[0]!.id] })).rejects.toThrow('history')
+    expect(fixture.studio.snapshot().employees).toHaveLength(5)
+    const state = await fixture.command('deleteEmployees', { ids: redundant.map(value => value.id) })
+    expect(state.employees.map(value => value.id)).toEqual(fixture.roster.map(value => value.id))
   })
 })
 

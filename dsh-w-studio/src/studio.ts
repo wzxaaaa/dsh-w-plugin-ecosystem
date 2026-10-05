@@ -5,11 +5,12 @@ import { createReadStream } from 'node:fs'
 import { join, resolve, relative, isAbsolute } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import type { Artifact, StudioArtifactId, Employee, StudioEmployeeId, EmployeeResult, StudioMessageId, Project, StudioProjectId, StudioConfig, StudioExecutor, StudioState, Task, StudioTaskId, StudioWorkspaceId, StudioNativeSessionId, Meeting, MeetingMinutes, StudioMeetingId, StudioNativeSession } from './types.ts'
-import { employeeSchema, outputName, parseState, migrateStateV1, migrateStateV2, validateEmployee, withinDirectory } from './validation.ts'
+import type { Artifact, StudioArtifactId, Employee, StudioEmployeeId, EmployeeResult, StudioMessageId, Project, StudioProjectId, StudioConfig, StudioExecutor, StudioState, Task, StudioTaskId, StudioWorkspaceId, StudioNativeSessionId, Meeting, MeetingMinutes, StudioMeetingId, StudioNativeSession, StudioTemplateId, TeamTemplate } from './types.ts'
+import { employeeSchema, outputName, parseState, migrateStateV1, migrateStateV2, migrateStateV3, validateEmployee, validateMember, withinDirectory } from './validation.ts'
 import { exportProject } from './workspace.ts'
-import { minutesSchema, parseFields } from './schema.ts'
-import { teamTemplate } from './templates.ts'
+import { minutesSchema, parseFields, templateSchema } from './schema.ts'
+import { defaultTemplates } from './templates.ts'
+import { hasHistory, planTemplate } from './roster.ts'
 
 const commandSchema = z.object({
   action: z.string().required(), expectedRevision: z.natural().required(),
@@ -39,8 +40,8 @@ function identity(input: unknown): string {
   return (z.resolve(input, schema, {})[0] as ReturnType<typeof schema>).id
 }
 function freshState(): StudioState {
-  return { version: 3, revision: 0, workspaces: [], activeWorkspaceId: null,
-    employees: [], projects: [], tasks: [], messages: [], artifacts: [], meetings: [] }
+  return { version: 4, revision: 0, workspaces: [], activeWorkspaceId: null,
+    employees: [], projects: [], tasks: [], messages: [], artifacts: [], meetings: [], templates: defaultTemplates() }
 }
 function within(root: string, path: string): boolean {
   const rel = relative(root, path)
@@ -77,15 +78,13 @@ export class Studio {
       }
     }
     // Predecessor journals are read once into the current file and left byte-for-byte unchanged.
-    const v3 = await read('studio.v3.json')
-    if (v3 !== undefined) studio.state = parseState(v3)
-    else {
-      const v2 = await read('studio.v2.json')
-      if (v2 !== undefined) studio.state = migrateStateV2(v2)
-      else {
-        const v1 = await read('studio.v1.json')
-        if (v1 !== undefined) studio.state = migrateStateV1(v1)
-      }
+    const journals: [string, (input: unknown) => StudioState][] = [['studio.v4.json', parseState], ['studio.v3.json', migrateStateV3],
+      ['studio.v2.json', migrateStateV2], ['studio.v1.json', migrateStateV1]]
+    for (const [name, load] of journals) {
+      const content = await read(name)
+      if (content === undefined) continue
+      studio.state = load(content)
+      break
     }
     for (const task of studio.state.tasks) {
       if (task.status === 'running') {
@@ -119,7 +118,7 @@ export class Studio {
     return next
   }
   private async persist(): Promise<void> {
-    const path = join(this.config.storageRoot, 'studio.v3.json')
+    const path = join(this.config.storageRoot, 'studio.v4.json')
     await writeFileAtomic(path, `${JSON.stringify(this.state, null, 2)}\n`, { mode: 0o600, dirMode: 0o700 })
   }
   private async commit(): Promise<void> {
@@ -135,6 +134,11 @@ export class Studio {
     const project = this.state.projects.find(value => value.id === id)
     if (!project) throw new Error('Project does not exist')
     return project
+  }
+  private template(id: string): TeamTemplate {
+    const template = this.state.templates.find(value => value.id === id)
+    if (!template) throw new Error('Team template does not exist')
+    return template
   }
   private meeting(id: string): Meeting {
     const meeting = this.state.meetings.find(value => value.id === id)
@@ -188,9 +192,46 @@ export class Studio {
             this.state.activeWorkspaceId = workspace.id
             break
           }
-          case 'template': {
-            const kind = parseFields(z.object({ kind: z.union(['lean', 'full'] as const).required() }), command.input).kind
-            this.state.employees.push(...teamTemplate(kind))
+          case 'applyTemplate': {
+            const template = this.template(identity(command.input))
+            const plan = planTemplate(this.state, template)
+            const affected = new Set([...plan.remove, ...plan.disable].map(employee => employee.id))
+            if ([...this.active.values()].some(run => affected.has(run.employeeId)) || this.state.meetings.some(meeting => meeting.speaking !== null && affected.has(meeting.speaking))) {
+              throw new Error('Stop running tasks and meeting turns of employees leaving the team first')
+            }
+            const removed = new Set(plan.remove.map(employee => employee.id))
+            this.state.employees = this.state.employees.filter(employee => !removed.has(employee.id))
+            for (const employee of this.state.employees) {
+              if (plan.disable.some(value => value.id === employee.id)) employee.enabled = false
+              if (plan.keep.some(value => value.id === employee.id)) employee.enabled = true
+            }
+            for (const meeting of this.state.meetings) meeting.queue = meeting.queue.filter(id => !affected.has(id))
+            this.state.employees.push(...plan.add.map(member => ({ ...member, id: randomUUID() as StudioEmployeeId, cwd: '', enabled: true })))
+            break
+          }
+          case 'saveTemplate': {
+            const input = parseFields(templateSchema, command.input)
+            if (!input.name.trim() || !input.members.length) throw new Error('A team template needs a name and at least one member')
+            if (input.members.length > 50) throw new Error('A team template can have at most 50 members')
+            for (const member of input.members) validateMember(member)
+            const existing = this.state.templates.find(value => value.id === input.id)
+            if (existing) Object.assign(existing, { name: input.name, description: input.description, members: input.members })
+            else this.state.templates.push({ ...input, id: input.id as StudioTemplateId, createdAt: new Date().toISOString() })
+            break
+          }
+          case 'deleteTemplate': {
+            const id = identity(command.input)
+            this.template(id)
+            this.state.templates = this.state.templates.filter(value => value.id !== id)
+            break
+          }
+          case 'deleteEmployees': {
+            const ids = [...new Set(parseFields(z.object({ ids: z.array(z.string()).required() }), command.input).ids)]
+            for (const id of ids) {
+              this.employee(id)
+              if (hasHistory(this.state, id)) throw new Error('Employees with task or meeting history can be disabled but cannot be deleted')
+            }
+            this.state.employees = this.state.employees.filter(employee => !ids.includes(employee.id))
             break
           }
           case 'saveEmployee': {

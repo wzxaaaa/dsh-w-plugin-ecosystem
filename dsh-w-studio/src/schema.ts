@@ -33,15 +33,17 @@ const short = z.string().max(500).required()
 const engine = z.union(['codex', 'claude', 'harness', 'compatible'] as const).required()
 const permission = z.union(['read-only', 'workspace-write', 'full-access'] as const).required()
 
-/** Complete employee parser; credentials are referenced by name, never stored as values. */
-export const employeeSchema = z.object({
-  id, name: short, role: short, responsibilities: text, engine, model: short,
-  effort: short, permission, cwd: short, enabled: z.boolean().required(),
-  baseURL: short, apiKeyEnv: short,
+const memberFields = {
+  name: short, role: short, responsibilities: text, engine, model: short,
+  effort: short, permission, baseURL: short, apiKeyEnv: short,
   thinkingFormat: z.union(['none', 'deepseek', 'zai'] as const).required(),
   contextWindow: z.number().step(1).min(1024).max(10_000_000).required(),
   maxTokens: z.number().step(1).min(1).max(1_000_000).required(),
-})
+}
+/** Complete employee parser; credentials are referenced by name, never stored as values. */
+export const employeeSchema = z.object({ ...memberFields, id, cwd: short, enabled: z.boolean().required() })
+/** Template member parser: employee settings without identity, directory, or enablement. */
+export const memberSchema = z.object(memberFields)
 
 const projectFields = { id, name: short, objective: text, cwd: short,
   status: z.union(['paused', 'running', 'completed'] as const).required(), createdAt: short }
@@ -97,5 +99,11 @@ const meeting = z.object({ id, workspaceId: id, title: short, agenda: text, host
   minutes: z.union([minutesSchema, z.const(null)]),
   projectId: z.union([id, z.const(null)]), createdAt: short })
 
-/** Current document: v2 plus meetings. */
-export const stateSchema = z.object({ ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() })
+const stateV3Fields = { ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() }
+/** Frozen v3 fields (v2 plus meetings) used only to read the predecessor journal. */
+export const stateV3Schema = z.object(stateV3Fields)
+
+/** Editable team template; also the `saveTemplate` input. */
+export const templateSchema = z.object({ id, name: short, description: text, members: z.array(memberSchema).required(), createdAt: short })
+/** Current document: v3 plus editable team templates. */
+export const stateSchema = z.object({ ...stateV3Fields, version: z.const(4).required(), templates: z.array(templateSchema).required() })

@@ -863,8 +863,7 @@ var text = Schema.string().max(1e5).required();
 var short = Schema.string().max(500).required();
 var engine = Schema.union(["codex", "claude", "harness", "compatible"]).required();
 var permission = Schema.union(["read-only", "workspace-write", "full-access"]).required();
-var employeeSchema = Schema.object({
-  id,
+var memberFields = {
   name: short,
   role: short,
   responsibilities: text,
@@ -872,14 +871,14 @@ var employeeSchema = Schema.object({
   model: short,
   effort: short,
   permission,
-  cwd: short,
-  enabled: Schema.boolean().required(),
   baseURL: short,
   apiKeyEnv: short,
   thinkingFormat: Schema.union(["none", "deepseek", "zai"]).required(),
   contextWindow: Schema.number().step(1).min(1024).max(1e7).required(),
   maxTokens: Schema.number().step(1).min(1).max(1e6).required()
-});
+};
+var employeeSchema = Schema.object({ ...memberFields, id, cwd: short, enabled: Schema.boolean().required() });
+var memberSchema = Schema.object(memberFields);
 var projectFields = {
   id,
   name: short,
@@ -987,7 +986,10 @@ var meeting = Schema.object({
   projectId: Schema.union([id, Schema.const(null)]),
   createdAt: short
 });
-var stateSchema = Schema.object({ ...stateV2Fields, version: Schema.const(3).required(), meetings: Schema.array(meeting).required() });
+var stateV3Fields = { ...stateV2Fields, version: Schema.const(3).required(), meetings: Schema.array(meeting).required() };
+var stateV3Schema = Schema.object(stateV3Fields);
+var templateSchema = Schema.object({ id, name: short, description: text, members: Schema.array(memberSchema).required(), createdAt: short });
+var stateSchema = Schema.object({ ...stateV3Fields, version: Schema.const(4).required(), templates: Schema.array(templateSchema).required() });
 
 // src/client/controller.ts
 var engineHealth = Schema.object({ available: Schema.boolean().required(), version: Schema.string().required() });
@@ -1124,7 +1126,7 @@ var StudioController = class {
 };
 
 // src/client/StudioPanel.tsx
-var import_react11 = require("react");
+var import_react12 = require("react");
 
 // src/client/HandoffTimeline.tsx
 var import_react2 = require("react");
@@ -1268,9 +1270,9 @@ if (typeof document !== "undefined") {
     tag.dataset.pluginCss = tagId;
     document.head.appendChild(tag);
   }
-  tag.textContent = '.r2poiG_studio{--s-bg:var(--dsw-alias-bg-base,#fff);--s-raised:var(--dsw-alias-bg-layer-1,#fff);--s-sunken:var(--dsw-alias-interactive-bg-hover,#2631480d);--s-hover:var(--dsw-alias-interactive-bg-hover,#2631480f);--s-active:var(--dsw-alias-interactive-bg-active,#2631481a);--s-ink:var(--dsw-alias-label-primary,#141b2b);--s-ink-2:var(--dsw-alias-label-secondary,#3d475c);--s-muted:var(--dsw-alias-label-tertiary,#5e6a80);--s-faint:var(--dsw-alias-label-caption,#8e98aa);--s-line:var(--dsw-alias-border-l2,#0000001a);--s-line-soft:var(--dsw-alias-border-l1,#0000000d);--s-line-strong:var(--dsw-alias-border-l3,#00000024);--s-accent:var(--dsw-alias-state-business-primary,#3a6ff7);--s-accent-soft:var(--dsw-alias-state-business-tertiary,#e8efff);--s-primary:var(--dsw-alias-button-primary-fill,#141b2b);--s-primary-hover:var(--dsw-alias-button-primary-hover,#2d3548);--s-on-primary:var(--dsw-alias-label-primary-inverted,#fff);--s-ok:var(--dsw-alias-state-success-primary,#1f9d55);--s-ok-soft:var(--dsw-alias-state-success-tertiary,#e3f6ea);--s-warn:var(--dsw-alias-state-warn-label,#b46a00);--s-warn-soft:var(--dsw-alias-state-warn-tertiary,#fff3dc);--s-bad:var(--dsw-alias-state-error-primary,#d42a2a);--s-bad-soft:var(--dsw-alias-interactive-bg-hover-danger,#ec131314);--s-radius:10px;--s-radius-sm:7px;--s-shadow:var(--dsw-elevation-prominent,0 8px 28px #141b2b24);--s-mono:var(--ds-font-family-code,"SF Mono", "JetBrains Mono", Consolas, monospace);--s-gutter:28px;background:var(--s-bg);height:100%;color:var(--s-ink);font-family:var(--dsw-font-family,-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);font-size:14px;line-height:1.6;overflow:hidden auto}body[data-ds-dark-theme] .r2poiG_studio{--s-sunken:#ffffff0a}.r2poiG_studio *,.r2poiG_studio :before,.r2poiG_studio :after{box-sizing:border-box}.r2poiG_studio h1,.r2poiG_studio h2,.r2poiG_studio h3,.r2poiG_studio h4,.r2poiG_studio p,.r2poiG_studio ul,.r2poiG_studio ol,.r2poiG_studio dl,.r2poiG_studio dd,.r2poiG_studio blockquote,.r2poiG_studio fieldset{margin:0}.r2poiG_studio h2{font-size:17px;font-weight:650;line-height:1.4}.r2poiG_studio h3{color:var(--studio-h3,var(--s-ink-2));font-size:13px;font-weight:600;line-height:1.4}.r2poiG_studio h4{color:var(--s-muted);margin:14px 0 6px;font-size:12px;font-weight:600}.r2poiG_studio ul,.r2poiG_studio ol{padding:0;list-style:none}.r2poiG_studio fieldset{border:0;min-width:0;padding:0}.r2poiG_studio legend{padding:0}.r2poiG_studio small{font-size:12px}.r2poiG_studio code{font-family:var(--s-mono);font-size:12px}.r2poiG_studio button,.r2poiG_studio input,.r2poiG_studio textarea,.r2poiG_studio select{font:inherit;color:inherit}.r2poiG_studio button,.r2poiG_linkButton{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);background:var(--s-raised);min-height:34px;color:var(--s-ink);cursor:pointer;white-space:nowrap;justify-content:center;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;line-height:1.4;text-decoration:none;transition:background .12s,border-color .12s,color .12s;display:inline-flex}.r2poiG_studio button:hover:not(:disabled),.r2poiG_linkButton:hover{background:var(--s-hover)}.r2poiG_studio button:disabled{opacity:.45;cursor:not-allowed}.r2poiG_studio :focus-visible{outline:2px solid var(--s-accent);outline-offset:2px}.r2poiG_studio .r2poiG_primary{background:var(--s-primary);border-color:var(--s-primary);color:var(--s-on-primary)}.r2poiG_studio .r2poiG_primary:hover:not(:disabled){background:var(--s-primary-hover);border-color:var(--s-primary-hover)}.r2poiG_studio .r2poiG_ghost{color:var(--s-ink-2);background:0 0;border-color:#0000}.r2poiG_studio .r2poiG_ghost:hover:not(:disabled){background:var(--s-hover);color:var(--s-ink)}.r2poiG_studio .r2poiG_ghostDanger{color:var(--s-bad);background:0 0;border-color:#0000}.r2poiG_studio .r2poiG_ghostDanger:hover:not(:disabled){background:var(--s-bad-soft)}.r2poiG_studio .r2poiG_dangerSolid{background:var(--s-bad);border-color:var(--s-bad);color:#fff}.r2poiG_studio .r2poiG_iconButton{width:32px;min-height:32px;color:var(--s-muted);background:0 0;border-color:#0000;padding:0;font-size:20px}.r2poiG_studio input,.r2poiG_studio textarea,.r2poiG_studio select{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);background:var(--s-raised);width:100%;min-width:0;min-height:36px;color:var(--s-ink);padding:7px 11px;font-size:13px;line-height:1.5}.r2poiG_studio textarea{resize:vertical}.r2poiG_studio input:hover,.r2poiG_studio textarea:hover,.r2poiG_studio select:hover{border-color:var(--s-faint)}.r2poiG_studio input:focus,.r2poiG_studio textarea:focus,.r2poiG_studio select:focus{border-color:var(--s-accent);box-shadow:0 0 0 3px var(--s-accent-soft);outline:none}.r2poiG_studio input::placeholder,.r2poiG_studio textarea::placeholder{color:var(--s-faint)}.r2poiG_studio input[type=checkbox],.r2poiG_studio input[type=radio]{width:16px;height:16px;min-height:0;accent-color:var(--s-accent);box-shadow:none;flex:none;margin:0;padding:0}.r2poiG_spinner{vertical-align:-1px;border:2px solid;border-right-color:#0000;border-radius:50%;width:12px;height:12px;animation:.7s linear infinite r2poiG_spin;display:inline-block}@keyframes r2poiG_spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.r2poiG_spinner{animation-duration:2s}}.r2poiG_mono{overflow-wrap:anywhere;font-size:12px;font-family:var(--s-mono)!important}.r2poiG_muted{color:var(--s-muted);font-size:12px}.r2poiG_hint{color:var(--s-muted);font-size:12px;line-height:1.6}.r2poiG_footnote{color:var(--s-faint);font-size:12px;margin-top:20px!important}.r2poiG_srOnly{clip:rect(0 0 0 0);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}.r2poiG_actions{flex-wrap:wrap;align-items:center;gap:8px;display:flex}.r2poiG_report{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font:inherit;color:var(--s-ink);margin:0;font-size:13px;line-height:1.75}.r2poiG_topbar{padding:22px var(--s-gutter) 16px;justify-content:space-between;align-items:center;gap:24px;display:flex}.r2poiG_brand{min-width:0}.r2poiG_brand h1{letter-spacing:-.3px;font-size:24px;font-weight:700;line-height:1.3}.r2poiG_brand p{color:var(--s-muted);font-size:13px}.r2poiG_workspace{align-items:flex-end;gap:8px;min-width:0;display:flex}.r2poiG_workspacePicker{gap:2px;width:340px;min-width:0;max-width:100%;display:grid}.r2poiG_workspacePicker>span{color:var(--s-faint);letter-spacing:.2px;font-size:11px;font-weight:500}.r2poiG_workspacePicker select{font-weight:600}.r2poiG_workspacePicker small{color:var(--s-faint);white-space:nowrap;text-overflow:ellipsis;font-size:11px;overflow:hidden}.r2poiG_workspaceForm{margin:0 var(--s-gutter) 16px;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-sunken);gap:14px;padding:18px 20px;display:grid}.r2poiG_workspaceForm form{gap:12px;display:grid}.r2poiG_inputWithButton{gap:8px;display:flex}.r2poiG_tabs{z-index:3;padding:0 var(--s-gutter);border-bottom:1px solid var(--s-line);background:var(--s-bg);justify-content:space-between;align-items:center;gap:12px;display:flex;position:sticky;top:0}.r2poiG_tabList{scrollbar-width:none;gap:4px;min-width:0;display:flex;overflow-x:auto}.r2poiG_studio .r2poiG_tab{min-height:44px;color:var(--s-muted);background:0 0;border:0;border-radius:0;padding:10px 12px;font-size:14px;position:relative}.r2poiG_studio .r2poiG_tab:hover:not(:disabled){color:var(--s-ink);background:0 0}.r2poiG_studio .r2poiG_tab[aria-current=page]{color:var(--s-ink);font-weight:600}.r2poiG_studio .r2poiG_tab[aria-current=page]:after{content:"";background:var(--s-ink);border-radius:2px;height:2px;position:absolute;bottom:-1px;left:10px;right:10px}.r2poiG_count{background:var(--s-sunken);min-width:20px;color:var(--s-muted);text-align:center;border-radius:10px;padding:0 6px;font-size:11px;font-weight:500;line-height:18px}.r2poiG_banner{margin:14px var(--s-gutter) 0;border-radius:var(--s-radius-sm);background:var(--s-bad-soft);color:var(--s-bad);overflow-wrap:anywhere;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;font-size:13px;display:flex}.r2poiG_emptyState{margin:28px var(--s-gutter);border:1px dashed var(--s-line-strong);border-radius:var(--s-radius);text-align:center;color:var(--s-muted);justify-items:center;gap:8px;padding:40px 20px;display:grid}.r2poiG_emptyState strong{color:var(--s-ink);font-size:15px}.r2poiG_detailPane .r2poiG_emptyState,.r2poiG_listPane .r2poiG_emptyState{margin:12px 0}.r2poiG_emptyInline{color:var(--s-faint);padding:4px 0;font-size:13px}.r2poiG_inlineError{color:var(--s-bad);overflow-wrap:anywhere;font-size:12px}.r2poiG_badge{background:var(--s-sunken);height:22px;color:var(--s-muted);white-space:nowrap;border-radius:11px;align-items:center;gap:5px;padding:0 8px;font-size:11.5px;font-weight:500;display:inline-flex}.r2poiG_badge i{background:currentColor;border-radius:50%;width:6px;height:6px}.r2poiG_badge[data-status=running],.r2poiG_badge[data-project=running]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_badge[data-status=running] i,.r2poiG_badge[data-project=running] i{animation:1.4s ease-in-out infinite r2poiG_pulse}.r2poiG_badge[data-status=completed],.r2poiG_badge[data-project=completed]{background:var(--s-ok-soft);color:var(--s-ok)}.r2poiG_badge[data-status=blocked]{color:var(--s-faint)}.r2poiG_badge[data-status=failed],.r2poiG_badge[data-status=interrupted]{background:var(--s-bad-soft);color:var(--s-bad)}.r2poiG_badge[data-status=cancelled]{color:var(--s-faint);text-decoration:line-through}.r2poiG_badge[data-project=review],.r2poiG_badge[data-review=pending]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_badge[data-review=accepted]{color:var(--s-ok);border:1px solid var(--s-ok-soft);background:0 0}.r2poiG_badge[data-review=superseded]{color:var(--s-muted);border:1px dashed var(--s-line-strong);background:0 0}@keyframes r2poiG_pulse{50%{opacity:.35}}.r2poiG_engineTag{white-space:nowrap;background:var(--s-sunken);color:var(--s-ink-2);border-radius:5px;padding:0 7px;font-size:11px;font-weight:600;line-height:19px;display:inline-block}.r2poiG_engineTag[data-engine=codex]{color:#0d8a6b;background:#10a37f1f}.r2poiG_engineTag[data-engine=claude]{color:#b85a3b;background:#d9775724}.r2poiG_engineTag[data-engine=harness]{color:#4060e0;background:#4d6bfe21}.r2poiG_engineTag[data-engine=compatible]{color:#7a4fd0;background:#8c5ce621}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=codex]{color:#4cd3ad}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=claude]{color:#f0a084}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=harness]{color:#93a8ff}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=compatible]{color:#c3a5ff}.r2poiG_avatar{--h:220;background:hsl(var(--h) 80% 55% / .14);width:34px;height:34px;color:hsl(var(--h) 55% 38%);border-radius:50%;flex:none;place-items:center;font-size:14px;font-weight:600;display:inline-grid}.r2poiG_avatar[data-size=sm]{width:22px;height:22px;font-size:11px}.r2poiG_avatar[data-size=lg]{width:46px;height:46px;font-size:19px}.r2poiG_avatar[data-tone="1"]{--h:265}.r2poiG_avatar[data-tone="2"]{--h:150}.r2poiG_avatar[data-tone="3"]{--h:30}.r2poiG_avatar[data-tone="4"]{--h:330}.r2poiG_avatar[data-tone="5"]{--h:190}.r2poiG_avatar[data-tone=user]{background:var(--s-primary);color:var(--s-on-primary)}body[data-ds-dark-theme] .r2poiG_avatar{color:hsl(var(--h) 80% 76%);background:hsl(var(--h) 60% 55% / .22)}.r2poiG_workArea{grid-template-columns:minmax(300px,400px) minmax(0,1fr);align-items:start;gap:0;display:grid}.r2poiG_listPane{padding:20px var(--s-gutter) 32px;border-right:1px solid var(--s-line);align-self:stretch;min-width:0}.r2poiG_detailPane{padding:20px var(--s-gutter) 40px;min-width:0;scroll-margin-top:52px}.r2poiG_paneHead{justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;display:flex}.r2poiG_toolRow{gap:8px;margin-bottom:10px;display:flex}.r2poiG_toolRow input{flex:1}.r2poiG_menu{position:relative}.r2poiG_menu>summary{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);cursor:pointer;white-space:nowrap;align-items:center;gap:6px;min-height:36px;padding:6px 12px;font-size:13px;font-weight:500;list-style:none;display:inline-flex}.r2poiG_menu>summary::-webkit-details-marker{display:none}.r2poiG_menu>summary:after{content:"\u25BE";color:var(--s-muted);font-size:10px}.r2poiG_menu[open]>summary{background:var(--s-hover)}.r2poiG_menuBody{z-index:5;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--dsw-specific-menu,var(--s-raised));width:280px;box-shadow:var(--s-shadow);gap:2px;padding:6px;display:grid;position:absolute;top:calc(100% + 6px);right:0}.r2poiG_studio .r2poiG_menuBody button{text-align:left;white-space:normal;background:0 0;border:0;justify-items:start;gap:0;width:100%;padding:8px 10px;display:grid}.r2poiG_menuBody button small{color:var(--s-muted);font-weight:400}.r2poiG_menuBody p{border-top:1px solid var(--s-line-soft);padding:6px 10px 4px;margin-top:4px!important}.r2poiG_healthRow{flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px;display:flex}.r2poiG_studio .r2poiG_healthRow>button{min-height:28px;padding:3px 8px;font-size:12px}.r2poiG_healthChip{color:var(--s-muted);align-items:center;gap:5px;font-size:11.5px;display:inline-flex}.r2poiG_healthChip i{background:var(--s-faint);border-radius:50%;width:7px;height:7px}.r2poiG_healthChip[data-available=true] i{background:var(--s-ok)}.r2poiG_healthChip[data-available=false]{color:var(--s-bad)}.r2poiG_healthChip[data-available=false] i{background:var(--s-bad)}.r2poiG_roster{gap:2px;display:grid}.r2poiG_studio .r2poiG_rosterItem{border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px;font-weight:400;display:grid}.r2poiG_studio .r2poiG_rosterItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_rosterItem[data-disabled=true]>:not(.r2poiG_rosterMeta){opacity:.55}.r2poiG_rosterText{min-width:0;display:grid}.r2poiG_rosterText strong{overflow-wrap:anywhere;flex-wrap:wrap;align-items:center;gap:6px;font-size:13.5px;font-weight:600;display:flex}.r2poiG_rosterText small{color:var(--s-muted);overflow-wrap:anywhere}.r2poiG_rosterMeta{justify-items:end;gap:2px;min-width:0;max-width:150px;display:grid}.r2poiG_rosterMeta small{color:var(--s-faint);white-space:nowrap;text-overflow:ellipsis;max-width:100%;font-size:11px;overflow:hidden}.r2poiG_offTag{color:var(--s-muted);border:1px solid var(--s-line-strong);border-radius:4px;padding:0 6px;font-size:10.5px;font-style:normal;font-weight:500;line-height:16px}.r2poiG_editorCard,.r2poiG_detailCard{gap:18px;max-width:860px;display:grid}.r2poiG_editorHead{align-items:center;gap:14px;padding-bottom:4px;display:flex}.r2poiG_editorHead h2{overflow-wrap:anywhere;font-size:19px}.r2poiG_editorHead p{color:var(--s-muted);font-size:13px}.r2poiG_formGroup{border:1px solid var(--s-line);border-radius:var(--s-radius);gap:14px;padding:18px;display:grid}.r2poiG_formGroup>legend{float:left;width:100%;color:var(--s-muted);letter-spacing:.3px;margin-bottom:2px;font-size:12px;font-weight:600}.r2poiG_formGroup>legend+*{clear:both}.r2poiG_field{gap:6px;min-width:0;display:grid}.r2poiG_field>span:first-child{color:var(--s-ink-2);font-size:12.5px;font-weight:500}.r2poiG_field>span:first-child small{color:var(--s-faint);font-weight:400}.r2poiG_fieldPair{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;display:grid}.r2poiG_switch{cursor:pointer;align-items:center;gap:8px;width:fit-content;font-size:13px;display:inline-flex}.r2poiG_segmented{border-radius:var(--s-radius);background:var(--s-sunken);grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:4px;display:grid}.r2poiG_segmented label{cursor:pointer;display:block;position:relative}.r2poiG_segmented input{opacity:0;pointer-events:none;position:absolute}.r2poiG_segmented span{border-radius:var(--s-radius-sm);text-align:center;color:var(--s-muted);overflow-wrap:anywhere;padding:7px 6px;font-size:12.5px;font-weight:500;line-height:1.35;display:block}.r2poiG_segmented input:checked+span{background:var(--s-raised);color:var(--s-ink);box-shadow:0 1px 3px #0000001f}.r2poiG_segmented input:focus-visible+span{outline:2px solid var(--s-accent)}.r2poiG_chips{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_chip{cursor:pointer;position:relative}.r2poiG_chip input{opacity:0;pointer-events:none;position:absolute}.r2poiG_chip span{border:1px solid var(--s-line-strong);color:var(--s-ink-2);border-radius:15px;padding:4px 11px;font-size:12.5px;display:inline-block}.r2poiG_chip input:checked+span{background:var(--s-primary);border-color:var(--s-primary);color:var(--s-on-primary)}.r2poiG_chip input:focus-visible+span{outline:2px solid var(--s-accent);outline-offset:2px}.r2poiG_modelPicker{gap:8px;display:grid}.r2poiG_modelPicker>legend{float:left;width:100%;color:var(--s-ink-2);font-size:12.5px;font-weight:500}.r2poiG_modelPicker>legend small{color:var(--s-faint);font-weight:400}.r2poiG_modelPicker>legend+*{clear:both}.r2poiG_modelList{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);max-height:288px;display:grid;overflow-y:auto}.r2poiG_modelOption{cursor:pointer;border-bottom:1px solid var(--s-line-soft);align-items:flex-start;gap:10px;padding:9px 12px;display:flex}.r2poiG_modelOption:last-child{border-bottom:0}.r2poiG_modelOption:hover{background:var(--s-hover)}.r2poiG_modelOption:has(input:checked){background:var(--s-accent-soft)}.r2poiG_modelOption input{margin-top:3px!important}.r2poiG_modelOption>span{min-width:0;display:grid}.r2poiG_modelOption strong{overflow-wrap:anywhere;font-size:13px;font-weight:600}.r2poiG_modelOption small{color:var(--s-muted);overflow-wrap:anywhere}.r2poiG_modelList>p{padding:9px 12px}.r2poiG_modelTags{flex-wrap:wrap;gap:4px;margin-top:2px;display:flex}.r2poiG_modelTags em{background:var(--s-sunken);color:var(--s-muted);border-radius:4px;padding:0 6px;font-size:10.5px;font-style:normal;line-height:17px}.r2poiG_formFooter{z-index:1;background:linear-gradient(to bottom, transparent, var(--s-bg) 30%);flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;display:flex;position:sticky;bottom:0}.r2poiG_formStatus{color:var(--s-muted);overflow-wrap:anywhere;font-size:12.5px}.r2poiG_formStatus[data-state=ok]{color:var(--s-ok)}.r2poiG_formStatus[data-state=error]{color:var(--s-bad)}.r2poiG_checkList{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);gap:2px;max-height:220px;padding:8px 10px;display:grid;overflow-y:auto}.r2poiG_checkList>legend{color:var(--s-ink-2);padding:0 4px;font-size:12.5px;font-weight:500}.r2poiG_checkList label{cursor:pointer;overflow-wrap:anywhere;align-items:flex-start;gap:8px;padding:5px 4px;font-size:13px;display:flex}.r2poiG_checkList b{color:var(--s-muted);font-weight:500}.r2poiG_checkList input{margin-top:3px!important}.r2poiG_projectBar{padding:18px var(--s-gutter) 18px;border-bottom:1px solid var(--s-line);gap:14px;display:grid}.r2poiG_projectTop{flex-wrap:wrap;align-items:center;gap:10px 12px;display:flex}.r2poiG_projectPicker{flex:0 380px;min-width:0}.r2poiG_projectPicker select{background-color:#0000;border-color:#0000;min-height:40px;margin-left:-8px;padding-left:8px;font-size:16px;font-weight:650}.r2poiG_projectPicker select:hover{border-color:var(--s-line-strong)}.r2poiG_projectActions{margin-left:auto}.r2poiG_summaryGrid{grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:16px;display:grid}.r2poiG_summaryMain,.r2poiG_summarySide{align-content:start;gap:6px;min-width:0;display:grid}.r2poiG_summaryMain h3{color:var(--s-faint);letter-spacing:.3px;font-size:11.5px;font-weight:600}.r2poiG_summaryMain h3:not(:first-child){margin-top:8px}.r2poiG_objective{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7}.r2poiG_criteria{color:var(--s-ink-2);white-space:pre-wrap;overflow-wrap:anywhere;border-left:2px solid var(--s-line-strong);padding-left:12px;font-size:13px}.r2poiG_summarySide{border-radius:var(--s-radius);background:var(--s-sunken);gap:12px;padding:14px 16px}.r2poiG_progressHead{color:var(--s-muted);justify-content:space-between;gap:8px;font-size:12px;display:flex}.r2poiG_progressHead strong{color:var(--s-ink);font-weight:600}.r2poiG_bar{background:var(--s-line);border-radius:3px;height:6px;margin:6px 0 10px;overflow:hidden}.r2poiG_bar span{background:var(--s-ok);border-radius:3px;height:100%;transition:width .3s;display:block}.r2poiG_statList{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;display:grid}.r2poiG_statList div{gap:0;display:grid}.r2poiG_statList dt{color:var(--s-muted);white-space:nowrap;text-overflow:ellipsis;font-size:11px;overflow:hidden}.r2poiG_statList dd{font-size:17px;font-weight:650;line-height:1.3}.r2poiG_statList [data-tone=running] dd{color:var(--s-accent)}.r2poiG_statList [data-tone=review] dd{color:var(--s-warn)}.r2poiG_statList [data-tone=attention] dd{color:var(--s-bad)}.r2poiG_teamStrip{gap:6px;display:grid}.r2poiG_teamStrip ul{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_teamStrip li{background:var(--s-raised);border:1px solid var(--s-line-soft);border-radius:14px;align-items:center;gap:5px;max-width:100%;padding:2px 8px 2px 2px;font-size:12px;display:inline-flex}.r2poiG_teamStrip li span:last-child{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.r2poiG_metaLine{color:var(--s-muted);white-space:nowrap;text-overflow:ellipsis;font-size:12px;overflow:hidden}.r2poiG_success,.r2poiG_notice,.r2poiG_alert{border-radius:var(--s-radius-sm);overflow-wrap:anywhere;gap:4px;padding:10px 14px;font-size:13px;display:grid}.r2poiG_success{background:var(--s-ok-soft);color:var(--s-ok);grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px}.r2poiG_success code{color:var(--s-ink);overflow-wrap:anywhere}.r2poiG_notice{background:var(--s-sunken);color:var(--s-ink-2)}.r2poiG_notice[data-tone=review]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_notice[data-tone=running]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_notice p{color:var(--s-ink-2);font-size:12.5px}.r2poiG_alert{background:var(--s-bad-soft);color:var(--s-bad)}.r2poiG_alert p{white-space:pre-wrap;color:var(--s-ink);font-size:12.5px}.r2poiG_filterRow{flex-wrap:wrap;gap:6px;margin-bottom:12px;display:flex}.r2poiG_studio .r2poiG_filter{border-color:var(--s-line);min-height:28px;color:var(--s-muted);border-radius:14px;gap:5px;padding:2px 10px;font-size:12px}.r2poiG_filter span{color:var(--s-faint);font-weight:600}.r2poiG_studio .r2poiG_filter[aria-pressed=true]{background:var(--s-ink);border-color:var(--s-ink);color:var(--s-bg)}.r2poiG_studio .r2poiG_filter[aria-pressed=true] span{color:inherit;opacity:.7}.r2poiG_pipeline{gap:4px;display:grid;position:relative}.r2poiG_pipeline li{position:relative}.r2poiG_pipeline li:not(:last-child):before{content:"";background:var(--s-line);z-index:0;width:1px;position:absolute;top:40px;bottom:-8px;left:25px}.r2poiG_studio .r2poiG_taskItem{z-index:1;border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"r2poiG_step r2poiG_main""r2poiG_step r2poiG_badges";align-items:start;gap:4px 12px;width:100%;padding:12px;font-weight:400;display:grid;position:relative}.r2poiG_studio .r2poiG_taskItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_step{background:var(--s-bg);border:1.5px solid var(--s-line-strong);width:28px;height:28px;color:var(--s-muted);border-radius:50%;grid-area:r2poiG_step;place-items:center;font-size:12px;font-weight:600;display:grid}li[data-status=completed] .r2poiG_step{border-color:var(--s-ok);color:var(--s-ok);background:var(--s-ok-soft)}li[data-status=running] .r2poiG_step{border-color:var(--s-accent);color:var(--s-accent);background:var(--s-accent-soft)}li[data-status=failed] .r2poiG_step,li[data-status=interrupted] .r2poiG_step{border-color:var(--s-bad);color:var(--s-bad)}li[data-status=blocked] .r2poiG_step{border-style:dashed}.r2poiG_taskMain{grid-area:r2poiG_main;gap:3px;min-width:0;display:grid}.r2poiG_taskMain>strong{overflow-wrap:anywhere;font-size:13.5px;font-weight:600;line-height:1.45}.r2poiG_taskOwner{color:var(--s-ink-2);flex-wrap:wrap;align-items:center;gap:6px;min-width:0;font-size:12.5px;display:inline-flex}.r2poiG_taskOwner small{color:var(--s-faint)}.r2poiG_reason{color:var(--s-muted);font-size:11.5px}.r2poiG_reason[data-kind=revision]{color:var(--s-warn)}.r2poiG_taskBadges{flex-wrap:wrap;grid-area:r2poiG_badges;gap:4px;display:flex}.r2poiG_detailHead{grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px 16px;display:grid}.r2poiG_detailTitle{align-items:flex-start;gap:12px;min-width:0;display:flex}.r2poiG_detailTitle h2{overflow-wrap:anywhere;font-size:18px}.r2poiG_stepLarge{background:var(--s-sunken);color:var(--s-muted);border-radius:6px;flex:none;margin-top:2px;padding:1px 8px;font-size:13px;font-weight:600}.r2poiG_detailBadges{flex-wrap:wrap;justify-content:flex-end;gap:6px;display:flex}.r2poiG_detailHead>.r2poiG_actions{grid-column:1/-1}.r2poiG_block{border-top:1px solid var(--s-line-soft);gap:10px;padding-top:16px;display:grid}.r2poiG_blockHead{justify-content:space-between;align-items:center;gap:8px;display:flex}.r2poiG_blockHead h3 small{color:var(--s-faint);font-weight:400}.r2poiG_linkList{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_studio .r2poiG_taskLink{border-color:var(--s-line);white-space:normal;text-align:left;gap:8px;max-width:100%;min-height:30px;padding:3px 4px 3px 10px;font-weight:400}.r2poiG_taskLink b{color:var(--s-muted);white-space:nowrap;font-weight:600}.r2poiG_revisionCard{border-radius:var(--s-radius-sm);border:1px solid var(--s-warn-soft);background:color-mix(in srgb, var(--s-warn-soft) 55%, transparent);gap:8px;padding:12px 14px;display:grid}.r2poiG_revisionCard>strong{color:var(--s-warn);font-size:12.5px}.r2poiG_revisionCard[data-kind=superseded]{border-style:dashed;border-color:var(--s-line-strong);background:0 0}.r2poiG_revisionCard[data-kind=superseded]>strong{color:var(--s-muted)}.r2poiG_studio blockquote{border-left:3px solid var(--s-warn);background:var(--s-raised);white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 6px 6px 0;gap:2px;padding:6px 12px;font-size:13px;display:grid}.r2poiG_studio blockquote small{color:var(--s-muted);font-size:11px}.r2poiG_reviewForm{gap:10px;display:grid}.r2poiG_facts{grid-template-columns:110px minmax(0,1fr);gap:10px 16px;font-size:13px;display:grid}.r2poiG_facts dt{color:var(--s-muted);padding-top:2px;font-size:12px}.r2poiG_facts dd{overflow-wrap:anywhere;min-width:0}.r2poiG_pathList{gap:2px;display:grid}.r2poiG_miniTimeline{gap:12px;display:grid}.r2poiG_miniTimeline li{border-left:2px solid var(--s-line);padding-left:12px}.r2poiG_handoffMeta{color:var(--s-muted);flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:12px;display:flex}.r2poiG_handoffMeta strong{color:var(--s-ink);font-size:13px}.r2poiG_handoffMeta time{color:var(--s-faint);margin-left:auto;font-size:11.5px}.r2poiG_disclosure{border:1px solid var(--s-line);border-radius:var(--s-radius)}.r2poiG_disclosure>summary{cursor:pointer;color:var(--s-ink-2);padding:11px 14px;font-size:13px;font-weight:600}.r2poiG_disclosure>summary small{color:var(--s-faint);font-weight:400}.r2poiG_disclosure[open]>summary{border-bottom:1px solid var(--s-line-soft)}.r2poiG_disclosureBody{gap:10px;padding:12px 14px 16px;display:grid}.r2poiG_session{border-radius:var(--s-radius-sm);background:var(--s-sunken);gap:4px;padding:10px 12px;font-size:12.5px;display:grid}.r2poiG_copyLine{align-items:center;gap:8px;min-width:0;display:flex}.r2poiG_copyLine code{background:var(--s-raised);border:1px solid var(--s-line-soft);white-space:nowrap;border-radius:6px;flex:1;min-width:0;padding:5px 9px;overflow-x:auto}.r2poiG_studio .r2poiG_copyLine button{min-height:28px;padding:2px 9px;font-size:12px}.r2poiG_fileGrid{gap:8px;display:grid}.r2poiG_fileCard{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);background:var(--s-raised);overflow:hidden}.r2poiG_thumb{background:var(--s-sunken);border-bottom:1px solid var(--s-line-soft);text-align:center;display:block}.r2poiG_thumb img{object-fit:contain;max-width:100%;max-height:260px;margin:0 auto;display:block}.r2poiG_fileRow{grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 10px;display:grid}.r2poiG_fileIcon{background:var(--s-sunken);min-width:38px;height:26px;color:var(--s-muted);white-space:nowrap;border-radius:6px;place-items:center;padding:0 5px;font-size:10.5px;font-weight:600;display:grid}.r2poiG_fileIcon[data-kind=image]{color:#b23473;background:#e8308c21}.r2poiG_fileIcon[data-kind=document]{color:#345eb2;background:#306ee821}.r2poiG_fileIcon[data-kind=web]{color:#ab602b;background:#ee7c2b24}.r2poiG_fileIcon[data-kind=code]{color:#1f7a5c;background:#1fad7e24}.r2poiG_fileIcon[data-kind=data]{color:#7143b1;background:#8d52e024}body[data-ds-dark-theme] .r2poiG_fileIcon[data-kind]{filter:brightness(1.6)}.r2poiG_fileName{min-width:0;display:grid}.r2poiG_fileName strong{overflow-wrap:anywhere;font-size:13px;font-weight:600}.r2poiG_fileName small{color:var(--s-faint);overflow-wrap:anywhere;font-size:11px}.r2poiG_fileActions{gap:4px;display:flex}.r2poiG_studio .r2poiG_fileActions button,.r2poiG_fileActions .r2poiG_linkButton{min-height:28px;padding:2px 10px;font-size:12px}.r2poiG_codePreview{border-top:1px solid var(--s-line-soft);background:var(--s-sunken);max-height:360px;font-family:var(--s-mono);white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px 14px;font-size:12px;line-height:1.6;overflow:auto}.r2poiG_handoffs{padding:20px var(--s-gutter) 40px;gap:22px;max-width:980px;display:grid}.r2poiG_composer{border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-raised);gap:10px;padding:16px;display:grid}.r2poiG_composerHead,.r2poiG_timelineHead{flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;display:flex}.r2poiG_composerHead h2{font-size:15px}.r2poiG_composerFoot{justify-content:space-between;align-items:center;gap:12px;display:flex}.r2poiG_inlineField{color:var(--s-muted);align-items:center;gap:8px;min-width:0;font-size:12.5px;display:inline-flex}.r2poiG_inlineField select{width:auto;max-width:240px;min-height:32px}.r2poiG_timeline{gap:0;display:grid}.r2poiG_timeline li{grid-template-columns:34px minmax(0,1fr);gap:12px;padding-bottom:16px;display:grid;position:relative}.r2poiG_timeline li:not(:last-child):before{content:"";background:var(--s-line);width:1px;position:absolute;top:38px;bottom:2px;left:16.5px}.r2poiG_timelineDot{padding-top:4px}.r2poiG_timelineCard{border:1px solid var(--s-line);border-radius:var(--s-radius);gap:8px;min-width:0;padding:12px 14px;display:grid}.r2poiG_timeline li[data-from=user] .r2poiG_timelineCard{background:var(--s-sunken);border-color:#0000}.r2poiG_studio .r2poiG_taskChip{border-color:var(--s-line);min-height:24px;color:var(--s-ink-2);white-space:normal;text-align:left;border-radius:12px;justify-self:start;max-width:100%;padding:1px 9px;font-size:11.5px;font-weight:500}.r2poiG_dialog{border:1px solid var(--s-line);background:var(--s-bg);width:min(720px,100vw - 32px);max-height:calc(100vh - 48px);color:var(--s-ink);box-shadow:var(--s-shadow);border-radius:14px;padding:0}.r2poiG_dialog::backdrop{background:#0a0e186b}.r2poiG_dialogForm{grid-template-rows:auto minmax(0,1fr) auto;max-height:calc(100vh - 50px);display:grid}.r2poiG_dialogHead{border-bottom:1px solid var(--s-line-soft);justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;display:flex}.r2poiG_dialogBody{gap:16px;padding:18px 22px;display:grid;overflow-y:auto}.r2poiG_dialogFoot{border-top:1px solid var(--s-line-soft);flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;padding:12px 22px;display:flex}.r2poiG_dialogFoot .r2poiG_formStatus{margin-right:auto}.r2poiG_optionCards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;display:grid}.r2poiG_optionCards>legend,.r2poiG_teamPicker>legend{color:var(--s-ink-2);margin-bottom:6px;font-size:12.5px;font-weight:500}.r2poiG_optionCards>legend{grid-column:1/-1}.r2poiG_teamPicker>legend small{color:var(--s-faint);font-weight:400}.r2poiG_optionCards label{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);cursor:pointer;align-items:flex-start;gap:10px;padding:11px 12px;display:flex}.r2poiG_optionCards label:has(input:checked){border-color:var(--s-accent);background:var(--s-accent-soft)}.r2poiG_optionCards input{margin-top:3px!important}.r2poiG_optionCards span{gap:2px;min-width:0;display:grid}.r2poiG_optionCards strong{font-size:13px;font-weight:600}.r2poiG_optionCards small{color:var(--s-muted)}.r2poiG_teamPicker{gap:4px;display:grid}.r2poiG_teamPicker label{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);cursor:pointer;grid-template-columns:auto 18px auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 10px;display:grid}.r2poiG_teamPicker label[data-checked=false]{opacity:.65}.r2poiG_teamPicker label[data-checked=true]{border-color:var(--s-line-strong)}.r2poiG_order{color:var(--s-accent);text-align:center;font-size:11px;font-weight:700}.r2poiG_studio .r2poiG_meetingItem{border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;justify-content:stretch;gap:6px;width:100%;padding:12px;font-weight:400;display:grid}.r2poiG_studio .r2poiG_meetingItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_meetingItem>small{color:var(--s-muted);text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.r2poiG_meetingItemHead{justify-content:space-between;align-items:flex-start;gap:8px;min-width:0;display:flex}.r2poiG_meetingItemHead strong{overflow-wrap:anywhere;font-size:13.5px;font-weight:600}.r2poiG_avatarStack{display:flex}.r2poiG_avatarStack>span{box-shadow:0 0 0 2px var(--s-bg);margin-right:-5px}.r2poiG_badge[data-meeting=open],.r2poiG_badge[data-meeting=drafting]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_badge[data-meeting=drafting] i{animation:1.4s ease-in-out infinite r2poiG_pulse}.r2poiG_badge[data-meeting=review]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_badge[data-meeting=closed]{color:var(--s-faint)}.r2poiG_reason[data-kind=speaking]{color:var(--s-accent)}.r2poiG_meetingCard{gap:14px;max-width:900px;display:grid}.r2poiG_meetingHead{border-bottom:1px solid var(--s-line-soft);gap:10px;padding-bottom:14px;display:grid}.r2poiG_meetingTitle{flex-wrap:wrap;align-items:center;gap:10px;display:flex}.r2poiG_meetingTitle h2{overflow-wrap:anywhere;font-size:18px}.r2poiG_agenda{color:var(--s-ink-2);white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.r2poiG_attendeeRow{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_attendeeRow li{border:1px solid var(--s-line);border-radius:14px;align-items:center;gap:5px;max-width:100%;padding:2px 9px 2px 2px;font-size:12px;display:inline-flex}.r2poiG_attendeeRow li[data-host=true]{border-color:var(--s-accent)}.r2poiG_attendeeRow em,.r2poiG_bubbleMeta em{color:var(--s-accent);background:var(--s-accent-soft);border-radius:4px;padding:0 5px;font-size:10.5px;font-style:normal;font-weight:600;line-height:16px}.r2poiG_chat{gap:14px;padding:4px 0;display:grid}.r2poiG_chatEmpty{border:1px dashed var(--s-line-strong);border-radius:var(--s-radius);color:var(--s-muted);text-align:center;padding:24px 16px;font-size:13px}.r2poiG_bubbleRow{grid-template-columns:34px minmax(0,1fr);align-items:start;gap:10px;display:grid}.r2poiG_bubbleRow[data-own=true]{grid-template-columns:minmax(0,1fr) 34px}.r2poiG_bubbleRow[data-own=true]>.r2poiG_avatar{grid-area:1/2}.r2poiG_bubbleRow[data-own=true]>.r2poiG_bubbleBody{grid-area:1/1;justify-items:end}.r2poiG_bubbleBody{justify-items:start;gap:4px;min-width:0;display:grid}.r2poiG_bubbleMeta{color:var(--s-muted);flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:12px;display:flex}.r2poiG_bubbleMeta strong{color:var(--s-ink);font-size:12.5px}.r2poiG_bubbleMeta time{color:var(--s-faint);font-size:11px}.r2poiG_bubble{background:var(--s-sunken);border:1px solid var(--s-line-soft);border-radius:4px 14px 14px;gap:4px;min-width:0;max-width:min(640px,100%);padding:9px 13px;display:grid}.r2poiG_bubbleRow[data-own=true] .r2poiG_bubble{background:var(--s-accent-soft);border-color:#0000;border-radius:14px 4px 14px 14px}.r2poiG_mentionLine{flex-wrap:wrap;gap:4px;display:flex}.r2poiG_mentionLine span{color:var(--s-accent);font-size:11.5px;font-weight:600}.r2poiG_sessionNote{color:var(--s-faint);max-width:100%;font-size:11px}.r2poiG_sessionNote summary{cursor:pointer}.r2poiG_sessionNote code{background:var(--s-sunken);white-space:nowrap;color:var(--s-ink-2);border-radius:5px;margin-top:4px;padding:3px 8px;display:block;overflow-x:auto}.r2poiG_typing{background:var(--s-sunken);color:var(--s-muted);border-radius:4px 14px 14px;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 13px;font-size:12.5px;display:inline-flex}.r2poiG_typing small{color:var(--s-faint)}.r2poiG_dots{gap:3px;display:inline-flex}.r2poiG_dots i{background:var(--s-accent);border-radius:50%;width:5px;height:5px;animation:1.2s ease-in-out infinite r2poiG_pulse}.r2poiG_dots i:nth-child(2){animation-delay:.2s}.r2poiG_dots i:nth-child(3){animation-delay:.4s}.r2poiG_chatComposer{z-index:2;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-bg);gap:8px;padding:12px 14px;display:grid;position:sticky;bottom:0;box-shadow:0 -8px 20px -12px #0000002e}.r2poiG_mentionChips{flex-wrap:wrap;align-items:center;gap:6px;display:flex}.r2poiG_minutes{border:1px solid var(--s-warn-soft);border-radius:var(--s-radius);background:color-mix(in srgb, var(--s-warn-soft) 30%, transparent);gap:14px;padding:16px 18px;display:grid}.r2poiG_minutes .r2poiG_blockHead{flex-wrap:wrap}.r2poiG_minutesTasks{gap:10px;display:grid}.r2poiG_minutesTasks>legend{color:var(--s-ink-2);margin-bottom:4px;font-size:12.5px;font-weight:500}.r2poiG_studio .r2poiG_minutesTasks>button{justify-self:start}.r2poiG_minutesTask{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);background:var(--s-bg);grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:10px;padding:10px;display:grid}.r2poiG_minutesTask>.r2poiG_step{grid-area:auto;margin-top:2px}.r2poiG_minutesTaskFields{gap:8px;min-width:0;display:grid}.r2poiG_minutesTaskActions{gap:2px;display:grid}.r2poiG_studio .r2poiG_minutesTaskActions button{width:28px;min-height:26px;padding:0}@media (width<=1100px){.r2poiG_workArea{grid-template-columns:minmax(0,1fr)}.r2poiG_listPane{border-right:0;border-bottom:1px solid var(--s-line)}.r2poiG_summaryGrid{grid-template-columns:minmax(0,1fr)}.r2poiG_roster{grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))}.r2poiG_pipeline li:before{display:none}}@media (width<=720px){.r2poiG_studio{--s-gutter:16px}.r2poiG_topbar{flex-direction:column;align-items:stretch;gap:12px;padding-top:18px}.r2poiG_brand h1{font-size:21px}.r2poiG_workspace{flex-direction:column;align-items:stretch}.r2poiG_workspacePicker{width:100%}.r2poiG_workspace>button{align-self:flex-start;padding-left:0}.r2poiG_fieldPair,.r2poiG_optionCards{grid-template-columns:minmax(0,1fr)}.r2poiG_projectPicker{flex-basis:100%}.r2poiG_projectActions{margin-left:0}.r2poiG_statList{grid-template-columns:repeat(2,minmax(0,1fr))}.r2poiG_detailHead{grid-template-columns:minmax(0,1fr)}.r2poiG_detailBadges{justify-content:flex-start}.r2poiG_facts{grid-template-columns:minmax(0,1fr);gap:2px}.r2poiG_facts dd{margin-bottom:8px}.r2poiG_segmented{grid-template-columns:repeat(2,minmax(0,1fr))}.r2poiG_composerFoot{flex-direction:column;align-items:stretch}.r2poiG_success{grid-template-columns:minmax(0,1fr)}.r2poiG_inputWithButton{flex-direction:column}.r2poiG_dialog{border-radius:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0}.r2poiG_dialogForm{height:100%;max-height:100dvh}}@media (width<=480px){.r2poiG_tabs{padding-right:8px}.r2poiG_studio .r2poiG_tab{padding:10px 8px;font-size:13px}.r2poiG_tabs>.r2poiG_primary{min-width:34px;padding:6px 10px}.r2poiG_wideLabel{display:none}.r2poiG_rosterItem{grid-template-columns:auto minmax(0,1fr)!important}.r2poiG_rosterMeta{grid-column:2;justify-items:start;max-width:100%}.r2poiG_fileRow{grid-template-columns:auto minmax(0,1fr)}.r2poiG_fileActions{grid-column:1/-1;justify-content:flex-end}.r2poiG_teamPicker label{grid-template-columns:auto 14px auto minmax(0,1fr)}.r2poiG_teamPicker label>:last-child{grid-column:4;justify-self:start}.r2poiG_timeline li{grid-template-columns:minmax(0,1fr)}.r2poiG_timeline li:before,.r2poiG_timelineDot{display:none}.r2poiG_minutesTask{grid-template-columns:minmax(0,1fr)}.r2poiG_minutesTask>.r2poiG_step{display:none}.r2poiG_minutesTaskActions{justify-content:flex-end;display:flex}.r2poiG_bubbleRow,.r2poiG_bubbleRow[data-own=true]{grid-template-columns:minmax(0,1fr)}.r2poiG_bubbleRow>.r2poiG_avatar{display:none}.r2poiG_bubbleRow[data-own=true]>.r2poiG_bubbleBody{grid-column:1}}';
+  tag.textContent = '.r2poiG_studio{--s-bg:var(--dsw-alias-bg-base,#fff);--s-raised:var(--dsw-alias-bg-layer-1,#fff);--s-sunken:var(--dsw-alias-interactive-bg-hover,#2631480d);--s-hover:var(--dsw-alias-interactive-bg-hover,#2631480f);--s-active:var(--dsw-alias-interactive-bg-active,#2631481a);--s-ink:var(--dsw-alias-label-primary,#141b2b);--s-ink-2:var(--dsw-alias-label-secondary,#3d475c);--s-muted:var(--dsw-alias-label-tertiary,#5e6a80);--s-faint:var(--dsw-alias-label-caption,#8e98aa);--s-line:var(--dsw-alias-border-l2,#0000001a);--s-line-soft:var(--dsw-alias-border-l1,#0000000d);--s-line-strong:var(--dsw-alias-border-l3,#00000024);--s-accent:var(--dsw-alias-state-business-primary,#3a6ff7);--s-accent-soft:var(--dsw-alias-state-business-tertiary,#e8efff);--s-primary:var(--dsw-alias-button-primary-fill,#141b2b);--s-primary-hover:var(--dsw-alias-button-primary-hover,#2d3548);--s-on-primary:var(--dsw-alias-label-primary-inverted,#fff);--s-ok:var(--dsw-alias-state-success-primary,#1f9d55);--s-ok-soft:var(--dsw-alias-state-success-tertiary,#e3f6ea);--s-warn:var(--dsw-alias-state-warn-label,#b46a00);--s-warn-soft:var(--dsw-alias-state-warn-tertiary,#fff3dc);--s-bad:var(--dsw-alias-state-error-primary,#d42a2a);--s-bad-soft:var(--dsw-alias-interactive-bg-hover-danger,#ec131314);--s-radius:10px;--s-radius-sm:7px;--s-shadow:var(--dsw-elevation-prominent,0 8px 28px #141b2b24);--s-mono:var(--ds-font-family-code,"SF Mono", "JetBrains Mono", Consolas, monospace);--s-gutter:28px;background:var(--s-bg);height:100%;color:var(--s-ink);font-family:var(--dsw-font-family,-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);font-size:14px;line-height:1.6;overflow:hidden auto}body[data-ds-dark-theme] .r2poiG_studio{--s-sunken:#ffffff0a}.r2poiG_studio *,.r2poiG_studio :before,.r2poiG_studio :after{box-sizing:border-box}.r2poiG_studio h1,.r2poiG_studio h2,.r2poiG_studio h3,.r2poiG_studio h4,.r2poiG_studio p,.r2poiG_studio ul,.r2poiG_studio ol,.r2poiG_studio dl,.r2poiG_studio dd,.r2poiG_studio blockquote,.r2poiG_studio fieldset{margin:0}.r2poiG_studio h2{font-size:17px;font-weight:650;line-height:1.4}.r2poiG_studio h3{color:var(--studio-h3,var(--s-ink-2));font-size:13px;font-weight:600;line-height:1.4}.r2poiG_studio h4{color:var(--s-muted);margin:14px 0 6px;font-size:12px;font-weight:600}.r2poiG_studio ul,.r2poiG_studio ol{padding:0;list-style:none}.r2poiG_studio fieldset{border:0;min-width:0;padding:0}.r2poiG_studio legend{padding:0}.r2poiG_studio small{font-size:12px}.r2poiG_studio code{font-family:var(--s-mono);font-size:12px}.r2poiG_studio button,.r2poiG_studio input,.r2poiG_studio textarea,.r2poiG_studio select{font:inherit;color:inherit}.r2poiG_studio button,.r2poiG_linkButton{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);background:var(--s-raised);min-height:34px;color:var(--s-ink);cursor:pointer;white-space:nowrap;justify-content:center;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;line-height:1.4;text-decoration:none;transition:background .12s,border-color .12s,color .12s;display:inline-flex}.r2poiG_studio button:hover:not(:disabled),.r2poiG_linkButton:hover{background:var(--s-hover)}.r2poiG_studio button:disabled{opacity:.45;cursor:not-allowed}.r2poiG_studio :focus-visible{outline:2px solid var(--s-accent);outline-offset:2px}.r2poiG_studio .r2poiG_primary{background:var(--s-primary);border-color:var(--s-primary);color:var(--s-on-primary)}.r2poiG_studio .r2poiG_primary:hover:not(:disabled){background:var(--s-primary-hover);border-color:var(--s-primary-hover)}.r2poiG_studio .r2poiG_ghost{color:var(--s-ink-2);background:0 0;border-color:#0000}.r2poiG_studio .r2poiG_ghost:hover:not(:disabled){background:var(--s-hover);color:var(--s-ink)}.r2poiG_studio .r2poiG_ghostDanger{color:var(--s-bad);background:0 0;border-color:#0000}.r2poiG_studio .r2poiG_ghostDanger:hover:not(:disabled){background:var(--s-bad-soft)}.r2poiG_studio .r2poiG_dangerSolid{background:var(--s-bad);border-color:var(--s-bad);color:#fff}.r2poiG_studio .r2poiG_iconButton{width:32px;min-height:32px;color:var(--s-muted);background:0 0;border-color:#0000;padding:0;font-size:20px}.r2poiG_studio input,.r2poiG_studio textarea,.r2poiG_studio select{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);background:var(--s-raised);width:100%;min-width:0;min-height:36px;color:var(--s-ink);padding:7px 11px;font-size:13px;line-height:1.5}.r2poiG_studio textarea{resize:vertical}.r2poiG_studio input:hover,.r2poiG_studio textarea:hover,.r2poiG_studio select:hover{border-color:var(--s-faint)}.r2poiG_studio input:focus,.r2poiG_studio textarea:focus,.r2poiG_studio select:focus{border-color:var(--s-accent);box-shadow:0 0 0 3px var(--s-accent-soft);outline:none}.r2poiG_studio input::placeholder,.r2poiG_studio textarea::placeholder{color:var(--s-faint)}.r2poiG_studio input[type=checkbox],.r2poiG_studio input[type=radio]{width:16px;height:16px;min-height:0;accent-color:var(--s-accent);box-shadow:none;flex:none;margin:0;padding:0}.r2poiG_spinner{vertical-align:-1px;border:2px solid;border-right-color:#0000;border-radius:50%;width:12px;height:12px;animation:.7s linear infinite r2poiG_spin;display:inline-block}@keyframes r2poiG_spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.r2poiG_spinner{animation-duration:2s}}.r2poiG_mono{overflow-wrap:anywhere;font-size:12px;font-family:var(--s-mono)!important}.r2poiG_muted{color:var(--s-muted);font-size:12px}.r2poiG_hint{color:var(--s-muted);font-size:12px;line-height:1.6}.r2poiG_footnote{color:var(--s-faint);font-size:12px;margin-top:20px!important}.r2poiG_srOnly{clip:rect(0 0 0 0);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}.r2poiG_actions{flex-wrap:wrap;align-items:center;gap:8px;display:flex}.r2poiG_report{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font:inherit;color:var(--s-ink);margin:0;font-size:13px;line-height:1.75}.r2poiG_topbar{padding:22px var(--s-gutter) 16px;justify-content:space-between;align-items:center;gap:24px;display:flex}.r2poiG_brand{min-width:0}.r2poiG_brand h1{letter-spacing:-.3px;font-size:24px;font-weight:700;line-height:1.3}.r2poiG_brand p{color:var(--s-muted);font-size:13px}.r2poiG_workspace{align-items:flex-end;gap:8px;min-width:0;display:flex}.r2poiG_workspacePicker{gap:2px;width:340px;min-width:0;max-width:100%;display:grid}.r2poiG_workspacePicker>span{color:var(--s-faint);letter-spacing:.2px;font-size:11px;font-weight:500}.r2poiG_workspacePicker select{font-weight:600}.r2poiG_workspacePicker small{color:var(--s-faint);white-space:nowrap;text-overflow:ellipsis;font-size:11px;overflow:hidden}.r2poiG_workspaceForm{margin:0 var(--s-gutter) 16px;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-sunken);gap:14px;padding:18px 20px;display:grid}.r2poiG_workspaceForm form{gap:12px;display:grid}.r2poiG_inputWithButton{gap:8px;display:flex}.r2poiG_tabs{z-index:3;padding:0 var(--s-gutter);border-bottom:1px solid var(--s-line);background:var(--s-bg);justify-content:space-between;align-items:center;gap:12px;display:flex;position:sticky;top:0}.r2poiG_tabList{scrollbar-width:none;gap:4px;min-width:0;display:flex;overflow-x:auto}.r2poiG_studio .r2poiG_tab{min-height:44px;color:var(--s-muted);background:0 0;border:0;border-radius:0;padding:10px 12px;font-size:14px;position:relative}.r2poiG_studio .r2poiG_tab:hover:not(:disabled){color:var(--s-ink);background:0 0}.r2poiG_studio .r2poiG_tab[aria-current=page]{color:var(--s-ink);font-weight:600}.r2poiG_studio .r2poiG_tab[aria-current=page]:after{content:"";background:var(--s-ink);border-radius:2px;height:2px;position:absolute;bottom:-1px;left:10px;right:10px}.r2poiG_count{background:var(--s-sunken);min-width:20px;color:var(--s-muted);text-align:center;border-radius:10px;padding:0 6px;font-size:11px;font-weight:500;line-height:18px}.r2poiG_banner{margin:14px var(--s-gutter) 0;border-radius:var(--s-radius-sm);background:var(--s-bad-soft);color:var(--s-bad);overflow-wrap:anywhere;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;font-size:13px;display:flex}.r2poiG_emptyState{margin:28px var(--s-gutter);border:1px dashed var(--s-line-strong);border-radius:var(--s-radius);text-align:center;color:var(--s-muted);justify-items:center;gap:8px;padding:40px 20px;display:grid}.r2poiG_emptyState strong{color:var(--s-ink);font-size:15px}.r2poiG_detailPane .r2poiG_emptyState,.r2poiG_listPane .r2poiG_emptyState{margin:12px 0}.r2poiG_emptyInline{color:var(--s-faint);padding:4px 0;font-size:13px}.r2poiG_inlineError{color:var(--s-bad);overflow-wrap:anywhere;font-size:12px}.r2poiG_badge{background:var(--s-sunken);height:22px;color:var(--s-muted);white-space:nowrap;border-radius:11px;align-items:center;gap:5px;padding:0 8px;font-size:11.5px;font-weight:500;display:inline-flex}.r2poiG_badge i{background:currentColor;border-radius:50%;width:6px;height:6px}.r2poiG_badge[data-status=running],.r2poiG_badge[data-project=running]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_badge[data-status=running] i,.r2poiG_badge[data-project=running] i{animation:1.4s ease-in-out infinite r2poiG_pulse}.r2poiG_badge[data-status=completed],.r2poiG_badge[data-project=completed]{background:var(--s-ok-soft);color:var(--s-ok)}.r2poiG_badge[data-status=blocked]{color:var(--s-faint)}.r2poiG_badge[data-status=failed],.r2poiG_badge[data-status=interrupted]{background:var(--s-bad-soft);color:var(--s-bad)}.r2poiG_badge[data-status=cancelled]{color:var(--s-faint);text-decoration:line-through}.r2poiG_badge[data-project=review],.r2poiG_badge[data-review=pending]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_badge[data-review=accepted]{color:var(--s-ok);border:1px solid var(--s-ok-soft);background:0 0}.r2poiG_badge[data-review=superseded]{color:var(--s-muted);border:1px dashed var(--s-line-strong);background:0 0}@keyframes r2poiG_pulse{50%{opacity:.35}}.r2poiG_engineTag{white-space:nowrap;background:var(--s-sunken);color:var(--s-ink-2);border-radius:5px;padding:0 7px;font-size:11px;font-weight:600;line-height:19px;display:inline-block}.r2poiG_engineTag[data-engine=codex]{color:#0d8a6b;background:#10a37f1f}.r2poiG_engineTag[data-engine=claude]{color:#b85a3b;background:#d9775724}.r2poiG_engineTag[data-engine=harness]{color:#4060e0;background:#4d6bfe21}.r2poiG_engineTag[data-engine=compatible]{color:#7a4fd0;background:#8c5ce621}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=codex]{color:#4cd3ad}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=claude]{color:#f0a084}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=harness]{color:#93a8ff}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=compatible]{color:#c3a5ff}.r2poiG_avatar{--h:220;background:hsl(var(--h) 80% 55% / .14);width:34px;height:34px;color:hsl(var(--h) 55% 38%);border-radius:50%;flex:none;place-items:center;font-size:14px;font-weight:600;display:inline-grid}.r2poiG_avatar[data-size=sm]{width:22px;height:22px;font-size:11px}.r2poiG_avatar[data-size=lg]{width:46px;height:46px;font-size:19px}.r2poiG_avatar[data-tone="1"]{--h:265}.r2poiG_avatar[data-tone="2"]{--h:150}.r2poiG_avatar[data-tone="3"]{--h:30}.r2poiG_avatar[data-tone="4"]{--h:330}.r2poiG_avatar[data-tone="5"]{--h:190}.r2poiG_avatar[data-tone=user]{background:var(--s-primary);color:var(--s-on-primary)}body[data-ds-dark-theme] .r2poiG_avatar{color:hsl(var(--h) 80% 76%);background:hsl(var(--h) 60% 55% / .22)}.r2poiG_workArea{grid-template-columns:minmax(300px,400px) minmax(0,1fr);align-items:start;gap:0;display:grid}.r2poiG_listPane{padding:20px var(--s-gutter) 32px;border-right:1px solid var(--s-line);align-self:stretch;min-width:0}.r2poiG_detailPane{padding:20px var(--s-gutter) 40px;min-width:0;scroll-margin-top:52px}.r2poiG_paneHead{justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;display:flex}.r2poiG_toolRow{gap:8px;margin-bottom:10px;display:flex}.r2poiG_toolRow input{flex:1}.r2poiG_menu{position:relative}.r2poiG_menu>summary{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);cursor:pointer;white-space:nowrap;align-items:center;gap:6px;min-height:36px;padding:6px 12px;font-size:13px;font-weight:500;list-style:none;display:inline-flex}.r2poiG_menu>summary::-webkit-details-marker{display:none}.r2poiG_menu>summary:after{content:"\u25BE";color:var(--s-muted);font-size:10px}.r2poiG_menu[open]>summary{background:var(--s-hover)}.r2poiG_menuBody{z-index:5;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--dsw-specific-menu,var(--s-raised));width:280px;box-shadow:var(--s-shadow);gap:2px;padding:6px;display:grid;position:absolute;top:calc(100% + 6px);right:0}.r2poiG_studio .r2poiG_menuBody button{text-align:left;white-space:normal;background:0 0;border:0;justify-items:start;gap:0;width:100%;padding:8px 10px;display:grid}.r2poiG_menuBody button small{color:var(--s-muted);font-weight:400}.r2poiG_menuBody p{border-top:1px solid var(--s-line-soft);padding:6px 10px 4px;margin-top:4px!important}.r2poiG_healthRow{flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px;display:flex}.r2poiG_studio .r2poiG_healthRow>button{min-height:28px;padding:3px 8px;font-size:12px}.r2poiG_healthChip{color:var(--s-muted);align-items:center;gap:5px;font-size:11.5px;display:inline-flex}.r2poiG_healthChip i{background:var(--s-faint);border-radius:50%;width:7px;height:7px}.r2poiG_healthChip[data-available=true] i{background:var(--s-ok)}.r2poiG_healthChip[data-available=false]{color:var(--s-bad)}.r2poiG_healthChip[data-available=false] i{background:var(--s-bad)}.r2poiG_roster{gap:2px;display:grid}.r2poiG_studio .r2poiG_rosterItem{border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px;font-weight:400;display:grid}.r2poiG_studio .r2poiG_rosterItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_rosterItem[data-disabled=true]>:not(.r2poiG_rosterMeta){opacity:.55}.r2poiG_rosterText{min-width:0;display:grid}.r2poiG_rosterText strong{overflow-wrap:anywhere;flex-wrap:wrap;align-items:center;gap:6px;font-size:13.5px;font-weight:600;display:flex}.r2poiG_rosterText small{color:var(--s-muted);overflow-wrap:anywhere}.r2poiG_rosterMeta{justify-items:end;gap:2px;min-width:0;max-width:150px;display:grid}.r2poiG_rosterMeta small{color:var(--s-faint);white-space:nowrap;text-overflow:ellipsis;max-width:100%;font-size:11px;overflow:hidden}.r2poiG_offTag{color:var(--s-muted);border:1px solid var(--s-line-strong);border-radius:4px;padding:0 6px;font-size:10.5px;font-style:normal;font-weight:500;line-height:16px}.r2poiG_editorCard,.r2poiG_detailCard{gap:18px;max-width:860px;display:grid}.r2poiG_editorHead{align-items:center;gap:14px;padding-bottom:4px;display:flex}.r2poiG_editorHead h2{overflow-wrap:anywhere;font-size:19px}.r2poiG_editorHead p{color:var(--s-muted);font-size:13px}.r2poiG_formGroup{border:1px solid var(--s-line);border-radius:var(--s-radius);gap:14px;padding:18px;display:grid}.r2poiG_formGroup>legend{float:left;width:100%;color:var(--s-muted);letter-spacing:.3px;margin-bottom:2px;font-size:12px;font-weight:600}.r2poiG_formGroup>legend+*{clear:both}.r2poiG_field{gap:6px;min-width:0;display:grid}.r2poiG_field>span:first-child{color:var(--s-ink-2);font-size:12.5px;font-weight:500}.r2poiG_field>span:first-child small{color:var(--s-faint);font-weight:400}.r2poiG_fieldPair{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;display:grid}.r2poiG_switch{cursor:pointer;align-items:center;gap:8px;width:fit-content;font-size:13px;display:inline-flex}.r2poiG_segmented{border-radius:var(--s-radius);background:var(--s-sunken);grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:4px;display:grid}.r2poiG_segmented label{cursor:pointer;display:block;position:relative}.r2poiG_segmented input{opacity:0;pointer-events:none;position:absolute}.r2poiG_segmented span{border-radius:var(--s-radius-sm);text-align:center;color:var(--s-muted);overflow-wrap:anywhere;padding:7px 6px;font-size:12.5px;font-weight:500;line-height:1.35;display:block}.r2poiG_segmented input:checked+span{background:var(--s-raised);color:var(--s-ink);box-shadow:0 1px 3px #0000001f}.r2poiG_segmented input:focus-visible+span{outline:2px solid var(--s-accent)}.r2poiG_chips{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_chip{cursor:pointer;position:relative}.r2poiG_chip input{opacity:0;pointer-events:none;position:absolute}.r2poiG_chip span{border:1px solid var(--s-line-strong);color:var(--s-ink-2);border-radius:15px;padding:4px 11px;font-size:12.5px;display:inline-block}.r2poiG_chip input:checked+span{background:var(--s-primary);border-color:var(--s-primary);color:var(--s-on-primary)}.r2poiG_chip input:focus-visible+span{outline:2px solid var(--s-accent);outline-offset:2px}.r2poiG_modelPicker{gap:8px;display:grid}.r2poiG_modelPicker>legend{float:left;width:100%;color:var(--s-ink-2);font-size:12.5px;font-weight:500}.r2poiG_modelPicker>legend small{color:var(--s-faint);font-weight:400}.r2poiG_modelPicker>legend+*{clear:both}.r2poiG_modelList{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);max-height:288px;display:grid;overflow-y:auto}.r2poiG_modelOption{cursor:pointer;border-bottom:1px solid var(--s-line-soft);align-items:flex-start;gap:10px;padding:9px 12px;display:flex}.r2poiG_modelOption:last-child{border-bottom:0}.r2poiG_modelOption:hover{background:var(--s-hover)}.r2poiG_modelOption:has(input:checked){background:var(--s-accent-soft)}.r2poiG_modelOption input{margin-top:3px!important}.r2poiG_modelOption>span{min-width:0;display:grid}.r2poiG_modelOption strong{overflow-wrap:anywhere;font-size:13px;font-weight:600}.r2poiG_modelOption small{color:var(--s-muted);overflow-wrap:anywhere}.r2poiG_modelList>p{padding:9px 12px}.r2poiG_modelTags{flex-wrap:wrap;gap:4px;margin-top:2px;display:flex}.r2poiG_modelTags em{background:var(--s-sunken);color:var(--s-muted);border-radius:4px;padding:0 6px;font-size:10.5px;font-style:normal;line-height:17px}.r2poiG_formFooter{z-index:1;background:linear-gradient(to bottom, transparent, var(--s-bg) 30%);flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;display:flex;position:sticky;bottom:0}.r2poiG_formStatus{color:var(--s-muted);overflow-wrap:anywhere;font-size:12.5px}.r2poiG_formStatus[data-state=ok]{color:var(--s-ok)}.r2poiG_formStatus[data-state=error]{color:var(--s-bad)}.r2poiG_checkList{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);gap:2px;max-height:220px;padding:8px 10px;display:grid;overflow-y:auto}.r2poiG_checkList>legend{color:var(--s-ink-2);padding:0 4px;font-size:12.5px;font-weight:500}.r2poiG_checkList label{cursor:pointer;overflow-wrap:anywhere;align-items:flex-start;gap:8px;padding:5px 4px;font-size:13px;display:flex}.r2poiG_checkList b{color:var(--s-muted);font-weight:500}.r2poiG_checkList input{margin-top:3px!important}.r2poiG_projectBar{padding:18px var(--s-gutter) 18px;border-bottom:1px solid var(--s-line);gap:14px;display:grid}.r2poiG_projectTop{flex-wrap:wrap;align-items:center;gap:10px 12px;display:flex}.r2poiG_projectPicker{flex:0 380px;min-width:0}.r2poiG_projectPicker select{background-color:#0000;border-color:#0000;min-height:40px;margin-left:-8px;padding-left:8px;font-size:16px;font-weight:650}.r2poiG_projectPicker select:hover{border-color:var(--s-line-strong)}.r2poiG_projectActions{margin-left:auto}.r2poiG_summaryGrid{grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:16px;display:grid}.r2poiG_summaryMain,.r2poiG_summarySide{align-content:start;gap:6px;min-width:0;display:grid}.r2poiG_summaryMain h3{color:var(--s-faint);letter-spacing:.3px;font-size:11.5px;font-weight:600}.r2poiG_summaryMain h3:not(:first-child){margin-top:8px}.r2poiG_objective{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7}.r2poiG_criteria{color:var(--s-ink-2);white-space:pre-wrap;overflow-wrap:anywhere;border-left:2px solid var(--s-line-strong);padding-left:12px;font-size:13px}.r2poiG_summarySide{border-radius:var(--s-radius);background:var(--s-sunken);gap:12px;padding:14px 16px}.r2poiG_progressHead{color:var(--s-muted);justify-content:space-between;gap:8px;font-size:12px;display:flex}.r2poiG_progressHead strong{color:var(--s-ink);font-weight:600}.r2poiG_bar{background:var(--s-line);border-radius:3px;height:6px;margin:6px 0 10px;overflow:hidden}.r2poiG_bar span{background:var(--s-ok);border-radius:3px;height:100%;transition:width .3s;display:block}.r2poiG_statList{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;display:grid}.r2poiG_statList div{gap:0;display:grid}.r2poiG_statList dt{color:var(--s-muted);white-space:nowrap;text-overflow:ellipsis;font-size:11px;overflow:hidden}.r2poiG_statList dd{font-size:17px;font-weight:650;line-height:1.3}.r2poiG_statList [data-tone=running] dd{color:var(--s-accent)}.r2poiG_statList [data-tone=review] dd{color:var(--s-warn)}.r2poiG_statList [data-tone=attention] dd{color:var(--s-bad)}.r2poiG_teamStrip{gap:6px;display:grid}.r2poiG_teamStrip ul{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_teamStrip li{background:var(--s-raised);border:1px solid var(--s-line-soft);border-radius:14px;align-items:center;gap:5px;max-width:100%;padding:2px 8px 2px 2px;font-size:12px;display:inline-flex}.r2poiG_teamStrip li span:last-child{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.r2poiG_metaLine{color:var(--s-muted);white-space:nowrap;text-overflow:ellipsis;font-size:12px;overflow:hidden}.r2poiG_success,.r2poiG_notice,.r2poiG_alert{border-radius:var(--s-radius-sm);overflow-wrap:anywhere;gap:4px;padding:10px 14px;font-size:13px;display:grid}.r2poiG_success{background:var(--s-ok-soft);color:var(--s-ok);grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px}.r2poiG_success code{color:var(--s-ink);overflow-wrap:anywhere}.r2poiG_notice{background:var(--s-sunken);color:var(--s-ink-2)}.r2poiG_notice[data-tone=review]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_notice[data-tone=running]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_notice p{color:var(--s-ink-2);font-size:12.5px}.r2poiG_alert{background:var(--s-bad-soft);color:var(--s-bad)}.r2poiG_alert p{white-space:pre-wrap;color:var(--s-ink);font-size:12.5px}.r2poiG_filterRow{flex-wrap:wrap;gap:6px;margin-bottom:12px;display:flex}.r2poiG_studio .r2poiG_filter{border-color:var(--s-line);min-height:28px;color:var(--s-muted);border-radius:14px;gap:5px;padding:2px 10px;font-size:12px}.r2poiG_filter span{color:var(--s-faint);font-weight:600}.r2poiG_studio .r2poiG_filter[aria-pressed=true]{background:var(--s-ink);border-color:var(--s-ink);color:var(--s-bg)}.r2poiG_studio .r2poiG_filter[aria-pressed=true] span{color:inherit;opacity:.7}.r2poiG_pipeline{gap:4px;display:grid;position:relative}.r2poiG_pipeline li{position:relative}.r2poiG_pipeline li:not(:last-child):before{content:"";background:var(--s-line);z-index:0;width:1px;position:absolute;top:40px;bottom:-8px;left:25px}.r2poiG_studio .r2poiG_taskItem{z-index:1;border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"r2poiG_step r2poiG_main""r2poiG_step r2poiG_badges";align-items:start;gap:4px 12px;width:100%;padding:12px;font-weight:400;display:grid;position:relative}.r2poiG_studio .r2poiG_taskItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_step{background:var(--s-bg);border:1.5px solid var(--s-line-strong);width:28px;height:28px;color:var(--s-muted);border-radius:50%;grid-area:r2poiG_step;place-items:center;font-size:12px;font-weight:600;display:grid}li[data-status=completed] .r2poiG_step{border-color:var(--s-ok);color:var(--s-ok);background:var(--s-ok-soft)}li[data-status=running] .r2poiG_step{border-color:var(--s-accent);color:var(--s-accent);background:var(--s-accent-soft)}li[data-status=failed] .r2poiG_step,li[data-status=interrupted] .r2poiG_step{border-color:var(--s-bad);color:var(--s-bad)}li[data-status=blocked] .r2poiG_step{border-style:dashed}.r2poiG_taskMain{grid-area:r2poiG_main;gap:3px;min-width:0;display:grid}.r2poiG_taskMain>strong{overflow-wrap:anywhere;font-size:13.5px;font-weight:600;line-height:1.45}.r2poiG_taskOwner{color:var(--s-ink-2);flex-wrap:wrap;align-items:center;gap:6px;min-width:0;font-size:12.5px;display:inline-flex}.r2poiG_taskOwner small{color:var(--s-faint)}.r2poiG_reason{color:var(--s-muted);font-size:11.5px}.r2poiG_reason[data-kind=revision]{color:var(--s-warn)}.r2poiG_taskBadges{flex-wrap:wrap;grid-area:r2poiG_badges;gap:4px;display:flex}.r2poiG_detailHead{grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px 16px;display:grid}.r2poiG_detailTitle{align-items:flex-start;gap:12px;min-width:0;display:flex}.r2poiG_detailTitle h2{overflow-wrap:anywhere;font-size:18px}.r2poiG_stepLarge{background:var(--s-sunken);color:var(--s-muted);border-radius:6px;flex:none;margin-top:2px;padding:1px 8px;font-size:13px;font-weight:600}.r2poiG_detailBadges{flex-wrap:wrap;justify-content:flex-end;gap:6px;display:flex}.r2poiG_detailHead>.r2poiG_actions{grid-column:1/-1}.r2poiG_block{border-top:1px solid var(--s-line-soft);gap:10px;padding-top:16px;display:grid}.r2poiG_blockHead{justify-content:space-between;align-items:center;gap:8px;display:flex}.r2poiG_blockHead h3 small{color:var(--s-faint);font-weight:400}.r2poiG_linkList{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_studio .r2poiG_taskLink{border-color:var(--s-line);white-space:normal;text-align:left;gap:8px;max-width:100%;min-height:30px;padding:3px 4px 3px 10px;font-weight:400}.r2poiG_taskLink b{color:var(--s-muted);white-space:nowrap;font-weight:600}.r2poiG_revisionCard{border-radius:var(--s-radius-sm);border:1px solid var(--s-warn-soft);background:color-mix(in srgb, var(--s-warn-soft) 55%, transparent);gap:8px;padding:12px 14px;display:grid}.r2poiG_revisionCard>strong{color:var(--s-warn);font-size:12.5px}.r2poiG_revisionCard[data-kind=superseded]{border-style:dashed;border-color:var(--s-line-strong);background:0 0}.r2poiG_revisionCard[data-kind=superseded]>strong{color:var(--s-muted)}.r2poiG_studio blockquote{border-left:3px solid var(--s-warn);background:var(--s-raised);white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 6px 6px 0;gap:2px;padding:6px 12px;font-size:13px;display:grid}.r2poiG_studio blockquote small{color:var(--s-muted);font-size:11px}.r2poiG_reviewForm{gap:10px;display:grid}.r2poiG_facts{grid-template-columns:110px minmax(0,1fr);gap:10px 16px;font-size:13px;display:grid}.r2poiG_facts dt{color:var(--s-muted);padding-top:2px;font-size:12px}.r2poiG_facts dd{overflow-wrap:anywhere;min-width:0}.r2poiG_pathList{gap:2px;display:grid}.r2poiG_miniTimeline{gap:12px;display:grid}.r2poiG_miniTimeline li{border-left:2px solid var(--s-line);padding-left:12px}.r2poiG_handoffMeta{color:var(--s-muted);flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:12px;display:flex}.r2poiG_handoffMeta strong{color:var(--s-ink);font-size:13px}.r2poiG_handoffMeta time{color:var(--s-faint);margin-left:auto;font-size:11.5px}.r2poiG_disclosure{border:1px solid var(--s-line);border-radius:var(--s-radius)}.r2poiG_disclosure>summary{cursor:pointer;color:var(--s-ink-2);padding:11px 14px;font-size:13px;font-weight:600}.r2poiG_disclosure>summary small{color:var(--s-faint);font-weight:400}.r2poiG_disclosure[open]>summary{border-bottom:1px solid var(--s-line-soft)}.r2poiG_disclosureBody{gap:10px;padding:12px 14px 16px;display:grid}.r2poiG_session{border-radius:var(--s-radius-sm);background:var(--s-sunken);gap:4px;padding:10px 12px;font-size:12.5px;display:grid}.r2poiG_copyLine{align-items:center;gap:8px;min-width:0;display:flex}.r2poiG_copyLine code{background:var(--s-raised);border:1px solid var(--s-line-soft);white-space:nowrap;border-radius:6px;flex:1;min-width:0;padding:5px 9px;overflow-x:auto}.r2poiG_studio .r2poiG_copyLine button{min-height:28px;padding:2px 9px;font-size:12px}.r2poiG_fileGrid{gap:8px;display:grid}.r2poiG_fileCard{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);background:var(--s-raised);overflow:hidden}.r2poiG_thumb{background:var(--s-sunken);border-bottom:1px solid var(--s-line-soft);text-align:center;display:block}.r2poiG_thumb img{object-fit:contain;max-width:100%;max-height:260px;margin:0 auto;display:block}.r2poiG_fileRow{grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 10px;display:grid}.r2poiG_fileIcon{background:var(--s-sunken);min-width:38px;height:26px;color:var(--s-muted);white-space:nowrap;border-radius:6px;place-items:center;padding:0 5px;font-size:10.5px;font-weight:600;display:grid}.r2poiG_fileIcon[data-kind=image]{color:#b23473;background:#e8308c21}.r2poiG_fileIcon[data-kind=document]{color:#345eb2;background:#306ee821}.r2poiG_fileIcon[data-kind=web]{color:#ab602b;background:#ee7c2b24}.r2poiG_fileIcon[data-kind=code]{color:#1f7a5c;background:#1fad7e24}.r2poiG_fileIcon[data-kind=data]{color:#7143b1;background:#8d52e024}body[data-ds-dark-theme] .r2poiG_fileIcon[data-kind]{filter:brightness(1.6)}.r2poiG_fileName{min-width:0;display:grid}.r2poiG_fileName strong{overflow-wrap:anywhere;font-size:13px;font-weight:600}.r2poiG_fileName small{color:var(--s-faint);overflow-wrap:anywhere;font-size:11px}.r2poiG_fileActions{gap:4px;display:flex}.r2poiG_studio .r2poiG_fileActions button,.r2poiG_fileActions .r2poiG_linkButton{min-height:28px;padding:2px 10px;font-size:12px}.r2poiG_codePreview{border-top:1px solid var(--s-line-soft);background:var(--s-sunken);max-height:360px;font-family:var(--s-mono);white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px 14px;font-size:12px;line-height:1.6;overflow:auto}.r2poiG_handoffs{padding:20px var(--s-gutter) 40px;gap:22px;max-width:980px;display:grid}.r2poiG_composer{border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-raised);gap:10px;padding:16px;display:grid}.r2poiG_composerHead,.r2poiG_timelineHead{flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;display:flex}.r2poiG_composerHead h2{font-size:15px}.r2poiG_composerFoot{justify-content:space-between;align-items:center;gap:12px;display:flex}.r2poiG_inlineField{color:var(--s-muted);align-items:center;gap:8px;min-width:0;font-size:12.5px;display:inline-flex}.r2poiG_inlineField select{width:auto;max-width:240px;min-height:32px}.r2poiG_timeline{gap:0;display:grid}.r2poiG_timeline li{grid-template-columns:34px minmax(0,1fr);gap:12px;padding-bottom:16px;display:grid;position:relative}.r2poiG_timeline li:not(:last-child):before{content:"";background:var(--s-line);width:1px;position:absolute;top:38px;bottom:2px;left:16.5px}.r2poiG_timelineDot{padding-top:4px}.r2poiG_timelineCard{border:1px solid var(--s-line);border-radius:var(--s-radius);gap:8px;min-width:0;padding:12px 14px;display:grid}.r2poiG_timeline li[data-from=user] .r2poiG_timelineCard{background:var(--s-sunken);border-color:#0000}.r2poiG_studio .r2poiG_taskChip{border-color:var(--s-line);min-height:24px;color:var(--s-ink-2);white-space:normal;text-align:left;border-radius:12px;justify-self:start;max-width:100%;padding:1px 9px;font-size:11.5px;font-weight:500}.r2poiG_dialog{border:1px solid var(--s-line);background:var(--s-bg);width:min(720px,100vw - 32px);max-height:calc(100vh - 48px);color:var(--s-ink);box-shadow:var(--s-shadow);border-radius:14px;padding:0}.r2poiG_dialog::backdrop{background:#0a0e186b}.r2poiG_dialogForm{grid-template-rows:auto minmax(0,1fr) auto;max-height:calc(100vh - 50px);display:grid}.r2poiG_dialogHead{border-bottom:1px solid var(--s-line-soft);justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;display:flex}.r2poiG_dialogBody{gap:16px;padding:18px 22px;display:grid;overflow-y:auto}.r2poiG_dialogFoot{border-top:1px solid var(--s-line-soft);flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;padding:12px 22px;display:flex}.r2poiG_dialogFoot .r2poiG_formStatus{margin-right:auto}.r2poiG_optionCards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;display:grid}.r2poiG_optionCards>legend,.r2poiG_teamPicker>legend{color:var(--s-ink-2);margin-bottom:6px;font-size:12.5px;font-weight:500}.r2poiG_optionCards>legend{grid-column:1/-1}.r2poiG_teamPicker>legend small{color:var(--s-faint);font-weight:400}.r2poiG_optionCards label{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);cursor:pointer;align-items:flex-start;gap:10px;padding:11px 12px;display:flex}.r2poiG_optionCards label:has(input:checked){border-color:var(--s-accent);background:var(--s-accent-soft)}.r2poiG_optionCards input{margin-top:3px!important}.r2poiG_optionCards span{gap:2px;min-width:0;display:grid}.r2poiG_optionCards strong{font-size:13px;font-weight:600}.r2poiG_optionCards small{color:var(--s-muted)}.r2poiG_teamPicker{gap:4px;display:grid}.r2poiG_teamPicker label{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);cursor:pointer;grid-template-columns:auto 18px auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 10px;display:grid}.r2poiG_teamPicker label[data-checked=false]{opacity:.65}.r2poiG_teamPicker label[data-checked=true]{border-color:var(--s-line-strong)}.r2poiG_order{color:var(--s-accent);text-align:center;font-size:11px;font-weight:700}.r2poiG_studio .r2poiG_meetingItem{border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;justify-content:stretch;gap:6px;width:100%;padding:12px;font-weight:400;display:grid}.r2poiG_studio .r2poiG_meetingItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_meetingItem>small{color:var(--s-muted);text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.r2poiG_meetingItemHead{justify-content:space-between;align-items:flex-start;gap:8px;min-width:0;display:flex}.r2poiG_meetingItemHead strong{overflow-wrap:anywhere;font-size:13.5px;font-weight:600}.r2poiG_avatarStack{display:flex}.r2poiG_avatarStack>span{box-shadow:0 0 0 2px var(--s-bg);margin-right:-5px}.r2poiG_badge[data-meeting=open],.r2poiG_badge[data-meeting=drafting]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_badge[data-meeting=drafting] i{animation:1.4s ease-in-out infinite r2poiG_pulse}.r2poiG_badge[data-meeting=review]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_badge[data-meeting=closed]{color:var(--s-faint)}.r2poiG_reason[data-kind=speaking]{color:var(--s-accent)}.r2poiG_meetingCard{gap:14px;max-width:900px;display:grid}.r2poiG_meetingHead{border-bottom:1px solid var(--s-line-soft);gap:10px;padding-bottom:14px;display:grid}.r2poiG_meetingTitle{flex-wrap:wrap;align-items:center;gap:10px;display:flex}.r2poiG_meetingTitle h2{overflow-wrap:anywhere;font-size:18px}.r2poiG_agenda{color:var(--s-ink-2);white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.r2poiG_attendeeRow{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_attendeeRow li{border:1px solid var(--s-line);border-radius:14px;align-items:center;gap:5px;max-width:100%;padding:2px 9px 2px 2px;font-size:12px;display:inline-flex}.r2poiG_attendeeRow li[data-host=true]{border-color:var(--s-accent)}.r2poiG_attendeeRow em,.r2poiG_bubbleMeta em{color:var(--s-accent);background:var(--s-accent-soft);border-radius:4px;padding:0 5px;font-size:10.5px;font-style:normal;font-weight:600;line-height:16px}.r2poiG_chat{gap:14px;padding:4px 0;display:grid}.r2poiG_chatEmpty{border:1px dashed var(--s-line-strong);border-radius:var(--s-radius);color:var(--s-muted);text-align:center;padding:24px 16px;font-size:13px}.r2poiG_bubbleRow{grid-template-columns:34px minmax(0,1fr);align-items:start;gap:10px;display:grid}.r2poiG_bubbleRow[data-own=true]{grid-template-columns:minmax(0,1fr) 34px}.r2poiG_bubbleRow[data-own=true]>.r2poiG_avatar{grid-area:1/2}.r2poiG_bubbleRow[data-own=true]>.r2poiG_bubbleBody{grid-area:1/1;justify-items:end}.r2poiG_bubbleBody{justify-items:start;gap:4px;min-width:0;display:grid}.r2poiG_bubbleMeta{color:var(--s-muted);flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:12px;display:flex}.r2poiG_bubbleMeta strong{color:var(--s-ink);font-size:12.5px}.r2poiG_bubbleMeta time{color:var(--s-faint);font-size:11px}.r2poiG_bubble{background:var(--s-sunken);border:1px solid var(--s-line-soft);border-radius:4px 14px 14px;gap:4px;min-width:0;max-width:min(640px,100%);padding:9px 13px;display:grid}.r2poiG_bubbleRow[data-own=true] .r2poiG_bubble{background:var(--s-accent-soft);border-color:#0000;border-radius:14px 4px 14px 14px}.r2poiG_mentionLine{flex-wrap:wrap;gap:4px;display:flex}.r2poiG_mentionLine span{color:var(--s-accent);font-size:11.5px;font-weight:600}.r2poiG_sessionNote{color:var(--s-faint);max-width:100%;font-size:11px}.r2poiG_sessionNote summary{cursor:pointer}.r2poiG_sessionNote code{background:var(--s-sunken);white-space:nowrap;color:var(--s-ink-2);border-radius:5px;margin-top:4px;padding:3px 8px;display:block;overflow-x:auto}.r2poiG_typing{background:var(--s-sunken);color:var(--s-muted);border-radius:4px 14px 14px;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 13px;font-size:12.5px;display:inline-flex}.r2poiG_typing small{color:var(--s-faint)}.r2poiG_dots{gap:3px;display:inline-flex}.r2poiG_dots i{background:var(--s-accent);border-radius:50%;width:5px;height:5px;animation:1.2s ease-in-out infinite r2poiG_pulse}.r2poiG_dots i:nth-child(2){animation-delay:.2s}.r2poiG_dots i:nth-child(3){animation-delay:.4s}.r2poiG_chatComposer{z-index:2;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-bg);gap:8px;padding:12px 14px;display:grid;position:sticky;bottom:0;box-shadow:0 -8px 20px -12px #0000002e}.r2poiG_mentionChips{flex-wrap:wrap;align-items:center;gap:6px;display:flex}.r2poiG_minutes{border:1px solid var(--s-warn-soft);border-radius:var(--s-radius);background:color-mix(in srgb, var(--s-warn-soft) 30%, transparent);gap:14px;padding:16px 18px;display:grid}.r2poiG_minutes .r2poiG_blockHead{flex-wrap:wrap}.r2poiG_minutesTasks{gap:10px;display:grid}.r2poiG_minutesTasks>legend{color:var(--s-ink-2);margin-bottom:4px;font-size:12.5px;font-weight:500}.r2poiG_studio .r2poiG_minutesTasks>button{justify-self:start}.r2poiG_minutesTask{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);background:var(--s-bg);grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:10px;padding:10px;display:grid}.r2poiG_minutesTask>.r2poiG_step{grid-area:auto;margin-top:2px}.r2poiG_minutesTaskFields{gap:8px;min-width:0;display:grid}.r2poiG_minutesTaskActions{gap:2px;display:grid}.r2poiG_studio .r2poiG_minutesTaskActions button{width:28px;min-height:26px;padding:0}.r2poiG_studio .r2poiG_rosterItem[data-bulk=true]{cursor:pointer;grid-template-columns:auto auto minmax(0,1fr) auto}.r2poiG_studio .r2poiG_rosterItem[data-bulk=true]:hover{background:var(--s-hover)}.r2poiG_studio .r2poiG_rosterItem[data-bulk=true]:has(input:checked){background:var(--s-bad-soft);border-color:#0000}.r2poiG_rosterItem[data-locked=true]{cursor:not-allowed}.r2poiG_rosterItem[data-locked=true] small{color:var(--s-faint)}.r2poiG_bulkBar{border-radius:var(--s-radius-sm);background:var(--s-sunken);color:var(--s-ink-2);gap:8px;margin-bottom:10px;padding:10px 12px;font-size:12.5px;display:grid}.r2poiG_memberRow{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:4px 6px;display:grid}.r2poiG_memberRow[aria-current=true]{border-color:var(--s-accent);background:var(--s-accent-soft)}.r2poiG_memberRow>.r2poiG_step{grid-area:auto}.r2poiG_studio .r2poiG_memberMain{text-align:left;white-space:normal;background:0 0;border:0;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:6px;font-weight:400;display:grid}.r2poiG_memberEditor{border:1px solid var(--s-accent);border-radius:var(--s-radius);padding:14px}.r2poiG_memberEditor .r2poiG_editorCard{max-width:none}.r2poiG_memberEditor .r2poiG_formFooter{background:0 0;position:static}.r2poiG_applyPlan{border-radius:var(--s-radius);border:1px solid var(--s-warn-soft);background:color-mix(in srgb, var(--s-warn-soft) 40%, transparent);gap:12px;padding:14px 16px;display:grid}.r2poiG_planRow{display:contents}.r2poiG_applyPlan .r2poiG_facts{grid-template-columns:minmax(150px,220px) minmax(0,1fr)}.r2poiG_planRow[data-kind=applyAdd] dt{color:var(--s-ok)}.r2poiG_planRow[data-kind=applyRemove] dt{color:var(--s-bad)}.r2poiG_planRow[data-kind=applyDisable] dt{color:var(--s-warn)}@media (width<=1100px){.r2poiG_workArea{grid-template-columns:minmax(0,1fr)}.r2poiG_listPane{border-right:0;border-bottom:1px solid var(--s-line)}.r2poiG_summaryGrid{grid-template-columns:minmax(0,1fr)}.r2poiG_roster{grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))}.r2poiG_pipeline li:before{display:none}}@media (width<=720px){.r2poiG_studio{--s-gutter:16px}.r2poiG_topbar{flex-direction:column;align-items:stretch;gap:12px;padding-top:18px}.r2poiG_brand h1{font-size:21px}.r2poiG_workspace{flex-direction:column;align-items:stretch}.r2poiG_workspacePicker{width:100%}.r2poiG_workspace>button{align-self:flex-start;padding-left:0}.r2poiG_fieldPair,.r2poiG_optionCards{grid-template-columns:minmax(0,1fr)}.r2poiG_projectPicker{flex-basis:100%}.r2poiG_projectActions{margin-left:0}.r2poiG_statList{grid-template-columns:repeat(2,minmax(0,1fr))}.r2poiG_detailHead{grid-template-columns:minmax(0,1fr)}.r2poiG_detailBadges{justify-content:flex-start}.r2poiG_facts{grid-template-columns:minmax(0,1fr);gap:2px}.r2poiG_facts dd{margin-bottom:8px}.r2poiG_segmented{grid-template-columns:repeat(2,minmax(0,1fr))}.r2poiG_composerFoot{flex-direction:column;align-items:stretch}.r2poiG_success{grid-template-columns:minmax(0,1fr)}.r2poiG_inputWithButton{flex-direction:column}.r2poiG_dialog{border-radius:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0}.r2poiG_dialogForm{height:100%;max-height:100dvh}}@media (width<=480px){.r2poiG_tabs{padding-right:8px}.r2poiG_studio .r2poiG_tab{padding:10px 8px;font-size:13px}.r2poiG_tabs>.r2poiG_primary{min-width:34px;padding:6px 10px}.r2poiG_wideLabel{display:none}.r2poiG_rosterItem{grid-template-columns:auto minmax(0,1fr)!important}.r2poiG_rosterMeta{grid-column:2;justify-items:start;max-width:100%}.r2poiG_fileRow{grid-template-columns:auto minmax(0,1fr)}.r2poiG_fileActions{grid-column:1/-1;justify-content:flex-end}.r2poiG_teamPicker label{grid-template-columns:auto 14px auto minmax(0,1fr)}.r2poiG_teamPicker label>:last-child{grid-column:4;justify-self:start}.r2poiG_timeline li{grid-template-columns:minmax(0,1fr)}.r2poiG_timeline li:before,.r2poiG_timelineDot{display:none}.r2poiG_minutesTask{grid-template-columns:minmax(0,1fr)}.r2poiG_minutesTask>.r2poiG_step{display:none}.r2poiG_minutesTaskActions{justify-content:flex-end;display:flex}.r2poiG_bubbleRow,.r2poiG_bubbleRow[data-own=true]{grid-template-columns:minmax(0,1fr)}.r2poiG_bubbleRow>.r2poiG_avatar{display:none}.r2poiG_bubbleRow[data-own=true]>.r2poiG_bubbleBody{grid-column:1}}';
 }
-var Studio_default = { "ghost": "r2poiG_ghost", "spin": "r2poiG_spin", "workspacePicker": "r2poiG_workspacePicker", "fieldPair": "r2poiG_fieldPair", "projectPicker": "r2poiG_projectPicker", "menuBody": "r2poiG_menuBody", "dots": "r2poiG_dots", "linkButton": "r2poiG_linkButton", "stepLarge": "r2poiG_stepLarge", "blockHead": "r2poiG_blockHead", "hint": "r2poiG_hint", "agenda": "r2poiG_agenda", "revisionCard": "r2poiG_revisionCard", "taskChip": "r2poiG_taskChip", "switch": "r2poiG_switch", "report": "r2poiG_report", "composerHead": "r2poiG_composerHead", "detailPane": "r2poiG_detailPane", "teamPicker": "r2poiG_teamPicker", "bubble": "r2poiG_bubble", "chips": "r2poiG_chips", "workspace": "r2poiG_workspace", "studio": "r2poiG_studio", "linkList": "r2poiG_linkList", "fileName": "r2poiG_fileName", "checkList": "r2poiG_checkList", "footnote": "r2poiG_footnote", "copyLine": "r2poiG_copyLine", "summaryGrid": "r2poiG_summaryGrid", "teamStrip": "r2poiG_teamStrip", "timelineHead": "r2poiG_timelineHead", "session": "r2poiG_session", "meetingTitle": "r2poiG_meetingTitle", "meetingHead": "r2poiG_meetingHead", "step": "r2poiG_step", "progressHead": "r2poiG_progressHead", "dialogBody": "r2poiG_dialogBody", "ghostDanger": "r2poiG_ghostDanger", "formFooter": "r2poiG_formFooter", "disclosureBody": "r2poiG_disclosureBody", "minutesTasks": "r2poiG_minutesTasks", "wideLabel": "r2poiG_wideLabel", "reason": "r2poiG_reason", "detailBadges": "r2poiG_detailBadges", "objective": "r2poiG_objective", "healthRow": "r2poiG_healthRow", "detailTitle": "r2poiG_detailTitle", "field": "r2poiG_field", "workspaceForm": "r2poiG_workspaceForm", "tabList": "r2poiG_tabList", "dialogHead": "r2poiG_dialogHead", "mentionLine": "r2poiG_mentionLine", "modelOption": "r2poiG_modelOption", "projectBar": "r2poiG_projectBar", "rosterMeta": "r2poiG_rosterMeta", "bubbleRow": "r2poiG_bubbleRow", "spinner": "r2poiG_spinner", "inlineError": "r2poiG_inlineError", "main": "r2poiG_main", "actions": "r2poiG_actions", "miniTimeline": "r2poiG_miniTimeline", "paneHead": "r2poiG_paneHead", "bar": "r2poiG_bar", "projectTop": "r2poiG_projectTop", "listPane": "r2poiG_listPane", "modelList": "r2poiG_modelList", "projectActions": "r2poiG_projectActions", "composerFoot": "r2poiG_composerFoot", "bubbleMeta": "r2poiG_bubbleMeta", "dangerSolid": "r2poiG_dangerSolid", "minutesTaskActions": "r2poiG_minutesTaskActions", "primary": "r2poiG_primary", "alert": "r2poiG_alert", "rosterText": "r2poiG_rosterText", "optionCards": "r2poiG_optionCards", "pipeline": "r2poiG_pipeline", "handoffMeta": "r2poiG_handoffMeta", "editorHead": "r2poiG_editorHead", "taskBadges": "r2poiG_taskBadges", "healthChip": "r2poiG_healthChip", "timelineDot": "r2poiG_timelineDot", "composer": "r2poiG_composer", "inputWithButton": "r2poiG_inputWithButton", "taskLink": "r2poiG_taskLink", "taskOwner": "r2poiG_taskOwner", "formGroup": "r2poiG_formGroup", "detailHead": "r2poiG_detailHead", "meetingItemHead": "r2poiG_meetingItemHead", "thumb": "r2poiG_thumb", "fileIcon": "r2poiG_fileIcon", "dialogFoot": "r2poiG_dialogFoot", "statList": "r2poiG_statList", "mono": "r2poiG_mono", "taskItem": "r2poiG_taskItem", "pulse": "r2poiG_pulse", "badges": "r2poiG_badges", "taskMain": "r2poiG_taskMain", "minutesTask": "r2poiG_minutesTask", "roster": "r2poiG_roster", "bubbleBody": "r2poiG_bubbleBody", "meetingItem": "r2poiG_meetingItem", "disclosure": "r2poiG_disclosure", "timelineCard": "r2poiG_timelineCard", "sessionNote": "r2poiG_sessionNote", "muted": "r2poiG_muted", "modelPicker": "r2poiG_modelPicker", "summaryMain": "r2poiG_summaryMain", "pathList": "r2poiG_pathList", "codePreview": "r2poiG_codePreview", "avatarStack": "r2poiG_avatarStack", "dialog": "r2poiG_dialog", "chatEmpty": "r2poiG_chatEmpty", "offTag": "r2poiG_offTag", "formStatus": "r2poiG_formStatus", "meetingCard": "r2poiG_meetingCard", "typing": "r2poiG_typing", "filterRow": "r2poiG_filterRow", "fileCard": "r2poiG_fileCard", "fileGrid": "r2poiG_fileGrid", "topbar": "r2poiG_topbar", "workArea": "r2poiG_workArea", "chat": "r2poiG_chat", "emptyState": "r2poiG_emptyState", "fileActions": "r2poiG_fileActions", "emptyInline": "r2poiG_emptyInline", "tabs": "r2poiG_tabs", "badge": "r2poiG_badge", "menu": "r2poiG_menu", "editorCard": "r2poiG_editorCard", "dialogForm": "r2poiG_dialogForm", "chip": "r2poiG_chip", "minutesTaskFields": "r2poiG_minutesTaskFields", "iconButton": "r2poiG_iconButton", "srOnly": "r2poiG_srOnly", "count": "r2poiG_count", "chatComposer": "r2poiG_chatComposer", "modelTags": "r2poiG_modelTags", "notice": "r2poiG_notice", "detailCard": "r2poiG_detailCard", "fileRow": "r2poiG_fileRow", "toolRow": "r2poiG_toolRow", "filter": "r2poiG_filter", "order": "r2poiG_order", "metaLine": "r2poiG_metaLine", "brand": "r2poiG_brand", "avatar": "r2poiG_avatar", "summarySide": "r2poiG_summarySide", "handoffs": "r2poiG_handoffs", "attendeeRow": "r2poiG_attendeeRow", "block": "r2poiG_block", "inlineField": "r2poiG_inlineField", "segmented": "r2poiG_segmented", "banner": "r2poiG_banner", "engineTag": "r2poiG_engineTag", "rosterItem": "r2poiG_rosterItem", "tab": "r2poiG_tab", "success": "r2poiG_success", "criteria": "r2poiG_criteria", "reviewForm": "r2poiG_reviewForm", "timeline": "r2poiG_timeline", "mentionChips": "r2poiG_mentionChips", "minutes": "r2poiG_minutes", "facts": "r2poiG_facts" };
+var Studio_default = { "formGroup": "r2poiG_formGroup", "healthRow": "r2poiG_healthRow", "workspace": "r2poiG_workspace", "taskBadges": "r2poiG_taskBadges", "timelineHead": "r2poiG_timelineHead", "dialogBody": "r2poiG_dialogBody", "rosterMeta": "r2poiG_rosterMeta", "timelineDot": "r2poiG_timelineDot", "meetingItemHead": "r2poiG_meetingItemHead", "projectPicker": "r2poiG_projectPicker", "minutesTasks": "r2poiG_minutesTasks", "detailTitle": "r2poiG_detailTitle", "chatEmpty": "r2poiG_chatEmpty", "memberEditor": "r2poiG_memberEditor", "alert": "r2poiG_alert", "banner": "r2poiG_banner", "memberRow": "r2poiG_memberRow", "minutesTaskFields": "r2poiG_minutesTaskFields", "fieldPair": "r2poiG_fieldPair", "pathList": "r2poiG_pathList", "dialogForm": "r2poiG_dialogForm", "mentionLine": "r2poiG_mentionLine", "spin": "r2poiG_spin", "dots": "r2poiG_dots", "modelList": "r2poiG_modelList", "fileName": "r2poiG_fileName", "avatarStack": "r2poiG_avatarStack", "minutesTask": "r2poiG_minutesTask", "switch": "r2poiG_switch", "formStatus": "r2poiG_formStatus", "timeline": "r2poiG_timeline", "dialog": "r2poiG_dialog", "iconButton": "r2poiG_iconButton", "composerFoot": "r2poiG_composerFoot", "timelineCard": "r2poiG_timelineCard", "dialogFoot": "r2poiG_dialogFoot", "detailCard": "r2poiG_detailCard", "teamPicker": "r2poiG_teamPicker", "inputWithButton": "r2poiG_inputWithButton", "chatComposer": "r2poiG_chatComposer", "planRow": "r2poiG_planRow", "inlineError": "r2poiG_inlineError", "hint": "r2poiG_hint", "metaLine": "r2poiG_metaLine", "reason": "r2poiG_reason", "block": "r2poiG_block", "toolRow": "r2poiG_toolRow", "disclosure": "r2poiG_disclosure", "editorHead": "r2poiG_editorHead", "chip": "r2poiG_chip", "objective": "r2poiG_objective", "healthChip": "r2poiG_healthChip", "taskItem": "r2poiG_taskItem", "footnote": "r2poiG_footnote", "topbar": "r2poiG_topbar", "fileCard": "r2poiG_fileCard", "fileRow": "r2poiG_fileRow", "workArea": "r2poiG_workArea", "rosterText": "r2poiG_rosterText", "dialogHead": "r2poiG_dialogHead", "taskLink": "r2poiG_taskLink", "attendeeRow": "r2poiG_attendeeRow", "disclosureBody": "r2poiG_disclosureBody", "bubble": "r2poiG_bubble", "fileActions": "r2poiG_fileActions", "applyPlan": "r2poiG_applyPlan", "inlineField": "r2poiG_inlineField", "spinner": "r2poiG_spinner", "badges": "r2poiG_badges", "wideLabel": "r2poiG_wideLabel", "formFooter": "r2poiG_formFooter", "miniTimeline": "r2poiG_miniTimeline", "optionCards": "r2poiG_optionCards", "teamStrip": "r2poiG_teamStrip", "brand": "r2poiG_brand", "count": "r2poiG_count", "main": "r2poiG_main", "chips": "r2poiG_chips", "meetingCard": "r2poiG_meetingCard", "bubbleMeta": "r2poiG_bubbleMeta", "fileIcon": "r2poiG_fileIcon", "bulkBar": "r2poiG_bulkBar", "report": "r2poiG_report", "codePreview": "r2poiG_codePreview", "facts": "r2poiG_facts", "studio": "r2poiG_studio", "tabs": "r2poiG_tabs", "memberMain": "r2poiG_memberMain", "statList": "r2poiG_statList", "segmented": "r2poiG_segmented", "emptyInline": "r2poiG_emptyInline", "meetingTitle": "r2poiG_meetingTitle", "mentionChips": "r2poiG_mentionChips", "actions": "r2poiG_actions", "bar": "r2poiG_bar", "dangerSolid": "r2poiG_dangerSolid", "filterRow": "r2poiG_filterRow", "tabList": "r2poiG_tabList", "order": "r2poiG_order", "fileGrid": "r2poiG_fileGrid", "linkList": "r2poiG_linkList", "typing": "r2poiG_typing", "progressHead": "r2poiG_progressHead", "taskMain": "r2poiG_taskMain", "step": "r2poiG_step", "pipeline": "r2poiG_pipeline", "menu": "r2poiG_menu", "thumb": "r2poiG_thumb", "modelOption": "r2poiG_modelOption", "primary": "r2poiG_primary", "minutes": "r2poiG_minutes", "modelPicker": "r2poiG_modelPicker", "summaryGrid": "r2poiG_summaryGrid", "stepLarge": "r2poiG_stepLarge", "mono": "r2poiG_mono", "copyLine": "r2poiG_copyLine", "emptyState": "r2poiG_emptyState", "pulse": "r2poiG_pulse", "offTag": "r2poiG_offTag", "linkButton": "r2poiG_linkButton", "listPane": "r2poiG_listPane", "srOnly": "r2poiG_srOnly", "ghost": "r2poiG_ghost", "projectActions": "r2poiG_projectActions", "taskOwner": "r2poiG_taskOwner", "summarySide": "r2poiG_summarySide", "editorCard": "r2poiG_editorCard", "handoffs": "r2poiG_handoffs", "composer": "r2poiG_composer", "composerHead": "r2poiG_composerHead", "success": "r2poiG_success", "handoffMeta": "r2poiG_handoffMeta", "detailBadges": "r2poiG_detailBadges", "notice": "r2poiG_notice", "agenda": "r2poiG_agenda", "chat": "r2poiG_chat", "sessionNote": "r2poiG_sessionNote", "minutesTaskActions": "r2poiG_minutesTaskActions", "filter": "r2poiG_filter", "session": "r2poiG_session", "roster": "r2poiG_roster", "field": "r2poiG_field", "modelTags": "r2poiG_modelTags", "workspacePicker": "r2poiG_workspacePicker", "meetingItem": "r2poiG_meetingItem", "projectBar": "r2poiG_projectBar", "taskChip": "r2poiG_taskChip", "engineTag": "r2poiG_engineTag", "meetingHead": "r2poiG_meetingHead", "paneHead": "r2poiG_paneHead", "blockHead": "r2poiG_blockHead", "bubbleBody": "r2poiG_bubbleBody", "avatar": "r2poiG_avatar", "checkList": "r2poiG_checkList", "reviewForm": "r2poiG_reviewForm", "detailHead": "r2poiG_detailHead", "rosterItem": "r2poiG_rosterItem", "ghostDanger": "r2poiG_ghostDanger", "workspaceForm": "r2poiG_workspaceForm", "badge": "r2poiG_badge", "revisionCard": "r2poiG_revisionCard", "tab": "r2poiG_tab", "muted": "r2poiG_muted", "menuBody": "r2poiG_menuBody", "detailPane": "r2poiG_detailPane", "summaryMain": "r2poiG_summaryMain", "projectTop": "r2poiG_projectTop", "bubbleRow": "r2poiG_bubbleRow", "criteria": "r2poiG_criteria" };
 
 // src/client/parts.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
@@ -2639,7 +2641,7 @@ function TaskForm({ draft, setDraft, tasks, state, project, busy, error, t, comm
 }
 
 // src/client/TeamView.tsx
-var import_react10 = require("react");
+var import_react11 = require("react");
 
 // ../../../deepseek-harness/packages/util/crypto/lib/index.js
 function randomUUID() {
@@ -2648,6 +2650,49 @@ function randomUUID() {
     return (index === 6 ? byte & 15 | 64 : index === 8 ? byte & 63 | 128 : byte).toString(16).padStart(2, "0");
   }).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// src/roster.ts
+function hasHistory(state, id2) {
+  return state.tasks.some((task) => task.employeeId === id2) || state.meetings.some((meeting2) => meeting2.attendeeIds.some((value) => value === id2) || meeting2.messages.some((message) => message.from === id2) || meeting2.minutes?.tasks.some((task) => task.employeeId === id2) === true);
+}
+function seat(value) {
+  return `${value.name.trim()}\0${value.role.trim()}`;
+}
+function planTemplate(state, template) {
+  const plan = { keep: [], add: [], remove: [], disable: [] };
+  const claimed = /* @__PURE__ */ new Set();
+  for (const member of template.members) {
+    const match = state.employees.find((employee) => !claimed.has(employee.id) && seat(employee) === seat(member));
+    if (match) {
+      claimed.add(match.id);
+      plan.keep.push(match);
+    } else plan.add.push(member);
+  }
+  for (const employee of state.employees) {
+    if (claimed.has(employee.id)) continue;
+    if (hasHistory(state, employee.id)) {
+      if (employee.enabled) plan.disable.push(employee);
+    } else plan.remove.push(employee);
+  }
+  return plan;
+}
+function settings(employee) {
+  return JSON.stringify([employee.name.trim(), employee.role.trim(), employee.responsibilities.trim(), employee.engine]);
+}
+function redundantEmployees(state) {
+  const seen = /* @__PURE__ */ new Set();
+  const result = [];
+  for (const employee of state.employees) {
+    const key = settings(employee);
+    if (seen.has(key) && !hasHistory(state, employee.id)) result.push(employee);
+    seen.add(key);
+  }
+  return result;
+}
+function toMember(employee) {
+  const { id: _id, cwd: _cwd, enabled: _enabled, ...member } = employee;
+  return member;
 }
 
 // src/client/EmployeeEditor.tsx
@@ -2660,7 +2705,8 @@ var efforts = {
   compatible: ["", "minimal", "low", "medium", "high", "xhigh"]
 };
 var engines = ["codex", "claude", "harness", "compatible"];
-function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove }) {
+function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove, variant = "employee" }) {
+  const member = variant === "member";
   const [draft, setDraft] = (0, import_react9.useState)(employee);
   const [customModel, setCustomModel] = (0, import_react9.useState)(false);
   const [outcome, setOutcome] = (0, import_react9.useState)("idle");
@@ -2698,9 +2744,13 @@ function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { id: `${id2}-title`, children: draft.name || t("newEmployee") }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { children: [
           draft.role || t("noRole"),
-          !draft.enabled && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+          !member && !draft.enabled && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
             " \xB7 ",
             t("disabled")
+          ] }),
+          member && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+            " \xB7 ",
+            t("templateMember")
           ] })
         ] })
       ] })
@@ -2717,7 +2767,7 @@ function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove
           change("responsibilities", event.target.value);
         } })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.switch, children: [
+      !member && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.switch, children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "checkbox", checked: draft.enabled, onChange: (event) => {
           change("enabled", event.target.checked);
         } }),
@@ -2799,8 +2849,8 @@ function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove
       ] }, key)) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("fieldset", { className: Studio_default.formGroup, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("legend", { children: t("workplace") }),
-      text2("cwd", t("unassignedCwd")),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("legend", { children: t(member ? "permission" : "workplace") }),
+      !member && text2("cwd", t("unassignedCwd")),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.field, children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t("permission") }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("select", { "aria-label": t("permission"), value: draft.permission, onChange: (event) => {
@@ -2816,7 +2866,7 @@ function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: Studio_default.actions, children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("button", { type: "submit", className: Studio_default.primary, disabled: busy || !dirty, children: [
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Busy, { on: outcome === "saving" }),
-          t(outcome === "saving" ? "saving" : "save")
+          t(outcome === "saving" ? "saving" : member ? "updateMember" : "save")
         ] }),
         confirmDelete ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: Studio_default.dangerSolid, disabled: busy, onClick: () => {
@@ -2831,9 +2881,9 @@ function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove
           }, children: t("cancelAction") })
         ] }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: Studio_default.ghostDanger, disabled: busy, onClick: () => {
           setConfirmDelete(true);
-        }, children: t(isNew ? "discard" : "delete") })
+        }, children: t(member ? "removeMember" : isNew ? "discard" : "delete") })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: Studio_default.formStatus, role: "status", "data-state": outcome === "failed" ? "error" : outcome === "saved" && !dirty ? "ok" : "idle", children: outcome === "failed" ? error || t("failure") : outcome === "saved" && !dirty ? t("settingsSaved") : dirty && !isNew ? t("unsaved") : "" })
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: Studio_default.formStatus, role: "status", "data-state": outcome === "failed" ? "error" : outcome === "saved" && !dirty ? "ok" : "idle", children: outcome === "failed" ? error || t("failure") : outcome === "saved" && !dirty ? t(member ? "memberUpdated" : "settingsSaved") : dirty && !isNew ? t("unsaved") : "" })
     ] })
   ] });
 }
@@ -2890,18 +2940,298 @@ function ModelPicker({ t, name, models, value, custom, loadError, onPick, onCust
   ] });
 }
 
-// src/client/TeamView.tsx
+// src/client/TemplatesView.tsx
+var import_react10 = require("react");
 var import_jsx_runtime10 = require("react/jsx-runtime");
-function TeamView({ state, view, t, command, checkHealth }) {
+function TemplatesView({ state, view, t, command, onDone }) {
   const [selected, setSelected] = (0, import_react10.useState)(null);
   const [draft, setDraft] = (0, import_react10.useState)(null);
-  const [query, setQuery] = (0, import_react10.useState)("");
-  const [checking, setChecking] = (0, import_react10.useState)(false);
+  const template = draft ?? state.templates.find((value) => value.id === selected) ?? state.templates[0];
+  const create = (members, name) => {
+    const id2 = randomUUID();
+    setDraft({ id: id2, name, description: "", members, createdAt: "" });
+    setSelected(id2);
+  };
+  const blank = () => toMember({
+    id: "",
+    name: t("newMember"),
+    role: "",
+    responsibilities: "",
+    engine: "codex",
+    model: "",
+    effort: "",
+    permission: "workspace-write",
+    cwd: "",
+    enabled: true,
+    baseURL: "",
+    apiKeyEnv: "",
+    thinkingFormat: "none",
+    contextWindow: 262144,
+    maxTokens: 32768
+  });
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.workArea, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: Studio_default.listPane, "aria-label": t("templates"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.paneHead, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: t("templates") }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.muted, children: t("templatesHelp") })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.ghost, onClick: onDone, children: t("backToRoster") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.primary, disabled: !!draft, onClick: () => {
+          create([blank()], t("newTemplate"));
+        }, children: t("newTemplate") }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { disabled: !!draft || !state.employees.some((employee) => employee.enabled), onClick: () => {
+          create(state.employees.filter((employee) => employee.enabled).map(toMember), t("myTeam"));
+        }, children: t("saveTeamAsTemplate") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("ul", { className: Studio_default.roster, style: { marginTop: 12 }, children: [
+        draft && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { className: Studio_default.meetingItem, "aria-current": "true", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.meetingItemHead, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: draft.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: Studio_default.badge, children: t("unsavedTemplate") })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: t("memberCount", { count: draft.members.length }) })
+        ] }) }),
+        state.templates.map((value) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+          "button",
+          {
+            className: Studio_default.meetingItem,
+            "aria-current": !draft && template?.id === value.id ? "true" : void 0,
+            onClick: () => {
+              setDraft(null);
+              setSelected(value.id);
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.meetingItemHead, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: value.name }),
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: t("memberCount", { count: value.members.length }) })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: Studio_default.avatarStack, children: value.members.slice(0, 10).map((member, index) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Avatar, { id: `${value.id}-${index}`, name: member.name, size: "sm" }, index)) }),
+              value.description && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: value.description })
+            ]
+          }
+        ) }, value.id))
+      ] }),
+      !state.templates.length && !draft && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: Studio_default.emptyState, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: t("noTemplates") }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: Studio_default.detailPane, children: template ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      TemplateEditor,
+      {
+        template,
+        isNew: draft?.id === template.id,
+        state,
+        view,
+        t,
+        command,
+        blank,
+        onSaved: () => {
+          setDraft(null);
+        },
+        onDiscard: () => {
+          setDraft(null);
+          setSelected(null);
+        },
+        onApplied: onDone
+      },
+      template.id
+    ) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: Studio_default.emptyState, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: t("selectTemplate") }) }) })
+  ] });
+}
+function TemplateEditor({ template, isNew, state, view, t, command, blank, onSaved, onDiscard, onApplied }) {
+  const [draft, setDraft] = (0, import_react10.useState)(template);
+  const [editing, setEditing] = (0, import_react10.useState)(null);
+  const [confirmDelete, setConfirmDelete] = (0, import_react10.useState)(false);
+  const [applying, setApplying] = (0, import_react10.useState)(false);
+  const [outcome, setOutcome] = (0, import_react10.useState)("idle");
   const { pending, run } = usePending();
+  const dirty = isNew || JSON.stringify({ ...draft, createdAt: "" }) !== JSON.stringify({ ...template, createdAt: "" });
+  const update = (patch) => {
+    setOutcome("idle");
+    setDraft({ ...draft, ...patch });
+  };
+  const move = (index, offset) => {
+    const members = [...draft.members];
+    const [member] = members.splice(index, 1);
+    if (member) members.splice(index + offset, 0, member);
+    update({ members });
+    setEditing(null);
+  };
+  const asEmployee = (member, index) => ({ ...member, id: `${draft.id}-member-${index}`, cwd: "", enabled: true });
+  const valid = !!draft.name.trim() && draft.members.length > 0 && draft.members.every((member) => member.name.trim() && member.role.trim());
+  const plan = applying ? planTemplate(state, template) : null;
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.editorCard, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("header", { className: Studio_default.detailHead, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: draft.name || t("newTemplate") }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("p", { className: Studio_default.muted, children: [
+        t("memberCount", { count: draft.members.length }),
+        isNew && ` \xB7 ${t("unsavedTemplate")}`
+      ] })
+    ] }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.fieldPair, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: t("templateName") }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("input", { required: true, value: draft.name, onChange: (event) => {
+          update({ name: event.target.value });
+        } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: t("templateDescription") }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("input", { value: draft.description, onChange: (event) => {
+          update({ description: event.target.value });
+        } })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("fieldset", { className: Studio_default.minutesTasks, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("legend", { children: t("templateMembers") }),
+      draft.members.map((member, index) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.memberRow, "aria-current": editing === index ? "true" : void 0, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: Studio_default.step, children: index + 1 }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { type: "button", className: Studio_default.memberMain, onClick: () => {
+          setEditing(editing === index ? null : index);
+        }, "aria-expanded": editing === index, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Avatar, { id: `${draft.id}-${index}`, name: member.name, size: "sm" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.rosterText, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: member.name || t("newMember") }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: member.role || t("noRole") })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.rosterMeta, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(EngineTag, { engine: member.engine, t }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { className: Studio_default.mono, children: [
+              member.model || t("nativeDefault"),
+              member.effort && ` \xB7 ${member.effort}`
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.minutesTaskActions, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: Studio_default.ghost, "aria-label": t("moveUp"), disabled: index === 0, onClick: () => {
+            move(index, -1);
+          }, children: "\u2191" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: Studio_default.ghost, "aria-label": t("moveDown"), disabled: index === draft.members.length - 1, onClick: () => {
+            move(index, 1);
+          }, children: "\u2193" })
+        ] })
+      ] }, index)),
+      editing !== null && draft.members[editing] && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: Studio_default.memberEditor, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        EmployeeEditor,
+        {
+          variant: "member",
+          employee: asEmployee(draft.members[editing], editing),
+          catalog: view.catalog,
+          busy: false,
+          isNew: false,
+          error: "",
+          t,
+          save: (employee) => {
+            if (!employee.name.trim() || !employee.role.trim()) return Promise.resolve(false);
+            update({ members: draft.members.map((value, position) => position === editing ? toMember(employee) : value) });
+            return Promise.resolve(true);
+          },
+          remove: () => {
+            update({ members: draft.members.filter((_, position) => position !== editing) });
+            setEditing(null);
+            return Promise.resolve(true);
+          }
+        },
+        `${draft.id}-${editing}-${draft.members.length}`
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { type: "button", className: Studio_default.ghost, onClick: () => {
+        update({ members: [...draft.members, blank()] });
+        setEditing(draft.members.length);
+      }, children: [
+        "+ ",
+        t("addMember")
+      ] })
+    ] }),
+    plan && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: Studio_default.applyPlan, "aria-label": t("applyTitle"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("h3", { children: [
+        t("applyTitle"),
+        " \xB7 ",
+        template.name
+      ] }),
+      !plan.add.length && !plan.remove.length && !plan.disable.length ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.muted, children: t("applyNoChange") }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("dl", { className: Studio_default.facts, children: [
+        ["applyKeep", plan.keep.map((value) => value.name)],
+        ["applyAdd", plan.add.map((value) => value.name)],
+        ["applyRemove", plan.remove.map((value) => value.name)],
+        ["applyDisable", plan.disable.map((value) => value.name)]
+      ].filter(([, names]) => names.length).map(([key, names]) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.planRow, "data-kind": key, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("dt", { children: [
+          t(key),
+          " \xB7 ",
+          names.length
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("dd", { children: names.join("\u3001") })
+      ] }, key)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { className: plan.remove.length ? Studio_default.dangerSolid : Studio_default.primary, disabled: view.busy, onClick: () => {
+          void run("apply", () => command("applyTemplate", { id: template.id })).then((ok) => {
+            if (ok) onApplied();
+            else setOutcome("failed");
+          });
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Busy, { on: pending === "apply" }),
+          t("confirmApply")
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.ghost, onClick: () => {
+          setApplying(false);
+        }, children: t("cancelAction") })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("footer", { className: Studio_default.formFooter, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { className: Studio_default.primary, disabled: view.busy || !dirty || !valid, onClick: () => {
+          void run("save", () => command("saveTemplate", draft)).then((ok) => {
+            setOutcome(ok ? "saved" : "failed");
+            if (ok) onSaved();
+          });
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Busy, { on: pending === "save" }),
+          t("saveTemplate")
+        ] }),
+        !isNew && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { disabled: view.busy || dirty, title: dirty ? t("saveBeforeApply") : void 0, onClick: () => {
+          setApplying(true);
+        }, children: t("applyTemplate") }),
+        isNew ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.ghost, onClick: onDiscard, children: t("cancelAction") }) : confirmDelete ? /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.dangerSolid, disabled: view.busy, onClick: () => {
+            void run("delete", () => command("deleteTemplate", { id: template.id })).then((ok) => {
+              if (ok) onDiscard();
+              else setOutcome("failed");
+            });
+          }, children: t("confirmDelete") }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.ghost, onClick: () => {
+            setConfirmDelete(false);
+          }, children: t("cancelAction") })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.ghostDanger, disabled: view.busy, onClick: () => {
+          setConfirmDelete(true);
+        }, children: t("deleteTemplate") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.formStatus, role: "status", "data-state": outcome === "failed" ? "error" : outcome === "saved" && !dirty ? "ok" : "idle", children: outcome === "failed" ? view.error || t("failure") : outcome === "saved" && !dirty ? t("templateSaved") : !valid ? t("templateIncomplete") : dirty && !isNew ? t("unsaved") : "" })
+    ] })
+  ] });
+}
+
+// src/client/TeamView.tsx
+var import_jsx_runtime11 = require("react/jsx-runtime");
+function TeamView({ state, view, t, command, checkHealth }) {
+  const [mode, setMode] = (0, import_react11.useState)("roster");
+  const [selected, setSelected] = (0, import_react11.useState)(null);
+  const [draft, setDraft] = (0, import_react11.useState)(null);
+  const [query, setQuery] = (0, import_react11.useState)("");
+  const [checking, setChecking] = (0, import_react11.useState)(false);
+  const [bulk, setBulk] = (0, import_react11.useState)(false);
+  const [picked, setPicked] = (0, import_react11.useState)([]);
+  const [confirmBulk, setConfirmBulk] = (0, import_react11.useState)(false);
+  const [bulkFailed, setBulkFailed] = (0, import_react11.useState)(false);
+  const { pending, run } = usePending();
+  if (mode === "templates") return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(TemplatesView, { state, view, t, command, onDone: () => {
+    setMode("roster");
+  } });
   const employee = draft ?? state.employees.find((value) => value.id === selected) ?? state.employees[0];
   const needle = query.trim().toLowerCase();
   const shown = needle ? state.employees.filter((value) => `${value.name} ${value.role} ${value.model} ${t(value.engine)}`.toLowerCase().includes(needle)) : state.employees;
   const enabled = state.employees.filter((value) => value.enabled).length;
+  const redundant = redundantEmployees(state);
+  const chosen = picked.filter((id2) => state.employees.some((value) => value.id === id2));
   const addEmployee = () => {
     const id2 = randomUUID();
     setDraft({
@@ -2923,99 +3253,143 @@ function TeamView({ state, view, t, command, checkHealth }) {
     });
     setSelected(id2);
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.workArea, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: Studio_default.listPane, "aria-label": t("employees"), children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.paneHead, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: t("employees") }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.muted, children: t("rosterSummary", { total: state.employees.length, enabled }) })
+  const exitBulk = () => {
+    setBulk(false);
+    setPicked([]);
+    setConfirmBulk(false);
+    setBulkFailed(false);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.workArea, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: Studio_default.listPane, "aria-label": t("employees"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.paneHead, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h2", { children: t("employees") }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: Studio_default.muted, children: t("rosterSummary", { total: state.employees.length, enabled }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.primary, onClick: addEmployee, disabled: !!draft, children: t("addEmployee") })
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.primary, onClick: addEmployee, disabled: !!draft || bulk, children: t("addEmployee") })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.toolRow, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("input", { type: "search", "aria-label": t("searchEmployees"), placeholder: t("searchEmployees"), value: query, onChange: (event) => {
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.toolRow, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { type: "search", "aria-label": t("searchEmployees"), placeholder: t("searchEmployees"), value: query, onChange: (event) => {
           setQuery(event.target.value);
         } }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("details", { className: Studio_default.menu, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("summary", { children: t("templates") }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.menuBody, children: [
-            ["lean", "full"].map((kind) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { disabled: view.busy, onClick: (event) => {
-              event.currentTarget.closest("details")?.removeAttribute("open");
-              void run(kind, () => command("template", { kind }));
-            }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Busy, { on: pending === kind }),
-              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: t(kind) }),
-              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: t(kind === "lean" ? "leanRoles" : "fullRoles") })
-            ] }, kind)),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.muted, children: t("templateHelp") })
-          ] })
-        ] })
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => {
+          exitBulk();
+          setDraft(null);
+          setMode("templates");
+        }, children: t("templates") })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.healthRow, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { className: Studio_default.ghost, disabled: checking, onClick: () => {
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.healthRow, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.ghost, disabled: checking, onClick: () => {
           setChecking(true);
           void checkHealth().finally(() => {
             setChecking(false);
           });
         }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Busy, { on: checking }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(Busy, { on: checking }),
           t("health")
         ] }),
-        view.health && ["codex", "claude", "harness"].map((engine2) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.healthChip, title: view.health?.[engine2].version, "data-available": view.health?.[engine2].available, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { "aria-hidden": "true" }),
+        !bulk && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.ghost, disabled: !!draft || !state.employees.length, onClick: () => {
+          setBulk(true);
+        }, children: [
+          t("bulkManage"),
+          !!redundant.length && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: Studio_default.count, children: redundant.length })
+        ] }),
+        view.health && ["codex", "claude", "harness"].map((engine2) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: Studio_default.healthChip, title: view.health?.[engine2].version, "data-available": view.health?.[engine2].available, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("i", { "aria-hidden": "true" }),
           t(engine2),
           " \xB7 ",
           t(view.health?.[engine2].available ? "available" : "unavailable")
         ] }, engine2))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("ul", { className: Studio_default.roster, children: [
-        draft && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { className: Studio_default.rosterItem, "aria-current": "true", onClick: () => {
+      bulk && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.bulkBar, role: "region", "aria-label": t("bulkManage"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("bulkHelp") }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.actions, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.ghost, disabled: !redundant.length, title: t("redundantHelp"), onClick: () => {
+            setPicked(redundant.map((value) => value.id));
+            setConfirmBulk(false);
+          }, children: t("selectRedundant", { count: redundant.length }) }),
+          confirmBulk ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.dangerSolid, disabled: view.busy, onClick: () => {
+            void run("bulk", () => command("deleteEmployees", { ids: chosen })).then((ok) => {
+              setBulkFailed(!ok);
+              if (ok) {
+                exitBulk();
+                setSelected(null);
+              }
+            });
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(Busy, { on: pending === "bulk" }),
+            t("confirmBulkDelete", { count: chosen.length })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.ghostDanger, disabled: !chosen.length, onClick: () => {
+            setConfirmBulk(true);
+          }, children: t("deleteSelected", { count: chosen.length }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.ghost, onClick: exitBulk, children: t("exitBulk") })
+        ] }),
+        bulkFailed && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: Studio_default.inlineError, role: "alert", children: view.error || t("failure") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("ul", { className: Studio_default.roster, children: [
+        draft && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.rosterItem, "aria-current": "true", onClick: () => {
           setSelected(draft.id);
         }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Avatar, { id: draft.id, name: draft.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.rosterText, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: draft.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: t("unsavedEmployee") })
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(Avatar, { id: draft.id, name: draft.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: Studio_default.rosterText, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: draft.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("small", { children: t("unsavedEmployee") })
           ] })
         ] }) }),
-        shown.map((value) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-          "button",
-          {
-            className: Studio_default.rosterItem,
-            "data-disabled": !value.enabled,
-            "aria-current": !draft && employee?.id === value.id ? "true" : void 0,
-            onClick: () => {
-              setDraft(null);
-              setSelected(value.id);
-            },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Avatar, { id: value.id, name: value.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.rosterText, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("strong", { children: [
-                  value.name,
-                  !value.enabled && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("em", { className: Studio_default.offTag, children: t("disabled") })
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: value.role || t("noRole") })
+        shown.map((value) => {
+          const locked = bulk && hasHistory(state, value.id);
+          const body = /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(Avatar, { id: value.id, name: value.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: Studio_default.rosterText, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("strong", { children: [
+                value.name,
+                !value.enabled && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("em", { className: Studio_default.offTag, children: t("disabled") })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.rosterMeta, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(EngineTag, { engine: value.engine, t }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { className: Studio_default.mono, title: value.model, children: [
-                  value.model || t("nativeDefault"),
-                  value.effort && ` \xB7 ${value.effort}`
-                ] })
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("small", { children: [
+                value.role || t("noRole"),
+                locked && ` \xB7 ${t("historyLocked")}`
               ] })
-            ]
-          }
-        ) }, value.id))
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: Studio_default.rosterMeta, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(EngineTag, { engine: value.engine, t }),
+              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("small", { className: Studio_default.mono, title: value.model, children: [
+                value.model || t("nativeDefault"),
+                value.effort && ` \xB7 ${value.effort}`
+              ] })
+            ] })
+          ] });
+          return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("li", { children: bulk ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: Studio_default.rosterItem, "data-disabled": !value.enabled, "data-bulk": "true", "data-locked": locked, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { type: "checkbox", disabled: locked, checked: chosen.includes(value.id), onChange: (event) => {
+              setConfirmBulk(false);
+              setPicked(event.target.checked ? [...chosen, value.id] : chosen.filter((id2) => id2 !== value.id));
+            } }),
+            body
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+            "button",
+            {
+              className: Studio_default.rosterItem,
+              "data-disabled": !value.enabled,
+              "aria-current": !draft && employee?.id === value.id ? "true" : void 0,
+              onClick: () => {
+                setDraft(null);
+                setSelected(value.id);
+              },
+              children: body
+            }
+          ) }, value.id);
+        })
       ] }),
-      !state.employees.length && !draft && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.emptyState, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: t("noEmployeesTitle") }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: t("noEmployees") })
+      !state.employees.length && !draft && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.emptyState, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: t("noEmployeesTitle") }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("noEmployees") }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => {
+          setMode("templates");
+        }, children: t("templates") })
       ] }),
-      !!state.employees.length && !shown.length && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.emptyInline, children: t("noEmployeeMatch") }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.footnote, children: t("noReasoning") })
+      !!state.employees.length && !shown.length && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: Studio_default.emptyInline, children: t("noEmployeeMatch") }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: Studio_default.footnote, children: t("noReasoning") })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: Studio_default.detailPane, children: employee ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: Studio_default.detailPane, children: employee ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       EmployeeEditor,
       {
         employee,
@@ -3044,20 +3418,20 @@ function TeamView({ state, view, t, command, checkHealth }) {
         }
       },
       employee.id
-    ) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: Studio_default.emptyState, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: t("selectEmployee") }) }) })
+    ) : /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: Studio_default.emptyState, children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("selectEmployee") }) }) })
   ] });
 }
 
 // src/client/StudioPanel.tsx
-var import_jsx_runtime11 = require("react/jsx-runtime");
+var import_jsx_runtime12 = require("react/jsx-runtime");
 function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, t }) {
   const view = useStudio((snapshot) => snapshot);
   const state = view.state;
-  const [chosenTab, setTab] = (0, import_react11.useState)(null);
-  const [projectId, setProjectId] = (0, import_react11.useState)(null);
-  const [taskId, setTaskId] = (0, import_react11.useState)(null);
-  const [workspaceForm, setWorkspaceForm] = (0, import_react11.useState)(false);
-  const [projectForm, setProjectForm] = (0, import_react11.useState)(false);
+  const [chosenTab, setTab] = (0, import_react12.useState)(null);
+  const [projectId, setProjectId] = (0, import_react12.useState)(null);
+  const [taskId, setTaskId] = (0, import_react12.useState)(null);
+  const [workspaceForm, setWorkspaceForm] = (0, import_react12.useState)(false);
+  const [projectForm, setProjectForm] = (0, import_react12.useState)(false);
   const workspace = state?.workspaces.find((value) => value.id === state.activeWorkspaceId);
   const projects = state?.projects.filter((value) => value.workspaceId === workspace?.id) ?? [];
   const project = projects.find((value) => value.id === projectId) ?? projects.at(-1);
@@ -3067,13 +3441,13 @@ function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, 
   const handoffCount = state && project ? state.messages.filter((value) => value.projectId === project.id).length : 0;
   const openMeetings = state?.meetings.filter((value) => value.workspaceId === workspace?.id && value.status !== "closed").length ?? 0;
   const counts = { employees: String(state?.employees.length ?? 0), tasks: projectTasks.length ? `${stats.completed}/${stats.active}` : "0", meetings: String(openMeetings), messages: String(handoffCount) };
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("main", { className: Studio_default.studio, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("header", { className: Studio_default.topbar, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.brand, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h1", { children: t("title") }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("subtitle") })
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("main", { className: Studio_default.studio, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: Studio_default.topbar, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: Studio_default.brand, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h1", { children: t("title") }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { children: t("subtitle") })
       ] }),
-      state && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      state && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
         WorkspaceSwitcher,
         {
           state,
@@ -3092,7 +3466,7 @@ function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, 
         }
       )
     ] }),
-    state && (workspaceForm || !workspace) && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    state && (workspaceForm || !workspace) && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
       WorkspaceForm,
       {
         t,
@@ -3111,34 +3485,34 @@ function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, 
         } : void 0
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("nav", { className: Studio_default.tabs, "aria-label": t("title"), children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: Studio_default.tabList, children: ["tasks", "meetings", "employees", "messages"].map((name) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.tab, "aria-current": tab === name ? "page" : void 0, onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("nav", { className: Studio_default.tabs, "aria-label": t("title"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: Studio_default.tabList, children: ["tasks", "meetings", "employees", "messages"].map((name) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("button", { className: Studio_default.tab, "aria-current": tab === name ? "page" : void 0, onClick: () => {
         setTab(name);
       }, children: [
         t(name === "tasks" ? "projectsTab" : name === "meetings" ? "meetingsTab" : name),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: Studio_default.count, children: counts[name] })
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: Studio_default.count, children: counts[name] })
       ] }, name)) }),
-      workspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.primary, "aria-label": t("newProject"), onClick: () => {
+      workspace && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("button", { className: Studio_default.primary, "aria-label": t("newProject"), onClick: () => {
         setProjectForm(true);
       }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { "aria-hidden": "true", children: "+" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: Studio_default.wideLabel, children: t("newProject") })
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { "aria-hidden": "true", children: "+" }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: Studio_default.wideLabel, children: t("newProject") })
       ] })
     ] }),
-    view.error && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.banner, role: "alert", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: view.error }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.ghost, onClick: () => {
+    view.error && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: Studio_default.banner, role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { children: view.error }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: Studio_default.ghost, onClick: () => {
         void refresh();
       }, children: t("refresh") })
     ] }),
-    !state ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: Studio_default.emptyState, children: view.error ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("connectionError") }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: Studio_default.spinner, "aria-hidden": "true" }),
+    !state ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: Studio_default.emptyState, children: view.error ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { children: t("connectionError") }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: Studio_default.spinner, "aria-hidden": "true" }),
       " ",
       t("checking")
-    ] }) }) : tab === "employees" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(TeamView, { state, view, t, command, checkHealth }) : !workspace ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.emptyState, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: t("workspaceFirst") }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("workspaceHelp") })
-    ] }) : tab === "meetings" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    ] }) }) : tab === "employees" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(TeamView, { state, view, t, command, checkHealth }) : !workspace ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: Studio_default.emptyState, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: t("workspaceFirst") }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { children: t("workspaceHelp") })
+    ] }) : tab === "meetings" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
       MeetingRoom,
       {
         state,
@@ -3154,23 +3528,23 @@ function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, 
         }
       },
       `meetings-${workspace.id}`
-    ) : !project ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.emptyState, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: t("noProjectsTitle") }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("noProjects") }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.primary, onClick: () => {
+    ) : !project ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: Studio_default.emptyState, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("strong", { children: t("noProjectsTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { children: t("noProjects") }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: Studio_default.primary, onClick: () => {
         setProjectForm(true);
       }, children: t("newProject") })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(ProjectBar, { state, projects, project, busy: view.busy, t, command, onSelect: (id2) => {
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(import_jsx_runtime12.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(ProjectBar, { state, projects, project, busy: view.busy, t, command, onSelect: (id2) => {
         setProjectId(id2);
         setTaskId(null);
       } }, `bar-${project.id}`),
-      tab === "tasks" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(TaskBoard, { state, project, busy: view.busy, error: view.error, t, command, selected: taskId, onSelect: setTaskId }, `tasks-${project.id}`) : /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(HandoffTimeline, { state, project, busy: view.busy, error: view.error, t, command, onOpenTask: (id2) => {
+      tab === "tasks" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(TaskBoard, { state, project, busy: view.busy, error: view.error, t, command, selected: taskId, onSelect: setTaskId }, `tasks-${project.id}`) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(HandoffTimeline, { state, project, busy: view.busy, error: view.error, t, command, onOpenTask: (id2) => {
         setTaskId(id2);
         setTab("tasks");
       } }, `handoffs-${project.id}`)
     ] }),
-    state && workspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    state && workspace && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
       ProjectDialog,
       {
         open: projectForm,
@@ -3194,32 +3568,32 @@ function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, 
   ] });
 }
 function WorkspaceSwitcher({ state, workspace, busy, t, command, formOpen, onToggleForm, onChanged }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.workspace, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: Studio_default.workspacePicker, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: t("companyWorkspace") }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { "aria-label": t("companyWorkspace"), value: workspace?.id ?? "", disabled: busy || !state.workspaces.length, onChange: (event) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: Studio_default.workspace, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: Studio_default.workspacePicker, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { children: t("companyWorkspace") }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("select", { "aria-label": t("companyWorkspace"), value: workspace?.id ?? "", disabled: busy || !state.workspaces.length, onChange: (event) => {
         void command("selectWorkspace", { id: event.target.value });
         onChanged();
       }, children: [
-        !workspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "", children: t("workspaceFirst") }),
-        state.workspaces.map((value) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: value.id, children: value.name }, value.id))
+        !workspace && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: "", children: t("workspaceFirst") }),
+        state.workspaces.map((value) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("option", { value: value.id, children: value.name }, value.id))
       ] }),
-      workspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("small", { className: Studio_default.mono, title: workspace.path, children: workspace.path })
+      workspace && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("small", { className: Studio_default.mono, title: workspace.path, children: workspace.path })
     ] }),
-    !!state.workspaces.length && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.ghost, "aria-expanded": formOpen, onClick: onToggleForm, children: t("addWorkspace") })
+    !!state.workspaces.length && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: Studio_default.ghost, "aria-expanded": formOpen, onClick: onToggleForm, children: t("addWorkspace") })
   ] });
 }
 function WorkspaceForm({ t, busy, error, first, command, pickDirectory, onDone, onCancel }) {
-  const [draft, setDraft] = (0, import_react11.useState)({ name: "", path: "" });
-  const [pickError, setPickError] = (0, import_react11.useState)("");
-  const [failed, setFailed] = (0, import_react11.useState)(false);
+  const [draft, setDraft] = (0, import_react12.useState)({ name: "", path: "" });
+  const [pickError, setPickError] = (0, import_react12.useState)("");
+  const [failed, setFailed] = (0, import_react12.useState)(false);
   const { pending, run } = usePending();
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: Studio_default.workspaceForm, "aria-label": t("addWorkspace"), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h2", { children: t(first ? "welcomeTitle" : "addWorkspace") }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: Studio_default.muted, children: t("workspaceHelp") })
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: Studio_default.workspaceForm, "aria-label": t("addWorkspace"), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { children: t(first ? "welcomeTitle" : "addWorkspace") }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: Studio_default.muted, children: t("workspaceHelp") })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("form", { onSubmit: (event) => {
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("form", { onSubmit: (event) => {
       event.preventDefault();
       void run("create", () => command("createWorkspace", draft)).then((ok) => {
         setFailed(!ok);
@@ -3229,20 +3603,20 @@ function WorkspaceForm({ t, busy, error, first, command, pickDirectory, onDone, 
         }
       });
     }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.fieldPair, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: Studio_default.field, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: t("companyName") }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { required: true, value: draft.name, onChange: (event) => {
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: Studio_default.fieldPair, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: Studio_default.field, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { children: t("companyName") }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("input", { required: true, value: draft.name, onChange: (event) => {
             setDraft({ ...draft, name: event.target.value });
           } })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: Studio_default.field, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: t("companyDirectory") }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: Studio_default.inputWithButton, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { required: true, className: Studio_default.mono, value: draft.path, onChange: (event) => {
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("label", { className: Studio_default.field, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { children: t("companyDirectory") }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { className: Studio_default.inputWithButton, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("input", { required: true, className: Studio_default.mono, value: draft.path, onChange: (event) => {
               setDraft({ ...draft, path: event.target.value });
             } }),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", onClick: () => {
               setPickError("");
               void pickDirectory().then((path) => {
                 if (path) setDraft((value) => ({ ...value, path }));
@@ -3253,13 +3627,13 @@ function WorkspaceForm({ t, busy, error, first, command, pickDirectory, onDone, 
           ] })
         ] })
       ] }),
-      (pickError || failed) && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: pickError || error || t("failure") }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.actions, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.primary, disabled: busy, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(Busy, { on: pending === "create" }),
+      (pickError || failed) && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: pickError || error || t("failure") }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("button", { className: Studio_default.primary, disabled: busy, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Busy, { on: pending === "create" }),
           t("useWorkspace")
         ] }),
-        onCancel && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", className: Studio_default.ghost, onClick: onCancel, children: t("cancelAction") })
+        onCancel && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: Studio_default.ghost, onClick: onCancel, children: t("cancelAction") })
       ] })
     ] })
   ] });
@@ -3294,8 +3668,6 @@ var zh = {
   newSession: "\u65B0\u4F1A\u8BDD",
   title: "\u5DE5\u4F5C\u5BA4",
   subtitle: "\u914D\u7F6E\u56E2\u961F\uFF0C\u5206\u914D\u4EFB\u52A1\uFF0C\u7528\u7ED3\u679C\u534F\u4F5C\u3002",
-  lean: "\u7CBE\u7B80\u4EA7\u54C1\u56E2\u961F",
-  full: "\u5B8C\u6574\u7814\u53D1\u56E2\u961F",
   employees: "\u5458\u5DE5",
   tasks: "\u4EFB\u52A1",
   messages: "\u4EA4\u63A5\u8BB0\u5F55",
@@ -3396,7 +3768,6 @@ var zh = {
   compatible: "GLM / \u517C\u5BB9 API",
   downloadAll: "\u7ED3\u679C\u6587\u4EF6",
   settingsSaved: "\u5DF2\u4FDD\u5B58",
-  templateAdded: "\u56E2\u961F\u6A21\u677F\u5DF2\u6DFB\u52A0\uFF0C\u53EF\u4EE5\u8C03\u6574\u6BCF\u540D\u5458\u5DE5\u3002",
   zai: "Z.ai",
   deepseekProtocol: "DeepSeek",
   fileMetadata: "{size} KB \xB7 SHA256 {hash}",
@@ -3423,9 +3794,6 @@ var zh = {
   rosterSummary: "\u5171 {total} \u4EBA\uFF0C{enabled} \u4EBA\u542F\u7528",
   searchEmployees: "\u641C\u7D22\u59D3\u540D\u3001\u5C97\u4F4D\u6216\u6A21\u578B",
   templates: "\u56E2\u961F\u6A21\u677F",
-  leanRoles: "4 \u4EBA\uFF1A\u4EA7\u54C1\u3001UI \u8BBE\u8BA1\u3001\u5168\u6808\u5F00\u53D1\u3001\u6D4B\u8BD5",
-  fullRoles: "7 \u4EBA\uFF1A\u4EA7\u54C1\u3001\u6280\u672F\u8D1F\u8D23\u4EBA\u3001UI \u8BBE\u8BA1\u3001\u524D\u7AEF\u3001\u540E\u7AEF\u3001\u6D4B\u8BD5\u3001\u4EA4\u4ED8",
-  templateHelp: "\u6A21\u677F\u4F1A\u8FFD\u52A0\u5230\u73B0\u6709\u540D\u5355\uFF0C\u4E4B\u540E\u53EF\u9010\u4E2A\u8C03\u6574\u3002",
   unsavedEmployee: "\u5C1A\u672A\u4FDD\u5B58",
   noEmployeesTitle: "\u56E2\u961F\u8FD8\u662F\u7A7A\u7684",
   noEmployeeMatch: "\u6CA1\u6709\u5339\u914D\u7684\u5458\u5DE5\u3002",
@@ -3551,7 +3919,46 @@ var zh = {
   createFromMinutes: "\u6309\u7EAA\u8981\u521B\u5EFA\u9879\u76EE",
   saveMinutes: "\u4FDD\u5B58\u7EAA\u8981",
   resumeMeeting: "\u7EE7\u7EED\u8BA8\u8BBA",
-  minutesIncomplete: "\u9700\u8981\u9879\u76EE\u540D\u79F0\u3001\u76EE\u6807\u548C\u81F3\u5C11\u4E00\u9879\u5B8C\u6574\u4EFB\u52A1\u3002"
+  minutesIncomplete: "\u9700\u8981\u9879\u76EE\u540D\u79F0\u3001\u76EE\u6807\u548C\u81F3\u5C11\u4E00\u9879\u5B8C\u6574\u4EFB\u52A1\u3002",
+  templatesHelp: "\u5E94\u7528\u6A21\u677F\u4F1A\u7528\u6A21\u677F\u6210\u5458\u66FF\u6362\u5F53\u524D\u56E2\u961F\uFF0C\u91CD\u590D\u5E94\u7528\u4E0D\u4F1A\u91CD\u590D\u6DFB\u52A0\u3002",
+  backToRoster: "\u8FD4\u56DE\u5458\u5DE5\u540D\u5355",
+  newTemplate: "\u65B0\u5EFA\u6A21\u677F",
+  saveTeamAsTemplate: "\u5F53\u524D\u56E2\u961F\u5B58\u4E3A\u6A21\u677F",
+  myTeam: "\u6211\u7684\u56E2\u961F",
+  unsavedTemplate: "\u672A\u4FDD\u5B58",
+  memberCount: "{count} \u4EBA",
+  noTemplates: "\u8FD8\u6CA1\u6709\u56E2\u961F\u6A21\u677F\u3002",
+  selectTemplate: "\u9009\u62E9\u4E00\u4E2A\u6A21\u677F\u67E5\u770B\u6210\u5458\u3002",
+  templateName: "\u6A21\u677F\u540D\u79F0",
+  templateDescription: "\u8BF4\u660E",
+  templateMembers: "\u6210\u5458\uFF08\u6309\u4EA4\u4ED8\u987A\u5E8F\uFF09",
+  addMember: "\u6DFB\u52A0\u6210\u5458",
+  newMember: "\u65B0\u6210\u5458",
+  templateMember: "\u6A21\u677F\u6210\u5458",
+  updateMember: "\u66F4\u65B0\u6210\u5458",
+  removeMember: "\u79FB\u9664\u6210\u5458",
+  memberUpdated: "\u6210\u5458\u5DF2\u66F4\u65B0\uFF0C\u4FDD\u5B58\u6A21\u677F\u540E\u751F\u6548",
+  saveTemplate: "\u4FDD\u5B58\u6A21\u677F",
+  applyTemplate: "\u7528\u6B64\u6A21\u677F\u66FF\u6362\u56E2\u961F",
+  deleteTemplate: "\u5220\u9664\u6A21\u677F",
+  templateSaved: "\u6A21\u677F\u5DF2\u4FDD\u5B58",
+  templateIncomplete: "\u6A21\u677F\u9700\u8981\u540D\u79F0\u548C\u81F3\u5C11\u4E00\u540D\u6210\u5458\uFF0C\u6BCF\u540D\u6210\u5458\u90FD\u8981\u6709\u59D3\u540D\u548C\u5C97\u4F4D\u3002",
+  saveBeforeApply: "\u5148\u4FDD\u5B58\u6A21\u677F\u518D\u5E94\u7528",
+  applyTitle: "\u66FF\u6362\u5F53\u524D\u56E2\u961F",
+  applyKeep: "\u4FDD\u7559\uFF08\u59D3\u540D\u548C\u5C97\u4F4D\u4E00\u81F4\uFF0C\u6CBF\u7528\u73B0\u6709\u8BBE\u7F6E\uFF09",
+  applyAdd: "\u65B0\u589E",
+  applyRemove: "\u5220\u9664\uFF08\u6CA1\u6709\u4EFB\u52A1\u6216\u4F1A\u8BAE\u8BB0\u5F55\uFF09",
+  applyDisable: "\u505C\u7528\uFF08\u6709\u4EFB\u52A1\u6216\u4F1A\u8BAE\u8BB0\u5F55\uFF0C\u4FDD\u7559\u6570\u636E\uFF09",
+  applyNoChange: "\u5F53\u524D\u56E2\u961F\u5DF2\u4E0E\u6A21\u677F\u4E00\u81F4\uFF0C\u65E0\u9700\u66F4\u6539\u3002",
+  confirmApply: "\u786E\u8BA4\u66FF\u6362",
+  bulkManage: "\u6279\u91CF\u7BA1\u7406",
+  bulkHelp: "\u52FE\u9009\u8981\u5220\u9664\u7684\u5458\u5DE5\u3002\u6709\u4EFB\u52A1\u6216\u4F1A\u8BAE\u8BB0\u5F55\u7684\u5458\u5DE5\u53EA\u80FD\u505C\u7528\uFF0C\u4E0D\u80FD\u5220\u9664\u3002",
+  selectRedundant: "\u9009\u4E2D\u91CD\u590D\u5458\u5DE5\uFF08{count}\uFF09",
+  redundantHelp: "\u4E0E\u524D\u9762\u7684\u5458\u5DE5\u59D3\u540D\u3001\u5C97\u4F4D\u3001\u804C\u8D23\u548C\u6267\u884C\u5DE5\u5177\u90FD\u76F8\u540C\uFF0C\u4E14\u6CA1\u6709\u5386\u53F2\u8BB0\u5F55\uFF1B\u4FDD\u7559\u6700\u65E9\u7684\u4E00\u4F4D\u3002",
+  deleteSelected: "\u5220\u9664\u6240\u9009\uFF08{count}\uFF09",
+  confirmBulkDelete: "\u786E\u8BA4\u5220\u9664 {count} \u4EBA",
+  exitBulk: "\u5B8C\u6210",
+  historyLocked: "\u6709\u5386\u53F2\u8BB0\u5F55"
 };
 var en = {
   companyWorkspace: "Company workspace",
@@ -3581,8 +3988,6 @@ var en = {
   newSession: "New session",
   title: "Studio",
   subtitle: "Configure a team. Assign work. Collaborate through results.",
-  lean: "Lean product team",
-  full: "Full delivery team",
   employees: "Employees",
   tasks: "Tasks",
   messages: "Handoffs",
@@ -3683,7 +4088,6 @@ var en = {
   compatible: "GLM / compatible API",
   downloadAll: "Result files",
   settingsSaved: "Saved",
-  templateAdded: "Team template added. You can customize every employee.",
   zai: "Z.ai",
   deepseekProtocol: "DeepSeek",
   fileMetadata: "{size} KB \xB7 SHA256 {hash}",
@@ -3710,9 +4114,6 @@ var en = {
   rosterSummary: "{total} people, {enabled} enabled",
   searchEmployees: "Search name, role, or model",
   templates: "Team templates",
-  leanRoles: "4 people: product, UI design, full-stack, QA",
-  fullRoles: "7 people: product, tech lead, UI design, frontend, backend, QA, delivery",
-  templateHelp: "Templates append to the current roster; adjust each employee afterwards.",
   unsavedEmployee: "Not saved yet",
   noEmployeesTitle: "Your team is empty",
   noEmployeeMatch: "No matching employees.",
@@ -3838,16 +4239,55 @@ var en = {
   createFromMinutes: "Create project from minutes",
   saveMinutes: "Save minutes",
   resumeMeeting: "Resume discussion",
-  minutesIncomplete: "A project name, objective, and at least one complete task are required."
+  minutesIncomplete: "A project name, objective, and at least one complete task are required.",
+  templatesHelp: "Applying a template replaces the current team with its members; applying it again adds nothing.",
+  backToRoster: "Back to employees",
+  newTemplate: "New template",
+  saveTeamAsTemplate: "Save current team as template",
+  myTeam: "My team",
+  unsavedTemplate: "Unsaved",
+  memberCount: "{count} people",
+  noTemplates: "No team templates yet.",
+  selectTemplate: "Select a template to see its members.",
+  templateName: "Template name",
+  templateDescription: "Description",
+  templateMembers: "Members (in delivery order)",
+  addMember: "Add member",
+  newMember: "New member",
+  templateMember: "Template member",
+  updateMember: "Update member",
+  removeMember: "Remove member",
+  memberUpdated: "Member updated; save the template to keep it",
+  saveTemplate: "Save template",
+  applyTemplate: "Replace team with this template",
+  deleteTemplate: "Delete template",
+  templateSaved: "Template saved",
+  templateIncomplete: "A template needs a name and at least one member, each with a name and role.",
+  saveBeforeApply: "Save the template before applying it",
+  applyTitle: "Replace current team",
+  applyKeep: "Kept (same name and role, settings unchanged)",
+  applyAdd: "Added",
+  applyRemove: "Deleted (no task or meeting history)",
+  applyDisable: "Disabled (task or meeting history, data kept)",
+  applyNoChange: "The team already matches this template.",
+  confirmApply: "Confirm replace",
+  bulkManage: "Bulk manage",
+  bulkHelp: "Select employees to delete. Employees with task or meeting history can only be disabled.",
+  selectRedundant: "Select duplicates ({count})",
+  redundantHelp: "Same name, role, responsibilities, and tool as an earlier employee, with no history; the earliest copy stays.",
+  deleteSelected: "Delete selected ({count})",
+  confirmBulkDelete: "Confirm deleting {count}",
+  exitBulk: "Done",
+  historyLocked: "has history"
 };
 
 // src/client/mount.tsx
-var import_jsx_runtime12 = require("react/jsx-runtime");
+var import_jsx_runtime13 = require("react/jsx-runtime");
 var inject = ["slots", "locale", "layout", "uiWorkspace"];
 function StudioIcon({ size }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("circle", { cx: "9", cy: "7", r: "3" }),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("path", { d: "M3 20v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2" })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("circle", { cx: "9", cy: "7", r: "3" }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("path", { d: "M3 20v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2" })
   ] });
 }
 function apply(ctx) {

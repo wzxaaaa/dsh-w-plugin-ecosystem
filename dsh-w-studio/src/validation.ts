@@ -1,9 +1,10 @@
 /** JSON validation for HTTP commands and persisted Studio data. */
 import { isAbsolute, normalize, relative } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { Employee, StudioState, StudioWorkspaceId } from './types.ts'
+import type { Employee, StudioEmployeeId, StudioState, StudioWorkspaceId, TemplateMember } from './types.ts'
+import { defaultTemplates } from './templates.ts'
 
-import { minutesSchema, nativeSessionSchema, parseFields, stateSchema, stateV1Schema, stateV2Schema } from './schema.ts'
+import { minutesSchema, nativeSessionSchema, parseFields, stateSchema, stateV1Schema, stateV2Schema, stateV3Schema } from './schema.ts'
 export { employeeSchema } from './schema.ts'
 
 /** Parse a disk document without admitting unsupported generations.
@@ -79,6 +80,11 @@ export function parseState(input: unknown): StudioState {
       if (meeting.minutes.tasks.some(task => !employees.has(task.employeeId))) throw new Error('Stored meeting minutes refer to a missing employee')
     }
   }
+  identities(state.templates)
+  for (const template of state.templates) {
+    if (!template.name.trim() || !template.members.length) throw new Error('Stored team template needs a name and members')
+    for (const member of template.members) validateMember(member)
+  }
   return state
 }
 
@@ -87,7 +93,15 @@ export function parseState(input: unknown): StudioState {
  * @returns Current state.
  */
 export function migrateStateV2(input: unknown): StudioState {
-  return parseState({ ...parseFields(stateV2Schema, input), version: 3, meetings: [] })
+  return migrateStateV3({ ...parseFields(stateV2Schema, input), version: 3, meetings: [] })
+}
+
+/** Read the frozen v3 document into the current journal, seeding the built-in teams as editable templates.
+ * @param input - Decoded v3 JSON.
+ * @returns Current state.
+ */
+export function migrateStateV3(input: unknown): StudioState {
+  return parseState({ ...parseFields(stateV3Schema, input), version: 4, templates: defaultTemplates() })
 }
 
 /** Read the frozen predecessor into a separate current journal without changing it.
@@ -138,6 +152,13 @@ export function validateEmployee(employee: Employee): void {
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new Error('Provider URL must use HTTP(S) without embedded credentials')
     if (!employee.model || !employee.apiKeyEnv) throw new Error('Compatible providers require a model and credential reference')
   }
+}
+
+/** Validate a template member with the same native-option rules as an employee.
+ * @param member - Template member parsed from JSON.
+ */
+export function validateMember(member: TemplateMember): void {
+  validateEmployee({ ...member, id: 'template-member' as StudioEmployeeId, cwd: '', enabled: true })
 }
 
 /** Reject paths that could export private files outside the project.
