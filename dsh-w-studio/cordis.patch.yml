@@ -1,0 +1,4 @@
+# One W-series loader row provides the Host and Web Client.
+- insert:
+    - id: dsh-w-studio
+      name: dsh-w-studio

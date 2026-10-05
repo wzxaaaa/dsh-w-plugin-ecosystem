@@ -1,0 +1,136 @@
+diff --git a/packages/sdk/server/README.i18n.yaml b/packages/sdk/server/README.i18n.yaml
+index 0eda2a5541..a3a5dcfdc1 100644
+--- a/packages/sdk/server/README.i18n.yaml
++++ b/packages/sdk/server/README.i18n.yaml
+@@ -5,2 +5,2 @@
+-README.md: 3598fc38c16b6c2387169c121eb88c0c0d45f7a5
+-README.zh.md: 9fb80288c1fdee5ada86a3a2a419e4466e7e54da
++README.md: 2b581eeb1489e05c48ac76b6556115e6b30942da
++README.zh.md: 0b97b1cbf1cdba821b398391823483e5060ea880
+diff --git a/packages/sdk/server/README.md b/packages/sdk/server/README.md
+index 3598fc38c1..2b581eeb14 100644
+--- a/packages/sdk/server/README.md
++++ b/packages/sdk/server/README.md
+@@ -38,0 +39 @@ The plugin creates one agent per `sessionId` on first use. A registered model ad
++| `resumePersistedSessions` | `false` | Restore an exact persisted session on its first prompt in this runtime |
+@@ -41,0 +43,2 @@ The profile composition owns each root agent's tools. `input`, `output`, and `ex
++With `resumePersistedSessions` enabled, a durable-id collision restores that session through the agent factory using the initialized model options. The stored working directory must equal the initialized directory before restoration. Corrupt data, active ownership, missing persistence, and directory mismatches remain errors; disabling the option preserves fresh-only first use. Restored history stays in that session, and protocol clients receive only the new prompt's activity interval. The [Studio decision](../../../.agents/notes/implemented/feature/2026-10-05-local-studio-employees.md) owns this opt-in use.
++
+diff --git a/packages/sdk/server/README.zh.md b/packages/sdk/server/README.zh.md
+index 9fb80288c1..0b97b1cbf1 100644
+--- a/packages/sdk/server/README.zh.md
++++ b/packages/sdk/server/README.zh.md
+@@ -38,0 +39 @@ kind: "package-reference"
++| `resumePersistedSessions` | `false` | 在当前运行时首次收到提示词时恢复确切的持久会话 |
+@@ -41,0 +43,2 @@ profile 组合拥有每个根 agent 的工具。`input`、`output` 与 `exit`
++启用 `resumePersistedSessions` 后，持久 ID 冲突会通过 agent 工厂恢复该会话，并使用初始化时指定的模型选项。恢复前，保存的工作目录必须与初始化目录一致。损坏数据、活动写入所有权、缺失持久化能力和目录不一致仍会报错；禁用此选项时，首次使用只允许新建会话。恢复历史留在该会话内，协议客户端只接收新提示词的活动区间。[工作室决策](../../../.agents/notes/implemented/feature/2026-10-05-local-studio-employees.zh.md)记录此可选用途。
++
+diff --git a/packages/sdk/server/package.json b/packages/sdk/server/package.json
+index 56d1e7cad5..01000b46f6 100644
+--- a/packages/sdk/server/package.json
++++ b/packages/sdk/server/package.json
+@@ -41,0 +42 @@
++    "@deepseek-ai/dsh-session-persistence": "workspace:^",
+@@ -55,0 +57 @@
++    "@deepseek-ai/dsh-session-persistence": "workspace:^",
+diff --git a/packages/sdk/server/src/index.ts b/packages/sdk/server/src/index.ts
+index 963b4fb3bd..302281a80e 100644
+--- a/packages/sdk/server/src/index.ts
++++ b/packages/sdk/server/src/index.ts
+@@ -27,0 +28,2 @@ export interface JsonRpcConfig {
++  /** Resume an exact persisted session when its first prompt reaches this runtime; default is false. */
++  resumePersistedSessions?: boolean
+@@ -37,0 +40 @@ export const Config: Schema<JsonRpcConfig> = Schema.object({
++  resumePersistedSessions: Schema.boolean().default(false),
+@@ -48 +51 @@ export function apply(ctx: Context, config: JsonRpcConfig): void {
+-  const resolvedConfig = config as JsonRpcConfig & { maxTokensAsSuccess: boolean }
++  const resolvedConfig = config as JsonRpcConfig & { maxTokensAsSuccess: boolean; resumePersistedSessions: boolean }
+@@ -61,0 +65 @@ export function apply(ctx: Context, config: JsonRpcConfig): void {
++    resumePersistedSessions: resolvedConfig.resumePersistedSessions,
+diff --git a/packages/sdk/server/src/server.ts b/packages/sdk/server/src/server.ts
+index 1cc17059c9..f67e8912bd 100644
+--- a/packages/sdk/server/src/server.ts
++++ b/packages/sdk/server/src/server.ts
+@@ -15,0 +16 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
++import { SessionAlreadyExistsError } from '@deepseek-ai/dsh-session-persistence'
+@@ -62,0 +64,2 @@ export interface HarnessSdkJsonRpcServerOptions {
++  /** Resume an exact persisted session id on its first prompt in this runtime; default is fresh-only. */
++  resumePersistedSessions?: boolean
+@@ -279,10 +282,17 @@ export class HarnessSdkJsonRpcServer {
+-    const handle = await this.ctx.agents.create({
+-      sessionId: brandString<SessionId>(sessionId),
+-      meta: { cwd: this.cwd },
+-      agentOptions: {
+-        provider: this.provider,
+-        model: this.model,
+-        ...this.reasoningEffort === undefined ? {} : { reasoningEffort: this.reasoningEffort },
+-        ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
+-      },
+-    })
++    const id = brandString<SessionId>(sessionId)
++    const agentOptions = {
++      provider: this.provider,
++      model: this.model,
++      ...this.reasoningEffort === undefined ? {} : { reasoningEffort: this.reasoningEffort },
++      ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
++    }
++    let handle: AgentHandle
++    try { handle = await this.ctx.agents.create({ sessionId: id, meta: { cwd: this.cwd }, agentOptions }) }
++    catch (error) {
++      if (!(error instanceof SessionAlreadyExistsError) || this.options.resumePersistedSessions !== true) throw error
++      const persistence = this.ctx.get('sessionPersistence')
++      if (!persistence) throw new Error('SDK session resume requires persistence')
++      const stored = await persistence.stat(id)
++      if (stored?.header.cwd !== this.cwd) throw new Error('Persisted SDK session belongs to another working directory')
++      handle = await this.ctx.agents.resume({ resumeSessionId: id, agentOptions })
++    }
+diff --git a/packages/sdk/server/tests/server.spec.ts b/packages/sdk/server/tests/server.spec.ts
+index 43fd51257c..76a0a3f65c 100644
+--- a/packages/sdk/server/tests/server.spec.ts
++++ b/packages/sdk/server/tests/server.spec.ts
+@@ -114,0 +115,37 @@ describe('HarnessSdkJsonRpcServer', () => {
++  it('resumes persisted private history only when enabled and refuses another working directory', async () => {
++    const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-resume-'))
++    const llmServer = await mockCompletionServer()
++    vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
++    vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
++    const ctx = await makeHarness(storageDir)
++    const servers: HarnessSdkJsonRpcServer[] = []
++    const open = async (enabled: boolean, cwd = storageDir) => {
++      const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport(), { resumePersistedSessions: enabled })
++      servers.push(server)
++      await server.initialize({ cwd, provider: 'deepseek-official', model: 'dsagent-model' })
++      return server
++    }
++    const prompt = (server: HarnessSdkJsonRpcServer, text: string) => server.prompt({ sessionId: 'persisted', contentBlocks: [{ type: 'text', text }] })
++    try {
++      const first = await open(false)
++      await prompt(first, 'Private employee context from the first runtime')
++      await ctx.agents.get(SessionId('persisted'))!.whenIdle()
++      await first.shutdown()
++      const fresh = await open(false)
++      await expect(prompt(fresh, 'Must refuse reuse')).rejects.toThrow('already exists')
++      await fresh.shutdown()
++      const wrong = await open(true, join(storageDir, 'different'))
++      await expect(prompt(wrong, 'Must refuse another directory')).rejects.toThrow('another working directory')
++      await wrong.shutdown()
++      const resumed = await open(true)
++      await prompt(resumed, 'Use your own previous private context')
++      await ctx.agents.get(SessionId('persisted'))!.whenIdle()
++      expect(llmServer.requests).toHaveLength(2)
++      expect(JSON.stringify(llmServer.requests[1])).toContain('Private employee context from the first runtime')
++      await resumed.shutdown()
++    } finally {
++      await Promise.allSettled(servers.map(server => server.shutdown()))
++      await ctx.fiber.dispose()
++      await rm(storageDir, { recursive: true, force: true })
++    }
++  })
+diff --git a/packages/sdk/server/tsconfig.json b/packages/sdk/server/tsconfig.json
+index 8bef96bf44..53dc9d6b13 100644
+--- a/packages/sdk/server/tsconfig.json
++++ b/packages/sdk/server/tsconfig.json
+@@ -31,0 +32,3 @@
++    {
++      "path": "../../session/session-persistence"
++    },

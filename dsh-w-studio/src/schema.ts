@@ -1,0 +1,82 @@
+/** Browser-safe parsers for Studio HTTP and durable records. */
+import z from '@deepseek-ai/schemastery'
+
+function knownFields(input: unknown, schema: Pick<z<unknown>, 'type' | 'dict' | 'inner'>): void {
+  if (schema.type === 'object' && typeof input === 'object' && input !== null && !Array.isArray(input)) {
+    for (const key of Object.keys(schema.dict ?? {})) {
+      if (!Object.hasOwn(input, key)) throw new Error(`Missing Studio field: ${key}`)
+    }
+    for (const [key, value] of Object.entries(input)) {
+      if (!schema.dict || !Object.hasOwn(schema.dict, key)) throw new Error(`Unexpected Studio field: ${key}`)
+      const member = schema.dict[key]
+      if (member === undefined) throw new Error(`Missing Studio field validator: ${key}`)
+      knownFields(value, member)
+    }
+  } else if (schema.type === 'array' && Array.isArray(input) && schema.inner) {
+    for (const value of input) knownFields(value, schema.inner)
+  }
+}
+
+/** Decode Studio JSON while rejecting extra object fields, including nested records.
+ * @param schema - Complete expected fields and value validators.
+ * @param input - HTTP or durable-file JSON.
+ * @returns Validated fields without private protocol extensions.
+ */
+export function parseFields<T>(schema: z<T>, input: unknown): T {
+  knownFields(input, schema)
+  return z.resolve(input, schema, {})[0] as T
+}
+
+const id = z.string().pattern(/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/).required()
+const text = z.string().max(100_000).required()
+const short = z.string().max(500).required()
+const engine = z.union(['codex', 'claude', 'harness', 'compatible'] as const).required()
+const permission = z.union(['read-only', 'workspace-write', 'full-access'] as const).required()
+
+/** Complete employee parser; credentials are referenced by name, never stored as values. */
+export const employeeSchema = z.object({
+  id, name: short, role: short, responsibilities: text, engine, model: short,
+  effort: short, permission, cwd: short, enabled: z.boolean().required(),
+  baseURL: short, apiKeyEnv: short,
+  thinkingFormat: z.union(['none', 'deepseek', 'zai'] as const).required(),
+  contextWindow: z.number().step(1).min(1024).max(10_000_000).required(),
+  maxTokens: z.number().step(1).min(1).max(1_000_000).required(),
+})
+
+const projectFields = { id, name: short, objective: text, cwd: short,
+  status: z.union(['paused', 'running', 'completed'] as const).required(), createdAt: short }
+const taskFields = { id, projectId: id, employeeId: id, title: short, instruction: text,
+  dependsOn: z.array(id).required(), outputFiles: z.array(short).required(),
+  status: z.union(['pending', 'running', 'completed', 'failed', 'cancelled', 'interrupted'] as const).required(),
+  attempt: z.natural().required(), result: text, error: text, startedAt: short, finishedAt: short, assignment: text }
+const stateV1Fields = {
+  version: z.const(1).required(), revision: z.natural().required(),
+  employees: z.array(employeeSchema).required(),
+  projects: z.array(z.object(projectFields)).required(),
+  tasks: z.array(z.object(taskFields)).required(),
+  messages: z.array(z.object({ id, projectId: id, taskId: z.union([id, z.const(null)]),
+    from: id, to: id, message: text, createdAt: short })).required(),
+  artifacts: z.array(z.object({ id, projectId: id, taskId: id, name: short,
+    size: z.natural().required(), sha256: short })).required(),
+}
+
+/** Frozen v1 fields used only to read the predecessor journal. */
+export const stateV1Schema = z.object(stateV1Fields)
+
+/** Current company workspace, review, and native-session fields. */
+export const stateSchema = z.object({
+  ...stateV1Fields,
+  version: z.const(2).required(),
+  workspaces: z.array(z.object({ id, name: short, path: short, createdAt: short })).required(),
+  activeWorkspaceId: z.union([id, z.const(null)]),
+  projects: z.array(z.object({ ...projectFields,
+    workspaceId: id, acceptanceCriteria: text,
+    sessionMode: z.union(['employee-project', 'new-task'] as const).required(),
+    status: z.union(['paused', 'running', 'review', 'completed'] as const).required(),
+  })).required(),
+  tasks: z.array(z.object({ ...taskFields,
+    nativeSessions: z.array(z.object({ id, engine, cwd: short,
+      attempt: z.natural().min(1).required(), continued: z.boolean().required() })).required(),
+    reviewStatus: z.union(['pending', 'accepted', 'superseded'] as const).required(),
+  })).required(),
+})

@@ -1,0 +1,27 @@
+{
+  "project": "completed",
+  "tasks": [
+    {
+      "status": "completed",
+      "review": "superseded",
+      "continued": false
+    },
+    {
+      "status": "completed",
+      "review": "accepted",
+      "continued": false
+    },
+    {
+      "status": "completed",
+      "review": "accepted",
+      "continued": true
+    }
+  ],
+  "files": [
+    "artifact-locations.json",
+    "artifacts",
+    "board.json",
+    "brief.md",
+    "handoffs.md"
+  ]
+}

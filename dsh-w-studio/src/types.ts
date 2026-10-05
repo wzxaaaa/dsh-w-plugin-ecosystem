@@ -1,0 +1,192 @@
+/** Persisted Studio records. Native transcripts and reasoning never enter these records. */
+import type { Branded } from '@deepseek-ai/dsh-brand'
+
+/** Employee identity minted by Studio. */
+export type StudioEmployeeId = Branded<'StudioEmployeeId'>
+/** Project identity minted by Studio. */
+export type StudioProjectId = Branded<'StudioProjectId'>
+/** Task identity minted by Studio. */
+export type StudioTaskId = Branded<'StudioTaskId'>
+/** Public handoff identity minted by Studio. */
+export type StudioMessageId = Branded<'StudioMessageId'>
+/** Immutable result file identity minted by Studio. */
+export type StudioArtifactId = Branded<'StudioArtifactId'>
+/** Company workspace identity owned by Studio. */
+export type StudioWorkspaceId = Branded<'StudioWorkspaceId'>
+/** Session identity returned by a native executor. */
+export type StudioNativeSessionId = Branded<'StudioNativeSessionId'>
+/** Executors available to employees. */
+export type Engine = 'codex' | 'claude' | 'harness' | 'compatible'
+/** Native permission choices translated explicitly by each executor. */
+export type Permission = 'read-only' | 'workspace-write' | 'full-access'
+/** Shared company folder; selecting it does not create or modify a Git repository. */
+export interface StudioWorkspace {
+  id: StudioWorkspaceId
+  name: string
+  path: string
+  createdAt: string
+}
+/** Public execution identity; the session transcript remains native and private. */
+export interface StudioNativeSession {
+  id: StudioNativeSessionId
+  engine: Engine
+  cwd: string
+  attempt: number
+  continued: boolean
+}
+/** Employees own their models, responsibilities, and native settings. */
+export interface Employee {
+  id: StudioEmployeeId
+  name: string
+  role: string
+  responsibilities: string
+  engine: Engine
+  model: string
+  effort: string
+  permission: Permission
+  cwd: string
+  enabled: boolean
+  baseURL: string
+  apiKeyEnv: string
+  thinkingFormat: 'none' | 'deepseek' | 'zai'
+  contextWindow: number
+  maxTokens: number
+}
+/** A company objective and its workspace. Pausing prevents new task starts. */
+export interface Project {
+  id: StudioProjectId
+  workspaceId: StudioWorkspaceId
+  name: string
+  objective: string
+  cwd: string
+  status: 'paused' | 'running' | 'review' | 'completed'
+  acceptanceCriteria: string
+  sessionMode: 'employee-project' | 'new-task'
+  createdAt: string
+}
+/** Task state survives reload; interrupted work requires an explicit retry. */
+export interface Task {
+  id: StudioTaskId
+  projectId: StudioProjectId
+  employeeId: StudioEmployeeId
+  title: string
+  instruction: string
+  dependsOn: StudioTaskId[]
+  outputFiles: string[]
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  attempt: number
+  result: string
+  error: string
+  startedAt: string
+  finishedAt: string
+  /** Exact public assignment sent for the most recent attempt. */
+  assignment: string
+  nativeSessions: StudioNativeSession[]
+  reviewStatus: 'pending' | 'accepted' | 'superseded'
+}
+/** A human-readable message; native reasoning and tool events are excluded. */
+export interface Handoff {
+  id: StudioMessageId
+  projectId: StudioProjectId
+  taskId: StudioTaskId | null
+  from: StudioEmployeeId | 'user'
+  to: StudioEmployeeId | 'team'
+  message: string
+  createdAt: string
+}
+/** Result bytes are copied outside the working tree before publication. */
+export interface Artifact {
+  id: StudioArtifactId
+  projectId: StudioProjectId
+  taskId: StudioTaskId
+  name: string
+  size: number
+  sha256: string
+}
+/** Studio's versioned local document; public HTTP responses use the same records. */
+export interface StudioState {
+  version: 2
+  revision: number
+  workspaces: StudioWorkspace[]
+  activeWorkspaceId: StudioWorkspaceId | null
+  employees: Employee[]
+  projects: Project[]
+  tasks: Task[]
+  messages: Handoff[]
+  artifacts: Artifact[]
+}
+/** Explicit deployment limits and executable argv prefixes. */
+export interface StudioConfig {
+  /** Absolute directory for the public journal, immutable artifacts, and private employee homes. */
+  storageRoot: string
+  /** Local Claude Code executable and optional fixed argv prefix. */
+  claudeCommand: string[]
+  /** Local Codex executable and optional fixed argv prefix. */
+  codexCommand: string[]
+  /** Built dsh CLI entry used to launch isolated SDK-profile employees. */
+  dshBin: string
+  /** Maximum simultaneous employee operations across distinct working directories. */
+  maxParallel: number
+  /** Maximum tasks admitted to one project. */
+  maxTasksPerProject: number
+  /** Maximum UTF-8 bytes in an assignment or complete final handoff. */
+  maxTextBytes: number
+  /** Maximum aggregate bytes published by one task, including its final report. */
+  maxArtifactBytes: number
+  /** Maximum streamed command request bytes before JSON decoding. */
+  maxRequestBytes: number
+  /** Maximum wall-clock duration of one employee operation before cancellation. */
+  taskTimeoutMs: number
+  /** Grace period forwarded to native subprocess and SDK teardown. */
+  disposeGraceMs: number
+  /** Interval supplied to the browser for refreshing the public journal. */
+  pollIntervalMs: number
+}
+/** Only the final human message and explicitly named files cross executor ownership. */
+export interface EmployeeResult {
+  message: string
+  files: string[]
+  handoffs: { employeeId: StudioEmployeeId; message: string }[]
+}
+/** An executor receives a committed assignment and returns a final handoff. */
+export interface StudioExecutor {
+  /** Execute one persisted public assignment without returning private protocol events.
+   * @param employee - Employee-specific native configuration.
+   * @param project - Project objective and default working directory.
+   * @param task - Committed task and its exact assignment.
+   * @param signal - Cancellation owned by Studio.
+   * @param execution - Employee-private continuation and public identity recorder.
+   * @returns Final report, result paths, and addressed colleague messages.
+   */
+  run(employee: Employee, project: Project, task: Task, signal: AbortSignal, execution: StudioExecution): Promise<EmployeeResult>
+}
+/** One attempt's private continuation selection and awaited metadata commit. */
+export interface StudioExecution {
+  resumeSessionId: StudioNativeSessionId | null
+  /** Record only the native identity, never its stream or transcript.
+   * @param id - Identity returned by the executor.
+   * @returns Completion of the durable metadata update.
+   */
+  recordSession(id: StudioNativeSessionId): Promise<void>
+}
+/** Host health results contain versions and presence, never credentials. */
+export interface StudioHealth {
+  codex: { available: boolean; version: string }
+  claude: { available: boolean; version: string }
+  harness: { available: boolean; version: string }
+}
+/** Provider-owned model identities and supported effort values. */
+export interface StudioModel {
+  id: string
+  name: string
+  efforts: string[]
+  /** Harness-advertised image input; null when native discovery does not publish it. */
+  imageInput: boolean | null
+}
+/** Native picker entries and the active Harness model directory. */
+export interface StudioCatalog {
+  codex: StudioModel[]
+  claude: StudioModel[]
+  claudeError: string
+  harness: StudioModel[]
+}
