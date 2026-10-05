@@ -1,3 +1,11 @@
+# 0.3.1 验证记录
+
+验证日期：2026-10-05。修复：Codex 只以桌面版（Microsoft Store）安装、PATH 中没有 `codex` 时，员工任务与会议发言报 `spawn codex ENOENT`。
+
+- 新增 `src/native-command.ts`：PATH（含 PATHEXT）中找不到默认的 `codex` 时，通过 `Get-AppxPackage OpenAI.Codex` 定位安装目录内的 `app\resources\codex.exe`；缓存结果，桌面版更新导致旧路径失效时重新定位；显式路径或多段命令按配置使用；ENOENT 错误改为说明缺少的工具和 `codexCommand` / `claudeCommand` 配置项。
+- 3 个文件、38 项源码测试通过（新增 3 项：PATH 优先与显式配置不被替换、缓存与更新后重新定位、缺少可执行文件的说明）；Host、Client 类型检查无错误。
+- 本机（PATH 中只有 `claude.exe`，Codex 为桌面版 26.930）使用默认配置启动隔离开发服务，`/api/studio/health` 返回 Codex `codex-cli 0.160.0`、Claude Code `2.1.118` 均可用。该检查只运行 `--version`，未调用模型。
+
 # 0.3.0 验证记录
 
 验证日期：2026-10-05。环境：Windows、Node 22.19.0、本地 Harness 0.1.5-rc.2 Web profile。官方 desktop profile 未列入本次验证。

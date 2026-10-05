@@ -1522,8 +1522,8 @@ function parseMinutes(text2, meeting2) {
 }
 
 // src/executor.ts
-import { mkdtemp, readFile as readFile3, writeFile as writeFile4, rm as rm2, mkdir as mkdir4, stat as stat2 } from "node:fs/promises";
-import { join as join4, resolve as resolve4 } from "node:path";
+import { mkdtemp, readFile as readFile3, writeFile as writeFile4, rm as rm2, mkdir as mkdir4, stat as stat3 } from "node:fs/promises";
+import { join as join5, resolve as resolve4 } from "node:path";
 import { randomUUID as randomUUID6 } from "node:crypto";
 import { StringDecoder as StringDecoder2 } from "node:string_decoder";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
@@ -2470,6 +2470,42 @@ function finalResponse(events) {
 
 // src/executor.ts
 import { scrubbedParentEnv } from "@deepseek-ai/dsh-subprocess";
+
+// src/native-command.ts
+import { stat as stat2 } from "node:fs/promises";
+import { delimiter, join as join4 } from "node:path";
+async function isFile(path) {
+  try {
+    return (await stat2(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+async function onPath(name2, env = process.env) {
+  const extensions = process.platform === "win32" ? ["", ...(env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean)] : [""];
+  for (const directory of (env.PATH ?? env.Path ?? "").split(delimiter).filter(Boolean)) {
+    for (const extension of extensions) if (await isFile(join4(directory, name2 + extension))) return true;
+  }
+  return false;
+}
+function commandResolver(configured, locate, env = process.env) {
+  let located = null;
+  return async () => {
+    const [name2] = configured;
+    if (configured.length !== 1 || name2 === void 0 || /[\\/]/.test(name2) || await onPath(name2, env)) return configured;
+    if (located && await isFile(located)) return [located];
+    located = await locate();
+    return located && await isFile(located) ? [located] : configured;
+  };
+}
+function explainSpawnError(error, engine2, command) {
+  const code = typeof error === "object" && error !== null && "code" in error ? error.code : void 0;
+  if (code !== "ENOENT" && !(error instanceof Error && /\bENOENT\b/.test(error.message))) return error;
+  const product = engine2 === "codex" ? "Codex CLI (npm i -g @openai/codex, or the Codex desktop app)" : "Claude Code CLI";
+  return new Error(`${engine2} executable not found: "${command}". Install the ${product}, or set ${engine2}Command in the dsh-w-studio plugin config to its full path.`, { cause: error });
+}
+
+// src/executor.ts
 var resultSchema = {
   type: "object",
   additionalProperties: false,
@@ -2563,10 +2599,35 @@ function createExecutor(ctx, config) {
       return { available: false, version: "Executable unavailable" };
     }
   };
+  const codexApp = async () => {
+    if (process.platform !== "win32") return null;
+    try {
+      const child = ctx.subprocess.spawn({
+        argv: [
+          "powershell.exe",
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "(Get-AppxPackage -Name OpenAI.Codex | Sort-Object Version -Descending | Select-Object -First 1).InstallLocation"
+        ],
+        cwd: process.cwd(),
+        stdio: { stdin: "ignore", stdout: { maxBytes: 4096 }, stderr: { maxBytes: 4096 } },
+        signal: AbortSignal.timeout(config.disposeGraceMs * 4),
+        graceMs: config.disposeGraceMs
+      });
+      const outcome = await child.done;
+      const location = child.collected.stdout?.readFrom(0).text.trim() ?? "";
+      return outcome.exitCode === 0 && location ? join5(location, "app", "resources", "codex.exe") : null;
+    } catch {
+      return null;
+    }
+  };
+  const codexCommand = commandResolver(config.codexCommand, codexApp);
+  const claudeCommand = commandResolver(config.claudeCommand, () => Promise.resolve(null));
   return {
     async health() {
-      const [claude, codex] = await Promise.all([probe(config.claudeCommand), probe(config.codexCommand)]);
-      const harness = await stat2(config.dshBin).then(
+      const [claude, codex] = await Promise.all([claudeCommand().then(probe), codexCommand().then(probe)]);
+      const harness = await stat3(config.dshBin).then(
         (value) => ({ available: value.isFile(), version: "Local Harness SDK" }),
         () => ({ available: false, version: "Build the dsh CLI first" })
       );
@@ -2580,7 +2641,7 @@ function createExecutor(ctx, config) {
         const home = resolve4(config.storageRoot, "employees", employee.id);
         await mkdir4(home, { recursive: true, mode: 448 });
         const patches = [];
-        const permissionPatch = join4(home, "permissions.patch.json");
+        const permissionPatch = join5(home, "permissions.patch.json");
         await writeFile4(permissionPatch, JSON.stringify([
           { id: "sdk-jsonrpc-server", config: { resumePersistedSessions: true } },
           { id: "sandbox-policy", config: { mode: employee.permission === "full-access" ? "danger-full-access" : employee.permission, workspaceRoot: cwd } },
@@ -2589,7 +2650,7 @@ function createExecutor(ctx, config) {
         patches.push(permissionPatch);
         if (employee.engine === "compatible") {
           if (!env[employee.apiKeyEnv]) throw new Error(`Missing credential reference: ${employee.apiKeyEnv}`);
-          const path = join4(home, "provider.patch.json");
+          const path = join5(home, "provider.patch.json");
           await writeFile4(path, JSON.stringify([{ id: "llm-pi-ai", config: { providers: {
             "studio-provider": {
               api: "openai-completions",
@@ -2643,15 +2704,16 @@ function createExecutor(ctx, config) {
           await harness.close();
         }
       }
-      const privateRoot = join4(config.storageRoot, "native-runs");
+      const privateRoot = join5(config.storageRoot, "native-runs");
       await mkdir4(privateRoot, { recursive: true, mode: 448 });
-      const dir = await mkdtemp(join4(privateRoot, "run-"));
+      const dir = await mkdtemp(join5(privateRoot, "run-"));
+      const command = employee.engine === "claude" ? await claudeCommand() : await codexCommand();
       try {
-        const schemaPath = join4(dir, "result-schema.json");
-        const resultPath = join4(dir, "final.json");
+        const schemaPath = join5(dir, "result-schema.json");
+        const resultPath = join5(dir, "final.json");
         await writeFile4(schemaPath, JSON.stringify(resultSchema), { flag: "wx", mode: 384 });
         const argv = employee.engine === "claude" ? [
-          ...config.claudeCommand,
+          ...command,
           "--print",
           "--output-format",
           "json",
@@ -2660,7 +2722,7 @@ function createExecutor(ctx, config) {
           "--permission-mode",
           employee.permission === "read-only" ? "plan" : employee.permission === "full-access" ? "bypassPermissions" : "acceptEdits"
         ] : [
-          ...config.codexCommand,
+          ...command,
           "exec",
           "--sandbox",
           employee.permission === "full-access" ? "danger-full-access" : employee.permission,
@@ -2715,6 +2777,8 @@ function createExecutor(ctx, config) {
         const final = raw.structured_output !== void 0 ? JSON.stringify(raw.structured_output) : raw.result;
         if (typeof final !== "string") throw new Error("Claude Code returned no final handoff");
         return finalHandoff(final, config.maxTextBytes);
+      } catch (error) {
+        throw explainSpawnError(error, employee.engine === "claude" ? "claude" : "codex", command[0] ?? "");
       } finally {
         await rm2(dir, { recursive: true, force: true });
       }
@@ -2724,7 +2788,7 @@ function createExecutor(ctx, config) {
 
 // src/catalog.ts
 import { readFile as readFile4 } from "node:fs/promises";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 function object(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -2732,7 +2796,7 @@ async function modelCatalog(ctx, codexHome, config) {
   let codex = [];
   let text2;
   try {
-    text2 = await readFile4(join5(codexHome, "models_cache.json"), "utf8");
+    text2 = await readFile4(join6(codexHome, "models_cache.json"), "utf8");
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }

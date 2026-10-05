@@ -2,7 +2,7 @@
 
 DeepSeek Harness W 系列工作室插件。在原有对话之外增加公司工作台：配置岗位与员工模型、选择共享工作区、建立项目与任务，通过工作报告、交接消息和文件协作，支持返工、验收与项目导出。
 
-当前版本：`0.3.0`。发布包：`dsh-w-studio-0.3.0.tgz`（旧版本安装包保留在同目录）。已验证环境：Windows、本地 Harness `0.1.5-rc.2` Web profile。官方桌面 `desktop` profile 尚未验证；本版本的界面通信使用 Web Connection HTTP 接口。
+当前版本：`0.3.1`。发布包：`dsh-w-studio-0.3.1.tgz`（旧版本安装包保留在同目录）。已验证环境：Windows、本地 Harness `0.1.5-rc.2` Web profile。官方桌面 `desktop` profile 尚未验证；本版本的界面通信使用 Web Connection HTTP 接口。
 
 ## 功能
 
@@ -37,6 +37,8 @@ dsh web
 ```
 
 正式安装包自动从当前安装环境解析 `@deepseek-ai/dsh` 的 CLI；`dshBin` 可以指定本地构建产物。需要完整的已构建 SDK profile，不能以源码文件替代这个执行入口。
+
+Codex、Claude Code 员工默认调用 PATH 中的 `codex`、`claude`。Windows 上如果 PATH 中没有 `codex`，会自动使用 Codex 桌面版（Microsoft Store）安装包内附带的 CLI，桌面版更新后重新定位。也可以在插件配置中用 `codexCommand`、`claudeCommand` 指定完整路径；指定路径或多段命令时按配置原样使用。找不到可执行文件时，错误会说明缺少哪个工具以及对应的配置项。
 
 默认数据位于 Harness home 下的 `studio/studio.v4.json`（v3 增加会议记录，v4 增加团队模板）。首次启动时如果只有较旧的 `studio.v3.json`、`studio.v2.json` 或 `studio.v1.json`，会读取最新的一份并写入 v4 文件，旧文件逐字节保留，旧版本插件仍可读取自己的文件；此后两个版本的数据各自独立，不会互相同步。不要同时启用内部 `experimental-studio` 和 `dsh-w-studio`，二者使用相同数据与 HTTP 路径。
 

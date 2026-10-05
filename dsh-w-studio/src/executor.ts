@@ -11,6 +11,7 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Employee, StudioEmployeeId, EmployeeResult, Project, StudioConfig, StudioExecutor, StudioHealth, Task, StudioExecution, StudioNativeSessionId } from './types.ts'
 import { outputName } from './validation.ts'
+import { commandResolver, explainSpawnError, type ExecutableLocator } from './native-command.ts'
 
 const resultSchema = {
   type: 'object', additionalProperties: false,
@@ -98,9 +99,24 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
       return { available: outcome.exitCode === 0, version: child.collected.stdout?.readFrom(0).text.trim() ?? '' }
     } catch { return { available: false, version: 'Executable unavailable' } }
   }
+  // The Codex desktop app (Microsoft Store) bundles its CLI inside a versioned package directory that is not on PATH.
+  const codexApp: ExecutableLocator = async () => {
+    if (process.platform !== 'win32') return null
+    try {
+      const child = ctx.subprocess.spawn({ argv: ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
+        '(Get-AppxPackage -Name OpenAI.Codex | Sort-Object Version -Descending | Select-Object -First 1).InstallLocation'],
+      cwd: process.cwd(), stdio: { stdin: 'ignore', stdout: { maxBytes: 4096 }, stderr: { maxBytes: 4096 } },
+      signal: AbortSignal.timeout(config.disposeGraceMs * 4), graceMs: config.disposeGraceMs })
+      const outcome = await child.done
+      const location = child.collected.stdout?.readFrom(0).text.trim() ?? ''
+      return outcome.exitCode === 0 && location ? join(location, 'app', 'resources', 'codex.exe') : null
+    } catch { return null }
+  }
+  const codexCommand = commandResolver(config.codexCommand, codexApp)
+  const claudeCommand = commandResolver(config.claudeCommand, () => Promise.resolve(null))
   return {
     async health() {
-      const [claude, codex] = await Promise.all([probe(config.claudeCommand), probe(config.codexCommand)])
+      const [claude, codex] = await Promise.all([claudeCommand().then(probe), codexCommand().then(probe)])
       const harness = await stat(config.dshBin).then(value => ({ available: value.isFile(), version: 'Local Harness SDK' }),
         () => ({ available: false, version: 'Build the dsh CLI first' }))
       return { claude, codex, harness }
@@ -164,15 +180,16 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
       const privateRoot = join(config.storageRoot, 'native-runs')
       await mkdir(privateRoot, { recursive: true, mode: 0o700 })
       const dir = await mkdtemp(join(privateRoot, 'run-'))
+      const command = employee.engine === 'claude' ? await claudeCommand() : await codexCommand()
       try {
         const schemaPath = join(dir, 'result-schema.json')
         const resultPath = join(dir, 'final.json')
         await writeFile(schemaPath, JSON.stringify(resultSchema), { flag: 'wx', mode: 0o600 })
         const argv = employee.engine === 'claude' ? [
-          ...config.claudeCommand, '--print', '--output-format', 'json', '--json-schema', JSON.stringify(resultSchema),
+          ...command, '--print', '--output-format', 'json', '--json-schema', JSON.stringify(resultSchema),
           '--permission-mode', employee.permission === 'read-only' ? 'plan' : employee.permission === 'full-access' ? 'bypassPermissions' : 'acceptEdits',
         ] : [
-          ...config.codexCommand, 'exec', '--sandbox', employee.permission === 'full-access' ? 'danger-full-access' : employee.permission,
+          ...command, 'exec', '--sandbox', employee.permission === 'full-access' ? 'danger-full-access' : employee.permission,
           ...(execution.resumeSessionId ? ['resume', execution.resumeSessionId] : []), '--skip-git-repo-check', '--json',
           '-c', 'approval_policy="never"', '--output-schema', schemaPath, '--output-last-message', resultPath,
         ]
@@ -208,6 +225,8 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
         const final = raw.structured_output !== undefined ? JSON.stringify(raw.structured_output) : raw.result
         if (typeof final !== 'string') throw new Error('Claude Code returned no final handoff')
         return finalHandoff(final, config.maxTextBytes)
+      } catch (error) {
+        throw explainSpawnError(error, employee.engine === 'claude' ? 'claude' : 'codex', command[0] ?? '')
       } finally {
         await rm(dir, { recursive: true, force: true })
       }
