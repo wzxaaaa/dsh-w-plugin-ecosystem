@@ -63,8 +63,11 @@ const stateV1Fields = {
 /** Frozen v1 fields used only to read the predecessor journal. */
 export const stateV1Schema = z.object(stateV1Fields)
 
-/** Current company workspace, review, and native-session fields. */
-export const stateSchema = z.object({
+/** Native identity of one employee run; transcripts are never recorded. */
+export const nativeSessionSchema = z.object({ id, engine, cwd: short,
+  attempt: z.natural().min(1).required(), continued: z.boolean().required() })
+const nativeSession = nativeSessionSchema
+const stateV2Fields = {
   ...stateV1Fields,
   version: z.const(2).required(),
   workspaces: z.array(z.object({ id, name: short, path: short, createdAt: short })).required(),
@@ -75,8 +78,24 @@ export const stateSchema = z.object({
     status: z.union(['paused', 'running', 'review', 'completed'] as const).required(),
   })).required(),
   tasks: z.array(z.object({ ...taskFields,
-    nativeSessions: z.array(z.object({ id, engine, cwd: short,
-      attempt: z.natural().min(1).required(), continued: z.boolean().required() })).required(),
+    nativeSessions: z.array(nativeSession).required(),
     reviewStatus: z.union(['pending', 'accepted', 'superseded'] as const).required(),
   })).required(),
-})
+}
+
+/** Frozen v2 fields used only to read the predecessor journal. */
+export const stateV2Schema = z.object(stateV2Fields)
+
+/** Editable meeting outcome; also the `saveMinutes` input. */
+export const minutesSchema = z.object({ summary: text, decisions: z.array(text).required(), projectName: short, objective: text,
+  acceptanceCriteria: text, tasks: z.array(z.object({ employeeId: id, title: short, instruction: text })).required() })
+const meeting = z.object({ id, workspaceId: id, title: short, agenda: text, hostId: id, attendeeIds: z.array(id).required(),
+  status: z.union(['open', 'drafting', 'review', 'closed'] as const).required(),
+  queue: z.array(id).required(), speaking: z.union([id, z.const(null)]), error: text,
+  messages: z.array(z.object({ id, from: id, message: text, mentions: z.array(id).required(), createdAt: short,
+    nativeSession: z.union([nativeSession, z.const(null)]) })).required(),
+  minutes: z.union([minutesSchema, z.const(null)]),
+  projectId: z.union([id, z.const(null)]), createdAt: short })
+
+/** Current document: v2 plus meetings. */
+export const stateSchema = z.object({ ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() })

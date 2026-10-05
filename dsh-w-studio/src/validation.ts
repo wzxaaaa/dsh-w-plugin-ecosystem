@@ -3,7 +3,7 @@ import { isAbsolute, normalize, relative } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Employee, StudioState, StudioWorkspaceId } from './types.ts'
 
-import { parseFields, stateSchema, stateV1Schema } from './schema.ts'
+import { minutesSchema, nativeSessionSchema, parseFields, stateSchema, stateV1Schema, stateV2Schema } from './schema.ts'
 export { employeeSchema } from './schema.ts'
 
 /** Parse a disk document without admitting unsupported generations.
@@ -59,7 +59,35 @@ export function parseState(input: unknown): StudioState {
     if (tasks.get(file.taskId)?.projectId !== file.projectId || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error('Stored artifact metadata is invalid')
     outputName(file.name)
   }
+  identities(state.meetings)
+  for (const meeting of state.meetings) {
+    const people = new Set(meeting.attendeeIds)
+    if (!workspaces.has(meeting.workspaceId) || !people.has(meeting.hostId) || people.size !== meeting.attendeeIds.length
+      || meeting.attendeeIds.some(id => !employees.has(id)) || meeting.queue.some(id => !people.has(id))
+      || meeting.speaking !== null && !people.has(meeting.speaking)
+      || meeting.projectId !== null && !projects.has(meeting.projectId)) throw new Error('Stored meeting refers to a missing participant, workspace, or project')
+    identities(meeting.messages)
+    for (const message of meeting.messages) {
+      if (message.from !== 'user' && !employees.has(message.from) || message.mentions.some(id => !employees.has(id))) throw new Error('Stored meeting message refers to a missing employee')
+      if (message.nativeSession) {
+        parseFields(nativeSessionSchema, message.nativeSession)
+        if (!isAbsolute(message.nativeSession.cwd)) throw new Error('Stored native session metadata is invalid')
+      }
+    }
+    if (meeting.minutes) {
+      parseFields(minutesSchema, meeting.minutes)
+      if (meeting.minutes.tasks.some(task => !employees.has(task.employeeId))) throw new Error('Stored meeting minutes refer to a missing employee')
+    }
+  }
   return state
+}
+
+/** Read the frozen v2 document into the current journal; meetings start empty.
+ * @param input - Decoded v2 JSON.
+ * @returns Current state.
+ */
+export function migrateStateV2(input: unknown): StudioState {
+  return parseState({ ...parseFields(stateV2Schema, input), version: 3, meetings: [] })
 }
 
 /** Read the frozen predecessor into a separate current journal without changing it.
@@ -77,7 +105,7 @@ export function migrateStateV1(input: unknown): StudioState {
     }
     return { ...project, workspaceId: workspace.id, acceptanceCriteria: '', sessionMode: 'new-task' as const }
   })
-  return parseState({ ...old, version: 2, workspaces, activeWorkspaceId: workspaces.at(-1)?.id ?? null,
+  return migrateStateV2({ ...old, version: 2, workspaces, activeWorkspaceId: workspaces.at(-1)?.id ?? null,
     projects, tasks: old.tasks.map(task => ({ ...task, nativeSessions: [], reviewStatus: task.status === 'completed' ? 'accepted' : 'pending' })) })
 }
 

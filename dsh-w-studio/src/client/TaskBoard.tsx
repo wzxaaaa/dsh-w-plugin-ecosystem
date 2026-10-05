@@ -1,8 +1,9 @@
 /** Dependency board, task editing, and immutable deliverable downloads. */
-import { useState } from 'react'
-import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
+import { useEffect, useRef, useState } from 'react'
 import type { StudioEmployeeId, Project, StudioState, Task } from '../types.ts'
-import type { StudioKey } from './locales.ts'
+import { TaskDetail } from './TaskDetail.tsx'
+import { Avatar, Busy, ReviewStatus, TaskStatus } from './parts.tsx'
+import { employeeOf, projectStats, revisionOf, taskPhase, usePending, waitingOn, type Command, type T, type TaskPhase } from './ui.ts'
 import css from './Studio.module.css'
 
 /** Data and callbacks supplied by the Studio panel. */
@@ -10,79 +11,139 @@ export interface TaskBoardProps {
   state: StudioState
   project: Project
   busy: boolean
-  t: Translate<StudioKey>
-  command: (action: string, input: unknown) => Promise<boolean>
+  error: string
+  t: T
+  command: Command
+  /** Selected task id, owned by the panel so the handoff timeline can jump here. */
+  selected: string | null
+  onSelect: (id: string) => void
+}
+type Filter = 'all' | 'active' | 'waiting' | 'done' | 'attention'
+const filters: Record<Filter, readonly TaskPhase[]> = {
+  all: [], active: ['running'], waiting: ['pending', 'blocked'], done: ['completed'], attention: ['failed', 'interrupted', 'cancelled'],
+}
+/** Draft for creating or editing a pending task. */
+interface TaskDraft {
+  id: string | null
+  employeeId: string
+  title: string
+  instruction: string
+  dependsOn: string[]
+  files: string
 }
 
 /** Show explicit task status alongside dependency readiness and final output. */
-export function TaskBoard({ state, project, busy, t, command }: TaskBoardProps) {
+export function TaskBoard({ state, project, busy, error, t, command, selected, onSelect }: TaskBoardProps) {
   const tasks = state.tasks.filter(task => task.projectId === project.id)
-  const [selected, setSelected] = useState<string | null>(tasks[0]?.id ?? null)
-  const [draft, setDraft] = useState<{
-    id: string | null
-    employeeId: string
-    title: string
-    instruction: string
-    dependsOn: string[]
-    files: string
-  } | null>(null)
-  const task = tasks.find(value => value.id === selected)
-  const [changes, setChanges] = useState('')
-  const edit = (value?: Task): void =>{  setDraft({ id: value?.id ?? null, employeeId: value?.employeeId ?? state.employees.find(employee => employee.enabled)?.id ?? '',
-    title: value?.title ?? '', instruction: value?.instruction ?? '', dependsOn: value?.dependsOn ?? [], files: value?.outputFiles.join('\n') ?? '' }) }
-  return <div className={css.split}>
-    <section className={css.list}>
-      <p className={css.hint}>{project.objective}</p>
-      {project.acceptanceCriteria && <p className={css.hint}>{t('acceptanceCriteria')}: {project.acceptanceCriteria}</p>}
-      <p className={css.hint}>{t('exportLocation', { path: `.studio/projects/${project.id}/` })}</p>
-      <div className={css.sectionHeading}><h2>{t('tasks')}</h2><button className={css.primary} disabled={busy} onClick={() =>{  edit() }}>{t('addTask')}</button></div>
-      {tasks.map(value => <button key={value.id} className={`${css.taskRow} ${selected === value.id ? css.selectedRow : ''}`} onClick={() => { setSelected(value.id); setDraft(null) }}>
-        <span><strong>{value.title}</strong><small>{state.employees.find(employee => employee.id === value.employeeId)?.name}
-          {value.reviewStatus === 'superseded' && <> · {t('superseded')}</>}</small></span>
-        <span className={css.status} data-status={value.status}>{t(value.status === 'pending' && !value.dependsOn.every(id => tasks.find(dependency => dependency.id === id)?.status === 'completed') ? 'blocked' : value.status)}</span>
-      </button>)}
-      {!tasks.length && <p className={css.empty}>{t('noTasks')}</p>}
+  const [filter, setFilter] = useState<Filter>('all')
+  const [draft, setDraft] = useState<TaskDraft | null>(null)
+  const detail = useRef<HTMLDivElement>(null)
+  const task = tasks.find(value => value.id === selected) ?? tasks[0]
+  const stats = projectStats(tasks)
+  const counts: Record<Filter, number> = { all: stats.total, active: stats.running, waiting: stats.ready + stats.blocked, done: stats.completed, attention: stats.attention }
+  const shown = filter === 'all' ? tasks : tasks.filter(value => filters[filter].includes(taskPhase(value, tasks)))
+  const edit = (value?: Task): void => {
+    setDraft({ id: value?.id ?? null, employeeId: value?.employeeId ?? state.employees.find(employee => employee.enabled)?.id ?? '',
+      title: value?.title ?? '', instruction: value?.instruction ?? '', dependsOn: value?.dependsOn ?? [], files: value?.outputFiles.join('\n') ?? '' })
+    reveal()
+  }
+  const reveal = (): void => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1100px)').matches) {
+      requestAnimationFrame(() => { detail.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) })
+    }
+  }
+  const select = (id: string): void => { onSelect(id); setDraft(null); reveal() }
+  return <div className={css.workArea}>
+    <section className={css.listPane} aria-label={t('tasks')}>
+      <div className={css.paneHead}>
+        <div><h2>{t('tasks')}</h2><p className={css.muted}>{t('taskSummary', { done: stats.completed, total: stats.active })}</p></div>
+        <button className={css.primary} disabled={busy} onClick={() => { edit() }}>{t('addTask')}</button>
+      </div>
+      <div className={css.filterRow} role="group" aria-label={t('filterTasks')}>
+        {(Object.keys(filters) as Filter[]).map(key => <button key={key} className={css.filter} aria-pressed={filter === key} onClick={() => { setFilter(key) }} data-tone={key}>
+          {t(`filter_${key}` as const)}<span>{counts[key]}</span>
+        </button>)}
+      </div>
+      <ol className={css.pipeline}>
+        {shown.map((value) => {
+          const phase = taskPhase(value, tasks)
+          const owner = employeeOf(state.employees, value.employeeId)
+          const waiting = phase === 'blocked' ? waitingOn(value, tasks) : []
+          const original = revisionOf(value, tasks)
+          return <li key={value.id} data-status={phase}>
+            <button className={css.taskItem} aria-current={task?.id === value.id ? 'true' : undefined} onClick={() => { select(value.id) }}>
+              <span className={css.step}>{tasks.indexOf(value) + 1}</span>
+              <span className={css.taskMain}>
+                <strong>{value.title}</strong>
+                <span className={css.taskOwner}><Avatar id={value.employeeId} name={owner?.name} size="sm" />{owner?.name ?? t('unknownEmployee')}{owner?.role && <small> · {owner.role}</small>}</span>
+                {!!waiting.length && <small className={css.reason}>{t('waitingFor', { names: waiting.map(dependency => `#${tasks.indexOf(dependency) + 1}`).join('、') })}</small>}
+                {original && <small className={css.reason} data-kind="revision">{t('revisionOfShort', { step: tasks.indexOf(original) + 1 })}</small>}
+              </span>
+              <span className={css.taskBadges}><TaskStatus phase={phase} t={t} /><ReviewStatus task={value} t={t} /></span>
+            </button>
+          </li>
+        })}
+      </ol>
+      {!tasks.length && <div className={css.emptyState}><strong>{t('noTasks')}</strong><p>{t('noTasksHelp')}</p></div>}
+      {!!tasks.length && !shown.length && <p className={css.emptyInline}>{t('noFilteredTasks')}</p>}
     </section>
-    <section className={css.editor}>
-      {draft ? <form onSubmit={(event) => {
-        event.preventDefault()
-        const input = { projectId: project.id, employeeId: draft.employeeId as StudioEmployeeId,
-          title: draft.title, instruction: draft.instruction,
-          dependsOn: draft.dependsOn, outputFiles: draft.files.split('\n').map(name => name.trim()).filter(Boolean) }
-        void command(draft.id ? 'editTask' : 'createTask', draft.id ? { id: draft.id, task: input } : input).then((ok) => { if (ok) setDraft(null) })
-      }}>
-        <h2>{t(draft.id ? 'edit' : 'addTask')}</h2>
-        <label className={css.stackedField}>{t('employees')}<select required value={draft.employeeId} onChange={(event) =>{  setDraft({ ...draft, employeeId: event.target.value }) }}>
-          {state.employees.filter(employee => employee.enabled).map(employee => <option key={employee.id} value={employee.id}>
-            {employee.name} · {employee.role}
-          </option>)}
-        </select></label>
-        <label className={css.stackedField}>{t('taskTitle')}<input required value={draft.title} onChange={(event) =>{  setDraft({ ...draft, title: event.target.value }) }} /></label>
-        <label className={css.stackedField}>{t('instruction')}<textarea required rows={5} value={draft.instruction} onChange={(event) =>{  setDraft({ ...draft, instruction: event.target.value }) }} /></label>
-        <fieldset className={css.checklist}><legend>{t('dependencies')}</legend>{tasks.filter(value => value.id !== draft.id).map(value => <label key={value.id} className={css.check}>
-          <input type="checkbox" checked={draft.dependsOn.includes(value.id)} onChange={(event) =>{  setDraft({ ...draft, dependsOn: event.target.checked ? [...draft.dependsOn, value.id] : draft.dependsOn.filter(id => id !== value.id) }) }} />{value.title}
-        </label>)}</fieldset>
-        <label className={css.stackedField}>{t('files')}<textarea rows={3} value={draft.files} onChange={(event) =>{  setDraft({ ...draft, files: event.target.value }) }} /></label>
-        <div className={css.actions}><button className={css.primary} disabled={busy}>{t('save')}</button><button type="button" onClick={() =>{  setDraft(null) }}>{t('close')}</button></div>
-      </form> : task ? <>
-        <h2>{t('lastResult')}</h2><h3>{task.title}</h3><p className={css.hint}>{t('attempt')}: {task.attempt}</p>
-        <div className={css.actions}>
-          {task.status === 'pending' && <button onClick={() =>{  edit(task) }}>{t('edit')}</button>}
-          {['failed', 'cancelled', 'interrupted'].includes(task.status) && <button disabled={busy} onClick={() => { void command('retryTask', { id: task.id }) }}>{t('retry')}</button>}
-          {['pending', 'running'].includes(task.status) && <button className={css.danger} disabled={busy} onClick={() => { void command('cancelTask', { id: task.id }) }}>{t('cancel')}</button>}
-        </div>
-        {task.error && <p role="alert" className={css.error}>{task.error}</p>}
-        {task.status === 'completed' && task.reviewStatus !== 'superseded' && <form onSubmit={(event) => { event.preventDefault(); void command('requestChanges', { id: task.id, instruction: changes }).then((ok) => { if (ok) setChanges('') }) }}>
-          <label className={css.stackedField}>{t('changeInstruction')}<textarea required rows={3} value={changes} onChange={(event) => { setChanges(event.target.value) }} /></label><button disabled={busy || project.status === 'running'}>{t('requestChanges')}</button>
-        </form>}
-        {task.status === 'completed' && <p className={css.hint}>{t(task.reviewStatus === 'superseded' ? 'superseded' : task.reviewStatus === 'accepted' ? 'accepted' : 'awaitingReview')}</p>}
-        {!!task.nativeSessions.length && <details><summary>{t('nativeSessions')}</summary><p className={css.hint}>{t('nativeSessionHelp')}</p>{task.nativeSessions.map(session => <div key={`${session.id}-${session.attempt}`}><strong>{t(session.engine)} · {t(session.continued ? 'continuedSession' : 'newSession')}</strong><pre className={css.report}>{session.engine === 'claude' ? `claude --resume ${session.id}` : session.engine === 'codex' ? `codex resume ${session.id}` : session.id}</pre><p className={css.hint}>{session.cwd}</p></div>)}</details>}
-        <h3>{t('result')}</h3><pre className={css.report}>{task.result || t('noResult')}</pre>
-        <h3>{t('artifacts')}</h3><ul className={css.fileList}>{state.artifacts.filter(file => file.taskId === task.id).map(file => <li key={file.id}>
-          <a href={`/api/studio/artifact?id=${encodeURIComponent(file.id)}`} download>{file.name}</a><small>{t('fileMetadata', { size: Math.ceil(file.size / 1024), hash: file.sha256.slice(0, 12) })}</small>
-        </li>)}</ul>
-        <details><summary>{t('assignment')}</summary><pre className={css.report}>{task.assignment || task.instruction}</pre></details>
-      </> : <p className={css.empty}>{t('noTasks')}</p>}
-    </section>
+    <div className={css.detailPane} ref={detail}>
+      {draft ? <TaskForm draft={draft} setDraft={setDraft} tasks={tasks} state={state} project={project} busy={busy} error={error} t={t} command={command} />
+        : task ? <TaskDetail key={task.id} task={task} tasks={tasks} state={state} project={project} busy={busy} t={t} command={command} onSelect={select} onEdit={() => { edit(task) }} />
+          : <div className={css.emptyState}><p>{t('selectTask')}</p></div>}
+    </div>
   </div>
+}
+
+interface TaskFormProps {
+  draft: TaskDraft
+  setDraft: (draft: TaskDraft | null) => void
+  tasks: Task[]
+  state: StudioState
+  project: Project
+  busy: boolean
+  error: string
+  t: T
+  command: Command
+}
+/** Create a task or edit a pending one; dependencies stay inside this project. */
+function TaskForm({ draft, setDraft, tasks, state, project, busy, error, t, command }: TaskFormProps) {
+  const { pending, run } = usePending()
+  const [failed, setFailed] = useState(false)
+  const first = useRef<HTMLSelectElement>(null)
+  useEffect(() => { first.current?.focus() }, [draft.id])
+  return <form className={css.editorCard} onSubmit={(event) => {
+    event.preventDefault()
+    const input = { projectId: project.id, employeeId: draft.employeeId as StudioEmployeeId,
+      title: draft.title, instruction: draft.instruction,
+      dependsOn: draft.dependsOn, outputFiles: draft.files.split('\n').map(name => name.trim()).filter(Boolean) }
+    void run('save', () => command(draft.id ? 'editTask' : 'createTask', draft.id ? { id: draft.id, task: input } : input)).then((ok) => {
+      setFailed(!ok)
+      if (ok) setDraft(null)
+    })
+  }}>
+    <header className={css.detailHead}><h2>{t(draft.id ? 'editTask' : 'addTask')}</h2></header>
+    <label className={css.field}><span>{t('assignee')}</span><select ref={first} required value={draft.employeeId} onChange={(event) => { setDraft({ ...draft, employeeId: event.target.value }) }}>
+      {state.employees.filter(employee => employee.enabled || employee.id === draft.employeeId).map(employee => <option key={employee.id} value={employee.id}>
+        {employee.name}{employee.role && ` · ${employee.role}`}
+      </option>)}
+    </select></label>
+    <label className={css.field}><span>{t('taskTitle')}</span><input required value={draft.title} onChange={(event) => { setDraft({ ...draft, title: event.target.value }) }} /></label>
+    <label className={css.field}><span>{t('instruction')}</span><textarea required rows={6} value={draft.instruction} onChange={(event) => { setDraft({ ...draft, instruction: event.target.value }) }} /></label>
+    <fieldset className={css.checkList}><legend>{t('dependencies')}</legend>
+      {tasks.filter(value => value.id !== draft.id).map(value => <label key={value.id}>
+        <input type="checkbox" checked={draft.dependsOn.includes(value.id)} onChange={(event) => { setDraft({ ...draft, dependsOn: event.target.checked ? [...draft.dependsOn, value.id] : draft.dependsOn.filter(id => id !== value.id) }) }} />
+        <span><b>#{tasks.indexOf(value) + 1}</b> {value.title}</span>
+      </label>)}
+      {tasks.length <= (draft.id ? 1 : 0) && <p className={css.muted}>{t('noDependencies')}</p>}
+    </fieldset>
+    <label className={css.field}><span>{t('files')}</span><textarea className={css.mono} rows={3} value={draft.files} onChange={(event) => { setDraft({ ...draft, files: event.target.value }) }} /></label>
+    <footer className={css.formFooter}>
+      <div className={css.actions}>
+        <button className={css.primary} disabled={busy}><Busy on={pending === 'save'} />{t(pending === 'save' ? 'saving' : 'save')}</button>
+        <button type="button" className={css.ghost} onClick={() => { setDraft(null) }}>{t('close')}</button>
+      </div>
+      {failed && <p className={css.formStatus} data-state="error" role="alert">{error || t('failure')}</p>}
+    </footer>
+  </form>
 }

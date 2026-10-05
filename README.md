@@ -8,7 +8,7 @@
 
 | 插件 | 当前版本 | 作用 | 安装包 |
 | --- | ---: | --- | --- |
-| [`dsh-w-studio`](./dsh-w-studio) | `0.1.0` | 软件公司工作室：配置原生模型员工、共享工作区、任务交接、返工、验收与成果导出；当前验证 Web profile | [下载 `.tgz`](./dsh-w-studio/dsh-w-studio-0.1.0.tgz?raw=1) |
+| [`dsh-w-studio`](./dsh-w-studio) | `0.2.0` | 软件公司工作室：配置原生模型员工、共享工作区、甲方会议室（群聊沟通需求，纪要一键建项目）、任务交接、返工、验收与成果导出；当前验证 Web profile | [下载 `.tgz`](./dsh-w-studio/dsh-w-studio-0.2.0.tgz?raw=1) |
 | [`dsh-w-custom-plugins`](./dsh-w-custom-plugins) | `0.5.1` | 自定义插件管理、启停和拖拽安装；隐藏 preset 内部实现模块；**建议第一个安装** | [下载 `.tgz`](./dsh-w-custom-plugins/dsh-w-custom-plugins-0.5.1.tgz?raw=1) |
 | [`dsh-w-right-sidebar`](./dsh-w-right-sidebar) | `0.8.3` | W 系列共用的右侧 Sidebar 宿主：工具栏、工具页返回、收缩栏直达工具，并真实挤压中间对话区域, 已完美兼容**dsh-better-sidebar**; **建议第二个安装** | [下载 `.tgz`](./dsh-w-right-sidebar/dsh-w-right-sidebar-0.8.3.tgz?raw=1) |
 | [`dsh-w-deslop`](./dsh-w-deslop) | `0.1.1` | 小说去 AI 味规则与文本扫描 | [下载 `.tgz`](./dsh-w-deslop/dsh-w-deslop-0.1.1.tgz?raw=1) |

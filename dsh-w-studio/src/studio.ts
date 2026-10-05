@@ -5,10 +5,10 @@ import { createReadStream } from 'node:fs'
 import { join, resolve, relative, isAbsolute } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import type { Artifact, StudioArtifactId, Employee, StudioEmployeeId, EmployeeResult, StudioMessageId, Project, StudioProjectId, StudioConfig, StudioExecutor, StudioState, Task, StudioTaskId, StudioWorkspaceId, StudioNativeSessionId } from './types.ts'
-import { employeeSchema, outputName, parseState, migrateStateV1, validateEmployee, withinDirectory } from './validation.ts'
+import type { Artifact, StudioArtifactId, Employee, StudioEmployeeId, EmployeeResult, StudioMessageId, Project, StudioProjectId, StudioConfig, StudioExecutor, StudioState, Task, StudioTaskId, StudioWorkspaceId, StudioNativeSessionId, Meeting, MeetingMinutes, StudioMeetingId, StudioNativeSession } from './types.ts'
+import { employeeSchema, outputName, parseState, migrateStateV1, migrateStateV2, validateEmployee, withinDirectory } from './validation.ts'
 import { exportProject } from './workspace.ts'
-import { parseFields } from './schema.ts'
+import { minutesSchema, parseFields } from './schema.ts'
 import { teamTemplate } from './templates.ts'
 
 const commandSchema = z.object({
@@ -23,14 +23,24 @@ const taskInput = z.object({ projectId: z.string().required(), employeeId: z.str
   dependsOn: z.array(z.string()).required(), outputFiles: z.array(z.string()).required() })
 const messageInput = z.object({ projectId: z.string().required(), to: z.string().required(),
   message: z.string().min(1).max(100_000).required() })
+const meetingFields = { title: z.string().min(1).max(500).required(), agenda: z.string().max(100_000).required(),
+  hostId: z.string().required(), attendeeIds: z.array(z.string()).required() }
+const meetingMessageInput = z.object({ id: z.string().required(), message: z.string().min(1).max(100_000).required(),
+  mentions: z.array(z.string()).required() })
+/** Employee turns allowed after one client message before the floor returns to the client. */
+const meetingChainLimit = 6
+/** Meeting actions validate against the live meeting (status, attendees, active turn) instead of the observed revision,
+ * because background speaker turns advance the revision between every browser poll. */
+const liveCheckedActions = new Set(['createMeeting', 'updateMeeting', 'meetingMessage', 'stopMeeting', 'draftMinutes',
+  'saveMinutes', 'resumeMeeting', 'meetingProject', 'closeMeeting'])
 
 function identity(input: unknown): string {
   const schema = z.object({ id: z.string().min(1).required() })
   return (z.resolve(input, schema, {})[0] as ReturnType<typeof schema>).id
 }
 function freshState(): StudioState {
-  return { version: 2, revision: 0, workspaces: [], activeWorkspaceId: null,
-    employees: [], projects: [], tasks: [], messages: [], artifacts: [] }
+  return { version: 3, revision: 0, workspaces: [], activeWorkspaceId: null,
+    employees: [], projects: [], tasks: [], messages: [], artifacts: [], meetings: [] }
 }
 function within(root: string, path: string): boolean {
   const rel = relative(root, path)
@@ -47,6 +57,7 @@ export class Studio {
     cwd: string
     employeeId: StudioEmployeeId
   }>()
+  private readonly meetingRuns = new Map<StudioMeetingId, { controller: AbortController; done: Promise<void> }>()
   private closing = false
   private constructor(private readonly config: StudioConfig, private readonly executor: StudioExecutor) {}
 
@@ -58,14 +69,23 @@ export class Studio {
   static async open(config: StudioConfig, executor: StudioExecutor): Promise<Studio> {
     const studio = new Studio(config, executor)
     await mkdir(config.storageRoot, { recursive: true, mode: 0o700 })
-    let content: string | undefined
-    try { content = await readFile(join(config.storageRoot, 'studio.v2.json'), 'utf8') }
-    catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error }
-    if (content !== undefined) studio.state = parseState(JSON.parse(content))
+    const read = async (name: string): Promise<unknown> => {
+      try { return JSON.parse(await readFile(join(config.storageRoot, name), 'utf8')) }
+      catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined
+        throw error
+      }
+    }
+    // Predecessor journals are read once into the current file and left byte-for-byte unchanged.
+    const v3 = await read('studio.v3.json')
+    if (v3 !== undefined) studio.state = parseState(v3)
     else {
-      try { content = await readFile(join(config.storageRoot, 'studio.v1.json'), 'utf8') }
-      catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error }
-      if (content !== undefined) studio.state = migrateStateV1(JSON.parse(content))
+      const v2 = await read('studio.v2.json')
+      if (v2 !== undefined) studio.state = migrateStateV2(v2)
+      else {
+        const v1 = await read('studio.v1.json')
+        if (v1 !== undefined) studio.state = migrateStateV1(v1)
+      }
     }
     for (const task of studio.state.tasks) {
       if (task.status === 'running') {
@@ -75,6 +95,14 @@ export class Studio {
       }
     }
     for (const project of studio.state.projects) if (project.status === 'running') project.status = 'paused'
+    for (const meeting of studio.state.meetings) {
+      if (meeting.speaking !== null || meeting.status === 'drafting') {
+        meeting.error = 'Host stopped during a meeting turn. Send a message or draft the minutes again.'
+        meeting.speaking = null
+        if (meeting.status === 'drafting') meeting.status = 'open'
+      }
+      meeting.queue = []
+    }
     await studio.persist()
     return studio
   }
@@ -91,7 +119,7 @@ export class Studio {
     return next
   }
   private async persist(): Promise<void> {
-    const path = join(this.config.storageRoot, 'studio.v2.json')
+    const path = join(this.config.storageRoot, 'studio.v3.json')
     await writeFileAtomic(path, `${JSON.stringify(this.state, null, 2)}\n`, { mode: 0o600, dirMode: 0o700 })
   }
   private async commit(): Promise<void> {
@@ -107,6 +135,11 @@ export class Studio {
     const project = this.state.projects.find(value => value.id === id)
     if (!project) throw new Error('Project does not exist')
     return project
+  }
+  private meeting(id: string): Meeting {
+    const meeting = this.state.meetings.find(value => value.id === id)
+    if (!meeting) throw new Error('Meeting does not exist')
+    return meeting
   }
   private task(id: string): Task {
     const task = this.state.tasks.find(value => value.id === id)
@@ -131,7 +164,7 @@ export class Studio {
     return this.enqueue(async () => {
       if (this.closing) throw new Error('Studio is stopping')
       const command = parseFields(commandSchema, raw) as { action: string; expectedRevision: number; input: unknown }
-      if (command.expectedRevision !== this.state.revision) throw new Error('Studio changed; refresh and retry your edit')
+      if (command.expectedRevision !== this.state.revision && !liveCheckedActions.has(command.action)) throw new Error('Studio changed; refresh and retry your edit')
       const before = this.snapshot()
       try {
         switch (command.action) {
@@ -168,6 +201,7 @@ export class Studio {
               parsed.cwd = await realpath(parsed.cwd)
             }
             if ([...this.active.values()].some(run => run.employeeId === parsed.id)) throw new Error('Stop the employee task before changing its settings')
+            if (this.state.meetings.some(meeting => meeting.speaking === parsed.id)) throw new Error('Wait until the employee finishes speaking before changing its settings')
             const index = this.state.employees.findIndex(employee => employee.id === parsed.id)
             if (index < 0) this.state.employees.push(parsed)
             else this.state.employees[index] = parsed
@@ -177,31 +211,101 @@ export class Studio {
             const id = identity(command.input)
             this.employee(id)
             if (this.state.tasks.some(task => task.employeeId === id)) throw new Error('An employee with task history can be disabled but cannot be deleted')
+            if (this.state.meetings.some(meeting => meeting.attendeeIds.includes(id as StudioEmployeeId) || meeting.messages.some(message => message.from === id)
+              || meeting.minutes?.tasks.some(task => task.employeeId === id))) throw new Error('An employee with meeting history can be disabled but cannot be deleted')
             this.state.employees = this.state.employees.filter(employee => employee.id !== id)
             break
           }
           case 'createProject': {
             const input = parseFields(projectInput, command.input)
+            const employees = [...new Set(input.employeeIds)].map(id => this.employee(id))
+            await this.newProject(input, employees.map(employee => ({ employee, title: `${employee.role} · ${input.name}`,
+              instruction: `完成你的岗位负责的工作，使用已交接的文档和结果。目标：${input.objective}` })))
+            break
+          }
+          case 'createMeeting': {
+            const input = parseFields(z.object({ ...meetingFields, workspaceId: z.string().required() }), command.input)
             const workspace = this.state.workspaces.find(value => value.id === input.workspaceId)
             if (!workspace) throw new Error('Select a company workspace first')
-            const directory = input.cwd || workspace.path
-            if (!isAbsolute(directory) || !(await stat(directory)).isDirectory()) throw new Error('Project working directory must be an existing absolute directory')
-            const cwd = await realpath(directory)
-            if (!withinDirectory(workspace.path, cwd)) throw new Error('Project directory must stay inside the company workspace')
-            const employees = [...new Set(input.employeeIds)].map(id => this.employee(id))
-            if (!employees.length || employees.some(employee => !employee.enabled)) throw new Error('Select at least one enabled employee')
-            if (employees.length > this.config.maxTasksPerProject) throw new Error('Team exceeds the project task limit')
-            const project: Project = { id: randomUUID() as StudioProjectId, name: input.name, objective: input.objective,
-              cwd, workspaceId: workspace.id, acceptanceCriteria: input.acceptanceCriteria, sessionMode: input.sessionMode,
-              status: 'paused', createdAt: new Date().toISOString() }
-            this.state.projects.push(project)
-            let previous: Task | undefined
-            for (const employee of employees) {
-              const task = this.appendTask(project, employee, `${employee.role} · ${input.name}`,
-                `完成你的岗位负责的工作，使用已交接的文档和结果。目标：${input.objective}`, previous ? [previous.id] : [], [])
-              if (employee.permission !== 'read-only') task.outputFiles = [`.studio-deliverables/${task.id}.md`]
-              previous = task
-            }
+            this.state.meetings.push({ id: randomUUID() as StudioMeetingId, workspaceId: workspace.id, title: input.title, agenda: input.agenda,
+              hostId: input.hostId as StudioEmployeeId, attendeeIds: this.attendees(input.hostId, input.attendeeIds), status: 'open',
+              queue: [], speaking: null, error: '', messages: [], minutes: null, projectId: null, createdAt: new Date().toISOString() })
+            break
+          }
+          case 'updateMeeting': {
+            const input = parseFields(z.object({ ...meetingFields, id: z.string().required() }), command.input)
+            const meeting = this.meeting(input.id)
+            if (meeting.status === 'closed') throw new Error('The meeting has ended')
+            const attendees = this.attendees(input.hostId, input.attendeeIds)
+            if (meeting.speaking && !attendees.includes(meeting.speaking)) throw new Error('Wait until the current speaker finishes')
+            Object.assign(meeting, { title: input.title, agenda: input.agenda, hostId: input.hostId, attendeeIds: attendees,
+              queue: meeting.queue.filter(id => attendees.includes(id)) })
+            break
+          }
+          case 'meetingMessage': {
+            const input = parseFields(meetingMessageInput, command.input)
+            const meeting = this.meeting(input.id)
+            if (meeting.status !== 'open') throw new Error('The meeting is not open for discussion')
+            const mentions = [...new Set(input.mentions)] as StudioEmployeeId[]
+            if (mentions.some(id => !meeting.attendeeIds.includes(id))) throw new Error('Mention only meeting attendees')
+            meeting.messages.push({ id: randomUUID() as StudioMessageId, from: 'user', message: input.message, mentions,
+              createdAt: new Date().toISOString(), nativeSession: null })
+            // Without mentions the host answers, even if the host is mid-turn: that turn did not see this message.
+            meeting.queue = [...new Set([...meeting.queue, ...mentions.length ? mentions : [meeting.hostId]])]
+            meeting.error = ''
+            break
+          }
+          case 'stopMeeting': {
+            const meeting = this.meeting(identity(command.input))
+            meeting.queue = []
+            this.meetingRuns.get(meeting.id)?.controller.abort(new Error('Stopped by user'))
+            break
+          }
+          case 'draftMinutes': {
+            const meeting = this.meeting(identity(command.input))
+            if (meeting.status !== 'open' && meeting.status !== 'review') throw new Error('The meeting has ended')
+            if (this.meetingRuns.has(meeting.id)) throw new Error('Wait for the current speaker or stop the turn first')
+            if (!meeting.messages.length) throw new Error('Discuss something before drafting minutes')
+            meeting.status = 'drafting'; meeting.queue = []; meeting.error = ''
+            break
+          }
+          case 'saveMinutes': {
+            const input = parseFields(z.object({ id: z.string().required(), minutes: minutesSchema.required() }), command.input)
+            const meeting = this.meeting(input.id)
+            if (meeting.status !== 'review') throw new Error('Minutes can be edited only while awaiting confirmation')
+            for (const task of input.minutes.tasks) this.employee(task.employeeId)
+            meeting.minutes = input.minutes as MeetingMinutes
+            meeting.error = ''
+            break
+          }
+          case 'resumeMeeting': {
+            const meeting = this.meeting(identity(command.input))
+            if (meeting.status !== 'review') throw new Error('Only meetings awaiting minutes confirmation can resume')
+            meeting.status = 'open'
+            break
+          }
+          case 'meetingProject': {
+            const input = parseFields(z.object({ id: z.string().required(), minutes: minutesSchema.required(), cwd: z.string().required(),
+              sessionMode: z.union(['employee-project', 'new-task'] as const).required() }), command.input)
+            const meeting = this.meeting(input.id)
+            if (meeting.status !== 'review') throw new Error('Confirm the meeting minutes first')
+            const minutes = input.minutes as MeetingMinutes
+            if (!minutes.projectName.trim() || !minutes.objective.trim()) throw new Error('Minutes need a project name and objective')
+            if (!minutes.tasks.length || minutes.tasks.some(task => !task.title.trim() || !task.instruction.trim())) throw new Error('Minutes need at least one complete task')
+            const project = await this.newProject({ name: minutes.projectName, objective: minutes.objective, cwd: input.cwd,
+              workspaceId: meeting.workspaceId, acceptanceCriteria: minutes.acceptanceCriteria, sessionMode: input.sessionMode },
+            minutes.tasks.map(task => ({ employee: this.employee(task.employeeId), title: task.title, instruction: task.instruction })))
+            // The minutes reach every project employee through the existing team-message channel.
+            this.state.messages.push({ id: randomUUID() as StudioMessageId, projectId: project.id, taskId: null, from: 'user', to: 'team',
+              message: [`会议纪要：${meeting.title}`, minutes.summary, ...minutes.decisions.map(value => `- ${value}`)].filter(Boolean).join('\n'),
+              createdAt: new Date().toISOString() })
+            Object.assign(meeting, { minutes, status: 'closed', projectId: project.id, queue: [], error: '' })
+            break
+          }
+          case 'closeMeeting': {
+            const meeting = this.meeting(identity(command.input))
+            meeting.status = 'closed'; meeting.queue = []
+            this.meetingRuns.get(meeting.id)?.controller.abort(new Error('Meeting ended'))
             break
           }
           case 'createTask': {
@@ -306,8 +410,165 @@ export class Studio {
         await this.commit()
       } catch (error) { this.state = before; throw error }
       this.schedule()
+      this.scheduleMeetings()
       return this.snapshot()
     })
+  }
+
+  private attendees(hostId: string, ids: string[]): StudioEmployeeId[] {
+    const attendees = [...new Set([hostId, ...ids])].map(id => this.employee(id))
+    if (attendees.some(employee => !employee.enabled)) throw new Error('Invite only enabled employees')
+    return attendees.map(employee => employee.id)
+  }
+
+  /** Validate directory and team, then append a paused project whose tasks form a sequential chain. */
+  private async newProject(input: { name: string; objective: string; cwd: string; workspaceId: string; acceptanceCriteria: string; sessionMode: Project['sessionMode'] },
+    assignments: { employee: Employee; title: string; instruction: string }[]): Promise<Project> {
+    const workspace = this.state.workspaces.find(value => value.id === input.workspaceId)
+    if (!workspace) throw new Error('Select a company workspace first')
+    const directory = input.cwd || workspace.path
+    if (!isAbsolute(directory) || !(await stat(directory)).isDirectory()) throw new Error('Project working directory must be an existing absolute directory')
+    const cwd = await realpath(directory)
+    if (!withinDirectory(workspace.path, cwd)) throw new Error('Project directory must stay inside the company workspace')
+    if (!assignments.length || assignments.some(value => !value.employee.enabled)) throw new Error('Select at least one enabled employee')
+    if (assignments.length > this.config.maxTasksPerProject) throw new Error('Team exceeds the project task limit')
+    const project: Project = { id: randomUUID() as StudioProjectId, name: input.name, objective: input.objective,
+      cwd, workspaceId: workspace.id, acceptanceCriteria: input.acceptanceCriteria, sessionMode: input.sessionMode,
+      status: 'paused', createdAt: new Date().toISOString() }
+    this.state.projects.push(project)
+    let previous: Task | undefined
+    for (const { employee, title, instruction } of assignments) {
+      const task = this.appendTask(project, employee, title, instruction, previous ? [previous.id] : [], [])
+      if (employee.permission !== 'read-only') task.outputFiles = [`.studio-deliverables/${task.id}.md`]
+      previous = task
+    }
+    return project
+  }
+
+  private meetingPrompt(meeting: Meeting, employee: Employee, drafting: boolean): string {
+    const name = (id: string): string => id === 'user' ? '甲方（用户）' : this.state.employees.find(value => value.id === id)?.name ?? id
+    const header = [
+      `你是软件公司的员工 ${employee.name}，岗位：${employee.role}。职责：${employee.responsibilities}`,
+      `你正在参加会议「${meeting.title}」。${meeting.hostId === employee.id ? '你是本次会议主持人：引导讨论，澄清甲方需求，必要时点名合适的同事发言。' : `主持人是 ${name(meeting.hostId)}。`}`,
+      `会议议题：${meeting.agenda || '（未填写，按讨论内容推进）'}`,
+      '甲方（用户）是提出需求的客户。会议只讨论，不写代码，不修改任何文件。',
+      `参会者：${JSON.stringify(meeting.attendeeIds.map(id => ({ employeeId: id, name: name(id), role: this.employee(id).role, host: id === meeting.hostId })))}`,
+    ].join('\n\n')
+    const instruction = drafting ? [
+      '讨论已结束。请作为主持人整理会议纪要，供甲方确认后直接建立项目。',
+      '仅返回 JSON：{"message":"<纪要 JSON 字符串>","files":[],"handoffs":[]}。message 必须是一个 JSON 字符串，结构为：',
+      '{"summary":"会议结论概述","decisions":["已确定的需求或决定"],"projectName":"项目名称","objective":"项目目标","acceptanceCriteria":"逐条验收标准","tasks":[{"employeeId":"参会者真实 employeeId","title":"任务标题","instruction":"具体任务安排"}]}',
+      'tasks 按交付顺序排列，每项交给最合适的参会者。不得包含推理过程。',
+    ].join('\n') : [
+      '现在轮到你发言。请以你的岗位视角，像会议中那样简洁地口头发言：回应最新的问题，提出需要甲方澄清的问题、风险、估算或建议。',
+      '仅返回 JSON：{"message":"你的发言","files":[],"handoffs":[{"employeeId":"需要接着发言的参会同事 employeeId","message":"想请他回答的问题"}]}。不需要别人接话时 handoffs 为 []。不得包含推理过程、思考日志或工具调用轨迹。',
+    ].join('\n')
+    // Keep the newest discussion when the transcript exceeds the assignment budget.
+    const budget = this.config.maxTextBytes - Buffer.byteLength(header) - Buffer.byteLength(instruction) - 1024
+    const transcript: { speaker: string; message: string }[] = []
+    let used = 0
+    for (const message of [...meeting.messages].reverse()) {
+      const entry = { speaker: name(message.from), message: message.message }
+      const bytes = Buffer.byteLength(JSON.stringify(entry))
+      if (used + bytes > budget) break
+      transcript.unshift(entry)
+      used += bytes
+    }
+    if (!transcript.length && meeting.messages.length) throw new Error('The latest meeting message exceeds the configured text limit')
+    const omitted = meeting.messages.length - transcript.length
+    return [header, `会议记录（按时间顺序${omitted ? `，省略最早的 ${omitted} 条` : ''}）：${JSON.stringify(transcript)}`, instruction].join('\n\n')
+  }
+
+  private scheduleMeetings(): void {
+    if (this.closing) return
+    for (const meeting of this.state.meetings) {
+      if (this.meetingRuns.has(meeting.id)) continue
+      if (meeting.status !== 'drafting' && !(meeting.status === 'open' && meeting.queue.length)) continue
+      const controller = new AbortController()
+      const run = { controller, done: Promise.resolve() }
+      this.meetingRuns.set(meeting.id, run)
+      run.done = this.meetingTurn(meeting.id, controller).finally(() => {
+        this.meetingRuns.delete(meeting.id)
+        this.scheduleMeetings()
+      })
+      // meetingTurn contains and persists speaker failures; a persistence failure stays host-local.
+      void run.done.catch((error: unknown) => {
+        console.error('Studio could not persist a meeting turn:', error instanceof Error ? error.message : 'unknown error')
+      })
+    }
+  }
+
+  /** Run one speaker, or the host's minutes, through the employee's own engine: read-only, in the company directory. */
+  private async meetingTurn(id: StudioMeetingId, controller: AbortController): Promise<void> {
+    let timedOut = false
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(new Error('Meeting turn timeout reached')) }, this.config.taskTimeoutMs)
+    try {
+      const prepared = await this.enqueue(async () => {
+        const meeting = this.meeting(id)
+        const drafting = meeting.status === 'drafting'
+        const speaker = drafting ? meeting.hostId : meeting.queue[0]
+        if (!speaker || controller.signal.aborted || this.closing) return null
+        const employee = this.employee(speaker)
+        const workspace = this.state.workspaces.find(value => value.id === meeting.workspaceId)
+        if (!workspace) throw new Error('Company workspace does not exist')
+        const cwd = await realpath(workspace.path)
+        const prompt = this.meetingPrompt(meeting, employee, drafting)
+        if (!drafting) meeting.queue.shift()
+        meeting.speaking = speaker; meeting.error = ''
+        await this.commit()
+        return { meeting: structuredClone(meeting), employee: structuredClone(employee), cwd, drafting, prompt }
+      })
+      if (!prepared) return
+      const { meeting, employee, cwd, drafting, prompt } = prepared
+      let session: StudioNativeSession | null = null
+      try {
+        const project: Project = { id: meeting.id as string as StudioProjectId, workspaceId: meeting.workspaceId, name: `会议 · ${meeting.title}`,
+          objective: meeting.agenda, cwd, status: 'running', acceptanceCriteria: '', sessionMode: 'new-task', createdAt: meeting.createdAt }
+        const task: Task = { id: randomUUID() as StudioTaskId, projectId: project.id, employeeId: employee.id, title: meeting.title,
+          instruction: prompt, dependsOn: [], outputFiles: [], status: 'running', attempt: 1, result: '', error: '',
+          startedAt: new Date().toISOString(), finishedAt: '', assignment: prompt, nativeSessions: [], reviewStatus: 'pending' }
+        // Meetings are discussion only: force read-only and the company directory whatever the employee's task settings are.
+        const result = await this.executor.run({ ...employee, permission: 'read-only', cwd: '' }, project, task, controller.signal, {
+          resumeSessionId: null,
+          recordSession: (sessionId: StudioNativeSessionId) => {
+            if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(sessionId)) return Promise.reject(new Error('Native session identity is invalid'))
+            session = { id: sessionId, engine: employee.engine, cwd, attempt: 1, continued: false }
+            return Promise.resolve()
+          },
+        })
+        controller.signal.throwIfAborted()
+        await this.enqueue(async () => {
+          const live = this.meeting(id)
+          const createdAt = new Date().toISOString()
+          live.speaking = null
+          if (drafting) {
+            const { minutes, parsed } = parseMinutes(result.message, live)
+            live.minutes = minutes
+            live.status = 'review'
+            live.error = parsed ? '' : 'The host did not return structured minutes. The original text is kept; add the project details and tasks before creating the project.'
+            live.messages.push({ id: randomUUID() as StudioMessageId, from: employee.id, message: minutes.summary, mentions: [], createdAt, nativeSession: session })
+          } else {
+            const sinceUser = live.messages.length - 1 - live.messages.findLastIndex(message => message.from === 'user')
+            const mentions = [...new Set(result.handoffs.map(handoff => handoff.employeeId))]
+              .filter(value => value !== employee.id && live.attendeeIds.includes(value))
+            live.messages.push({ id: randomUUID() as StudioMessageId, from: employee.id, message: result.message, mentions, createdAt, nativeSession: session })
+            if (live.status === 'open' && sinceUser + 1 < meetingChainLimit) live.queue = [...new Set([...live.queue, ...mentions])]
+          }
+          await this.commit()
+        })
+      } catch (error) {
+        await this.enqueue(async () => {
+          const live = this.state.meetings.find(value => value.id === id)
+          if (!live) return
+          live.speaking = null
+          live.queue = []
+          if (live.status === 'drafting') live.status = 'open'
+          live.error = timedOut ? 'Meeting turn timeout reached' : controller.signal.aborted ? `${employee.name} was stopped`
+            : `${employee.name}: ${error instanceof Error ? error.message : 'meeting turn failed'}`
+          await this.commit()
+        })
+      }
+    } finally { clearTimeout(timeout) }
   }
 
   private assignment(employee: Employee, project: Project, task: Task): string {
@@ -481,8 +742,41 @@ export class Studio {
    */
   async close(): Promise<void> {
     this.closing = true
-    for (const run of this.active.values()) run.controller.abort(new Error('Host shutdown'))
-    await Promise.allSettled([...this.active.values()].map(run => run.done))
+    const runs = [...this.active.values(), ...this.meetingRuns.values()]
+    for (const run of runs) run.controller.abort(new Error('Host shutdown'))
+    await Promise.allSettled(runs.map(run => run.done))
     await this.serial
   }
+}
+
+/** Admit host minutes; unstructured text is kept as the summary for the user to complete.
+ * @param text - Host's final message.
+ * @param meeting - Meeting whose attendees may receive tasks.
+ * @returns Minutes and whether the structured form was accepted.
+ */
+export function parseMinutes(text: string, meeting: Meeting): { minutes: MeetingMinutes; parsed: boolean } {
+  const fallback: MeetingMinutes = { summary: text.slice(0, 100_000), decisions: [], projectName: meeting.title.slice(0, 500),
+    objective: meeting.agenda, acceptanceCriteria: '', tasks: [] }
+  let raw: unknown
+  try { raw = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')) }
+  catch { return { minutes: fallback, parsed: false } }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { minutes: fallback, parsed: false }
+  const value = raw as Record<string, unknown>
+  const string = (key: string, max: number): string => {
+    const field = value[key]
+    return typeof field === 'string' ? field.slice(0, max) : ''
+  }
+  const tasks = Array.isArray(value.tasks) ? value.tasks.flatMap((item: unknown) => {
+    if (typeof item !== 'object' || item === null) return []
+    const task = item as Record<string, unknown>
+    if (typeof task.employeeId !== 'string' || !meeting.attendeeIds.includes(task.employeeId as StudioEmployeeId)
+      || typeof task.title !== 'string' || typeof task.instruction !== 'string' || !task.title.trim()) return []
+    return [{ employeeId: task.employeeId as StudioEmployeeId, title: task.title.slice(0, 500), instruction: task.instruction.slice(0, 100_000) }]
+  }) : []
+  const summary = string('summary', 100_000)
+  if (!summary && !tasks.length) return { minutes: fallback, parsed: false }
+  return { parsed: true, minutes: { summary, tasks,
+    decisions: Array.isArray(value.decisions) ? value.decisions.filter((item): item is string => typeof item === 'string').map(item => item.slice(0, 100_000)) : [],
+    projectName: string('projectName', 500) || fallback.projectName, objective: string('objective', 100_000) || fallback.objective,
+    acceptanceCriteria: string('acceptanceCriteria', 100_000) } }
 }

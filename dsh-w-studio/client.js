@@ -929,7 +929,15 @@ var stateV1Fields = {
   })).required()
 };
 var stateV1Schema = Schema.object(stateV1Fields);
-var stateSchema = Schema.object({
+var nativeSessionSchema = Schema.object({
+  id,
+  engine,
+  cwd: short,
+  attempt: Schema.natural().min(1).required(),
+  continued: Schema.boolean().required()
+});
+var nativeSession = nativeSessionSchema;
+var stateV2Fields = {
   ...stateV1Fields,
   version: Schema.const(2).required(),
   workspaces: Schema.array(Schema.object({ id, name: short, path: short, createdAt: short })).required(),
@@ -943,16 +951,43 @@ var stateSchema = Schema.object({
   })).required(),
   tasks: Schema.array(Schema.object({
     ...taskFields,
-    nativeSessions: Schema.array(Schema.object({
-      id,
-      engine,
-      cwd: short,
-      attempt: Schema.natural().min(1).required(),
-      continued: Schema.boolean().required()
-    })).required(),
+    nativeSessions: Schema.array(nativeSession).required(),
     reviewStatus: Schema.union(["pending", "accepted", "superseded"]).required()
   })).required()
+};
+var stateV2Schema = Schema.object(stateV2Fields);
+var minutesSchema = Schema.object({
+  summary: text,
+  decisions: Schema.array(text).required(),
+  projectName: short,
+  objective: text,
+  acceptanceCriteria: text,
+  tasks: Schema.array(Schema.object({ employeeId: id, title: short, instruction: text })).required()
 });
+var meeting = Schema.object({
+  id,
+  workspaceId: id,
+  title: short,
+  agenda: text,
+  hostId: id,
+  attendeeIds: Schema.array(id).required(),
+  status: Schema.union(["open", "drafting", "review", "closed"]).required(),
+  queue: Schema.array(id).required(),
+  speaking: Schema.union([id, Schema.const(null)]),
+  error: text,
+  messages: Schema.array(Schema.object({
+    id,
+    from: id,
+    message: text,
+    mentions: Schema.array(id).required(),
+    createdAt: short,
+    nativeSession: Schema.union([nativeSession, Schema.const(null)])
+  })).required(),
+  minutes: Schema.union([minutesSchema, Schema.const(null)]),
+  projectId: Schema.union([id, Schema.const(null)]),
+  createdAt: short
+});
+var stateSchema = Schema.object({ ...stateV2Fields, version: Schema.const(3).required(), meetings: Schema.array(meeting).required() });
 
 // src/client/controller.ts
 var engineHealth = Schema.object({ available: Schema.boolean().required(), version: Schema.string().required() });
@@ -1089,19 +1124,139 @@ var StudioController = class {
 };
 
 // src/client/StudioPanel.tsx
-var import_react3 = require("react");
+var import_react11 = require("react");
 
-// ../../../deepseek-harness/packages/util/crypto/lib/index.js
-function randomUUID() {
-  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
-  const hex = Array.from(bytes, (byte, index) => {
-    return (index === 6 ? byte & 15 | 64 : index === 8 ? byte & 63 | 128 : byte).toString(16).padStart(2, "0");
-  }).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
+// src/client/HandoffTimeline.tsx
+var import_react2 = require("react");
 
-// src/client/EmployeeEditor.tsx
+// src/client/ui.ts
 var import_react = require("react");
+function waitingOn(task, tasks) {
+  return task.dependsOn.map((id2) => tasks.find((value) => value.id === id2)).filter((value) => !!value && value.status !== "completed");
+}
+function taskPhase(task, tasks) {
+  return task.status === "pending" && waitingOn(task, tasks).length ? "blocked" : task.status;
+}
+function revisionOf(task, tasks) {
+  return task.dependsOn.map((id2) => tasks.find((value) => value.id === id2)).find((value) => value?.reviewStatus === "superseded" && value.employeeId === task.employeeId && value.title === task.title);
+}
+function revisionsFor(task, tasks) {
+  return task.reviewStatus === "superseded" ? tasks.filter((value) => revisionOf(value, tasks)?.id === task.id) : [];
+}
+function changeRequest(revision, messages) {
+  return messages.find((message) => message.taskId === revision.id && message.from === "user");
+}
+function projectStats(tasks) {
+  const phases = tasks.map((task) => taskPhase(task, tasks));
+  const count = (...values) => phases.filter((phase) => values.includes(phase)).length;
+  const active = tasks.filter((task) => task.status !== "cancelled").length;
+  return {
+    total: tasks.length,
+    active,
+    completed: count("completed"),
+    running: count("running"),
+    ready: count("pending"),
+    blocked: count("blocked"),
+    attention: count("failed", "interrupted", "cancelled"),
+    review: tasks.filter((task) => task.status === "completed" && task.reviewStatus === "pending").length
+  };
+}
+function tone(id2) {
+  let hash = 0;
+  for (const char of id2) hash = hash * 31 + char.charCodeAt(0) >>> 0;
+  return hash % 6;
+}
+function initial(name) {
+  return [...name?.trim() || "?"][0]?.toUpperCase() ?? "?";
+}
+function employeeOf(employees, id2) {
+  return employees.find((value) => value.id === id2);
+}
+var kinds = {
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  svg: "image",
+  bmp: "image",
+  md: "document",
+  markdown: "document",
+  txt: "document",
+  rst: "document",
+  pdf: "document",
+  docx: "document",
+  html: "web",
+  htm: "web",
+  css: "web",
+  json: "data",
+  csv: "data",
+  yml: "data",
+  yaml: "data",
+  toml: "data",
+  xml: "data",
+  ts: "code",
+  tsx: "code",
+  js: "code",
+  jsx: "code",
+  mjs: "code",
+  cjs: "code",
+  py: "code",
+  go: "code",
+  rs: "code",
+  java: "code",
+  kt: "code",
+  swift: "code",
+  c: "code",
+  h: "code",
+  cpp: "code",
+  cs: "code",
+  rb: "code",
+  php: "code",
+  sh: "code",
+  ps1: "code",
+  sql: "code",
+  vue: "code"
+};
+function fileKind(name) {
+  return kinds[name.split(".").at(-1)?.toLowerCase() ?? ""] ?? "other";
+}
+var imageTypes = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp" };
+function imageType(name) {
+  return imageTypes[name.split(".").at(-1)?.toLowerCase() ?? ""] ?? "";
+}
+function previewableText(artifact) {
+  const kind = fileKind(artifact.name);
+  return artifact.size <= 512 * 1024 && (kind === "code" || kind === "data" || kind === "web" || kind === "document" && !/\.(pdf|docx)$/i.test(artifact.name));
+}
+function artifactUrl(artifact) {
+  return `/api/studio/artifact?id=${encodeURIComponent(artifact.id)}`;
+}
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+function formatTime(iso) {
+  if (!iso) return "";
+  const date2 = new Date(iso);
+  return Number.isNaN(date2.getTime()) ? iso : date2.toLocaleString(void 0, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function resumeCommand(session) {
+  return session.engine === "claude" ? `claude --resume ${session.id}` : session.engine === "codex" ? `codex resume ${session.id}` : session.id;
+}
+function usePending() {
+  const [pending, setPending] = (0, import_react.useState)(null);
+  const run = async (key, action) => {
+    setPending(key);
+    try {
+      return await action();
+    } finally {
+      setPending(null);
+    }
+  };
+  return { pending, run };
+}
 
 // src/client/Studio.module.css
 var tagId = "dsh-w-studio/styles";
@@ -1113,141 +1268,1215 @@ if (typeof document !== "undefined") {
     tag.dataset.pluginCss = tagId;
     document.head.appendChild(tag);
   }
-  tag.textContent = '.r2poiG_studio{--studio-blue:#3064ee;--studio-ink:#152340;--studio-muted:#69768c;--studio-line:#e5eaf2;height:100%;color:var(--studio-ink);background:#fff;font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,Microsoft YaHei,sans-serif;font-size:14px;line-height:1.6;overflow:auto}.r2poiG_studio *{box-sizing:border-box}.r2poiG_studio h1{letter-spacing:-.8px;margin:0;font-size:34px;font-weight:700;line-height:1.3}.r2poiG_studio h2{margin:0 0 22px;font-size:21px;font-weight:650;line-height:1.4}.r2poiG_studio h3{margin:24px 0 10px;font-size:15px}.r2poiG_studio p{margin:8px 0}.r2poiG_studio button,.r2poiG_studio input,.r2poiG_studio textarea,.r2poiG_studio select{font:inherit}.r2poiG_studio button{color:var(--studio-ink);cursor:pointer;white-space:nowrap;background:#fff;border:1px solid #d5ddeb;border-radius:6px;padding:8px 16px;font-weight:500;line-height:1.5}.r2poiG_studio button:hover{border-color:var(--studio-blue);color:var(--studio-blue)}.r2poiG_studio button:disabled{opacity:.5;cursor:default}.r2poiG_studio button:focus-visible,.r2poiG_studio input:focus-visible,.r2poiG_studio textarea:focus-visible,.r2poiG_studio select:focus-visible,.r2poiG_studio a:focus-visible{outline:2px solid var(--studio-blue);outline-offset:2px}.r2poiG_studio button.r2poiG_primary{color:#fff;background:var(--studio-blue);border-color:var(--studio-blue)}.r2poiG_studio button.r2poiG_primary:hover{background:#2458d8}.r2poiG_studio button.r2poiG_danger{color:#c33f46}.r2poiG_studio input,.r2poiG_studio textarea,.r2poiG_studio select{width:100%;min-width:0;color:var(--studio-ink);background:#fff;border:1px solid #d5ddeb;border-radius:6px;padding:9px 12px;line-height:1.5}.r2poiG_studio textarea{resize:vertical}.r2poiG_studio input::placeholder,.r2poiG_studio textarea::placeholder{color:#97a2b4}.r2poiG_header{justify-content:space-between;align-items:center;gap:20px;padding:26px 30px 18px;display:flex}.r2poiG_header p{color:var(--studio-muted);font-size:16px}.r2poiG_actions{flex-wrap:wrap;align-items:center;gap:10px;display:flex}.r2poiG_tabs{border-bottom:1px solid var(--studio-line);gap:26px;padding:0 30px;display:flex}.r2poiG_tabs button{border:0;border-bottom:3px solid #0000;border-radius:0;padding:14px 8px;font-size:16px}.r2poiG_tabs button.r2poiG_activeTab{border-bottom-color:var(--studio-blue);color:var(--studio-blue)}.r2poiG_split{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:30px;padding:26px 30px 30px;display:grid}.r2poiG_list{min-width:0}.r2poiG_editor{border-left:1px solid var(--studio-line);min-width:0;padding:4px 0 0 30px}.r2poiG_sectionHeading{justify-content:space-between;align-items:center;gap:12px;margin-bottom:24px;display:flex}.r2poiG_sectionHeading h2{margin:0}.r2poiG_tableHead,.r2poiG_employeeRow{border-bottom:1px solid var(--studio-line);grid-template-columns:minmax(120px,1.25fr) minmax(60px,.85fr) minmax(95px,1fr) auto;align-items:center;gap:12px;padding:19px 0;display:grid}.r2poiG_tableHead{color:var(--studio-muted);padding-top:8px;padding-bottom:14px;font-size:12px}.r2poiG_employeeRow{min-height:88px}.r2poiG_employeeRow>span{overflow-wrap:anywhere}.r2poiG_employeeRow button{padding:5px 10px;font-size:12px}.r2poiG_employeeName{align-items:center;gap:12px;min-width:0;display:flex}.r2poiG_employeeName strong{overflow-wrap:anywhere;font-size:14px}.r2poiG_avatar{color:#345594;background:#e7efff;border-radius:50%;flex:0 0 38px;place-items:center;height:38px;font-size:17px;display:grid}.r2poiG_avatar[data-color="1"]{color:#65518e;background:#eee5ff}.r2poiG_avatar[data-color="2"]{color:#426b51;background:#e2f3e8}.r2poiG_avatar[data-color="3"]{color:#946535;background:#fff0df}.r2poiG_engineName small{color:var(--studio-muted);font-size:11px;display:block}.r2poiG_selectedRow{background:#f9fbff}.r2poiG_field{grid-template-columns:90px minmax(0,1fr);align-items:center;gap:16px;margin-bottom:18px;display:grid}.r2poiG_field>span{font-size:13px;font-weight:500}.r2poiG_numericFields{grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;display:grid}.r2poiG_numericFields label{font-size:12px}.r2poiG_check{align-items:center;gap:8px;font-size:13px;display:inline-flex}.r2poiG_studio .r2poiG_check input{width:16px;height:16px;accent-color:var(--studio-blue)}.r2poiG_hint{color:var(--studio-muted);font-size:12px;margin:12px 0 18px!important}.r2poiG_privacy{color:var(--studio-muted);max-width:440px;font-size:12px;margin-top:28px!important}.r2poiG_projectIntake{border-top:1px solid var(--studio-line);padding:22px 30px 24px}.r2poiG_projectIntake h2{margin-bottom:16px}.r2poiG_intakeFields{grid-template-columns:1fr 1.6fr;gap:24px;display:grid}.r2poiG_intakeFields label,.r2poiG_objectiveRow label,.r2poiG_messageForm label{font-size:13px}.r2poiG_intakeFields input,.r2poiG_objectiveRow textarea,.r2poiG_messageForm select{margin-top:6px}.r2poiG_teamSelection{border:0;flex-wrap:wrap;gap:8px 20px;margin:14px 0;padding:0;display:flex}.r2poiG_teamSelection legend{color:var(--studio-muted);padding:0 0 6px;font-size:12px}.r2poiG_objectiveRow{grid-template-columns:1fr auto;align-items:end;gap:20px;display:grid}.r2poiG_objectiveRow button{min-height:66px;padding:12px 32px}.r2poiG_projectToolbar{flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px;padding:20px 30px 0;display:flex}.r2poiG_projectToolbar label{grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:12px;width:560px;min-width:0;max-width:100%;display:grid}.r2poiG_projectIntake .r2poiG_projectToolbar{padding:0}.r2poiG_taskRow{text-align:left;justify-content:space-between;gap:12px;width:100%;border:0!important;border-bottom:1px solid var(--studio-line)!important;white-space:normal!important;border-radius:0!important;padding:18px 10px!important;display:flex!important}.r2poiG_taskRow small{color:var(--studio-muted);font-weight:400;display:block}.r2poiG_status{color:var(--studio-muted);flex-shrink:0;font-size:11px}.r2poiG_status[data-status=running]{color:var(--studio-blue)}.r2poiG_status[data-status=completed]{color:#268454}.r2poiG_status[data-status=failed],.r2poiG_status[data-status=interrupted]{color:#c33f46}.r2poiG_report{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font:inherit;margin:10px 0;font-size:13px;line-height:1.8}.r2poiG_fileList{padding-left:18px}.r2poiG_fileList li{overflow-wrap:anywhere;margin:8px 0}.r2poiG_fileList a{color:var(--studio-blue)}.r2poiG_fileList small{color:var(--studio-muted);font-size:11px;display:block}.r2poiG_stackedField{margin-bottom:16px;font-size:13px;display:block}.r2poiG_stackedField input,.r2poiG_stackedField textarea,.r2poiG_stackedField select{margin-top:6px}.r2poiG_checklist{border:1px solid var(--studio-line);margin:0 0 16px;padding:10px 12px}.r2poiG_checklist label{margin:8px 0;display:flex}.r2poiG_messages{padding:26px 30px}.r2poiG_messageRow{border-bottom:1px solid var(--studio-line);padding:20px 0}.r2poiG_messageRow>div{flex-wrap:wrap;gap:16px;font-size:12px;display:flex}.r2poiG_messageRow span,.r2poiG_messageRow time{color:var(--studio-muted)}.r2poiG_messageForm{grid-template-columns:180px minmax(0,1fr) auto;align-items:end;gap:12px;margin-top:24px;display:grid}.r2poiG_health{flex-wrap:wrap;gap:12px;margin-bottom:16px;font-size:11px;display:flex}.r2poiG_health span[data-available=true]{color:#268454}.r2poiG_health span[data-available=false]{color:#c33f46}.r2poiG_error{color:#a4343b;overflow-wrap:anywhere;background:#fff8f8;border:1px solid #f2d0d0;border-radius:6px;margin:16px 30px;padding:12px 16px;font-size:13px}.r2poiG_error button{margin-left:16px}.r2poiG_editor .r2poiG_error{margin:16px 0}.r2poiG_empty{color:var(--studio-muted);text-align:center;padding:36px 12px}@media (width<=1100px){.r2poiG_split{grid-template-columns:1fr;gap:24px}.r2poiG_editor{border-left:0;border-top:1px solid var(--studio-line);padding:24px 0 0}.r2poiG_header{align-items:start}.r2poiG_header .r2poiG_actions{justify-content:end}}@media (width<=600px){.r2poiG_header{flex-direction:column;gap:12px;padding:20px 16px 12px}.r2poiG_studio h1{font-size:28px}.r2poiG_header p{font-size:14px}.r2poiG_tabs{gap:20px;padding:0 16px}.r2poiG_split,.r2poiG_messages{padding:20px 16px}.r2poiG_employeeRow,.r2poiG_tableHead{grid-template-columns:minmax(90px,1.2fr) minmax(65px,1fr) auto;gap:8px;font-size:12px}.r2poiG_employeeRow>span:nth-child(2),.r2poiG_tableHead>span:nth-child(2),.r2poiG_avatar{display:none}.r2poiG_employeeName strong{font-size:12px}.r2poiG_field{grid-template-columns:75px minmax(0,1fr);gap:10px}.r2poiG_projectIntake{padding:20px 16px}.r2poiG_intakeFields,.r2poiG_objectiveRow,.r2poiG_messageForm{grid-template-columns:1fr;gap:12px}.r2poiG_objectiveRow button{min-height:42px}.r2poiG_projectToolbar{padding:20px 16px 0}.r2poiG_projectToolbar label{max-width:100%}.r2poiG_error{margin:12px 16px}}';
+  tag.textContent = '.r2poiG_studio{--s-bg:var(--dsw-alias-bg-base,#fff);--s-raised:var(--dsw-alias-bg-layer-1,#fff);--s-sunken:var(--dsw-alias-interactive-bg-hover,#2631480d);--s-hover:var(--dsw-alias-interactive-bg-hover,#2631480f);--s-active:var(--dsw-alias-interactive-bg-active,#2631481a);--s-ink:var(--dsw-alias-label-primary,#141b2b);--s-ink-2:var(--dsw-alias-label-secondary,#3d475c);--s-muted:var(--dsw-alias-label-tertiary,#5e6a80);--s-faint:var(--dsw-alias-label-caption,#8e98aa);--s-line:var(--dsw-alias-border-l2,#0000001a);--s-line-soft:var(--dsw-alias-border-l1,#0000000d);--s-line-strong:var(--dsw-alias-border-l3,#00000024);--s-accent:var(--dsw-alias-state-business-primary,#3a6ff7);--s-accent-soft:var(--dsw-alias-state-business-tertiary,#e8efff);--s-primary:var(--dsw-alias-button-primary-fill,#141b2b);--s-primary-hover:var(--dsw-alias-button-primary-hover,#2d3548);--s-on-primary:var(--dsw-alias-label-primary-inverted,#fff);--s-ok:var(--dsw-alias-state-success-primary,#1f9d55);--s-ok-soft:var(--dsw-alias-state-success-tertiary,#e3f6ea);--s-warn:var(--dsw-alias-state-warn-label,#b46a00);--s-warn-soft:var(--dsw-alias-state-warn-tertiary,#fff3dc);--s-bad:var(--dsw-alias-state-error-primary,#d42a2a);--s-bad-soft:var(--dsw-alias-interactive-bg-hover-danger,#ec131314);--s-radius:10px;--s-radius-sm:7px;--s-shadow:var(--dsw-elevation-prominent,0 8px 28px #141b2b24);--s-mono:var(--ds-font-family-code,"SF Mono", "JetBrains Mono", Consolas, monospace);--s-gutter:28px;background:var(--s-bg);height:100%;color:var(--s-ink);font-family:var(--dsw-font-family,-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);font-size:14px;line-height:1.6;overflow:hidden auto}body[data-ds-dark-theme] .r2poiG_studio{--s-sunken:#ffffff0a}.r2poiG_studio *,.r2poiG_studio :before,.r2poiG_studio :after{box-sizing:border-box}.r2poiG_studio h1,.r2poiG_studio h2,.r2poiG_studio h3,.r2poiG_studio h4,.r2poiG_studio p,.r2poiG_studio ul,.r2poiG_studio ol,.r2poiG_studio dl,.r2poiG_studio dd,.r2poiG_studio blockquote,.r2poiG_studio fieldset{margin:0}.r2poiG_studio h2{font-size:17px;font-weight:650;line-height:1.4}.r2poiG_studio h3{color:var(--studio-h3,var(--s-ink-2));font-size:13px;font-weight:600;line-height:1.4}.r2poiG_studio h4{color:var(--s-muted);margin:14px 0 6px;font-size:12px;font-weight:600}.r2poiG_studio ul,.r2poiG_studio ol{padding:0;list-style:none}.r2poiG_studio fieldset{border:0;min-width:0;padding:0}.r2poiG_studio legend{padding:0}.r2poiG_studio small{font-size:12px}.r2poiG_studio code{font-family:var(--s-mono);font-size:12px}.r2poiG_studio button,.r2poiG_studio input,.r2poiG_studio textarea,.r2poiG_studio select{font:inherit;color:inherit}.r2poiG_studio button,.r2poiG_linkButton{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);background:var(--s-raised);min-height:34px;color:var(--s-ink);cursor:pointer;white-space:nowrap;justify-content:center;align-items:center;gap:6px;padding:6px 14px;font-size:13px;font-weight:500;line-height:1.4;text-decoration:none;transition:background .12s,border-color .12s,color .12s;display:inline-flex}.r2poiG_studio button:hover:not(:disabled),.r2poiG_linkButton:hover{background:var(--s-hover)}.r2poiG_studio button:disabled{opacity:.45;cursor:not-allowed}.r2poiG_studio :focus-visible{outline:2px solid var(--s-accent);outline-offset:2px}.r2poiG_studio .r2poiG_primary{background:var(--s-primary);border-color:var(--s-primary);color:var(--s-on-primary)}.r2poiG_studio .r2poiG_primary:hover:not(:disabled){background:var(--s-primary-hover);border-color:var(--s-primary-hover)}.r2poiG_studio .r2poiG_ghost{color:var(--s-ink-2);background:0 0;border-color:#0000}.r2poiG_studio .r2poiG_ghost:hover:not(:disabled){background:var(--s-hover);color:var(--s-ink)}.r2poiG_studio .r2poiG_ghostDanger{color:var(--s-bad);background:0 0;border-color:#0000}.r2poiG_studio .r2poiG_ghostDanger:hover:not(:disabled){background:var(--s-bad-soft)}.r2poiG_studio .r2poiG_dangerSolid{background:var(--s-bad);border-color:var(--s-bad);color:#fff}.r2poiG_studio .r2poiG_iconButton{width:32px;min-height:32px;color:var(--s-muted);background:0 0;border-color:#0000;padding:0;font-size:20px}.r2poiG_studio input,.r2poiG_studio textarea,.r2poiG_studio select{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);background:var(--s-raised);width:100%;min-width:0;min-height:36px;color:var(--s-ink);padding:7px 11px;font-size:13px;line-height:1.5}.r2poiG_studio textarea{resize:vertical}.r2poiG_studio input:hover,.r2poiG_studio textarea:hover,.r2poiG_studio select:hover{border-color:var(--s-faint)}.r2poiG_studio input:focus,.r2poiG_studio textarea:focus,.r2poiG_studio select:focus{border-color:var(--s-accent);box-shadow:0 0 0 3px var(--s-accent-soft);outline:none}.r2poiG_studio input::placeholder,.r2poiG_studio textarea::placeholder{color:var(--s-faint)}.r2poiG_studio input[type=checkbox],.r2poiG_studio input[type=radio]{width:16px;height:16px;min-height:0;accent-color:var(--s-accent);box-shadow:none;flex:none;margin:0;padding:0}.r2poiG_spinner{vertical-align:-1px;border:2px solid;border-right-color:#0000;border-radius:50%;width:12px;height:12px;animation:.7s linear infinite r2poiG_spin;display:inline-block}@keyframes r2poiG_spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.r2poiG_spinner{animation-duration:2s}}.r2poiG_mono{overflow-wrap:anywhere;font-size:12px;font-family:var(--s-mono)!important}.r2poiG_muted{color:var(--s-muted);font-size:12px}.r2poiG_hint{color:var(--s-muted);font-size:12px;line-height:1.6}.r2poiG_footnote{color:var(--s-faint);font-size:12px;margin-top:20px!important}.r2poiG_srOnly{clip:rect(0 0 0 0);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}.r2poiG_actions{flex-wrap:wrap;align-items:center;gap:8px;display:flex}.r2poiG_report{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font:inherit;color:var(--s-ink);margin:0;font-size:13px;line-height:1.75}.r2poiG_topbar{padding:22px var(--s-gutter) 16px;justify-content:space-between;align-items:center;gap:24px;display:flex}.r2poiG_brand{min-width:0}.r2poiG_brand h1{letter-spacing:-.3px;font-size:24px;font-weight:700;line-height:1.3}.r2poiG_brand p{color:var(--s-muted);font-size:13px}.r2poiG_workspace{align-items:flex-end;gap:8px;min-width:0;display:flex}.r2poiG_workspacePicker{gap:2px;width:340px;min-width:0;max-width:100%;display:grid}.r2poiG_workspacePicker>span{color:var(--s-faint);letter-spacing:.2px;font-size:11px;font-weight:500}.r2poiG_workspacePicker select{font-weight:600}.r2poiG_workspacePicker small{color:var(--s-faint);white-space:nowrap;text-overflow:ellipsis;font-size:11px;overflow:hidden}.r2poiG_workspaceForm{margin:0 var(--s-gutter) 16px;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-sunken);gap:14px;padding:18px 20px;display:grid}.r2poiG_workspaceForm form{gap:12px;display:grid}.r2poiG_inputWithButton{gap:8px;display:flex}.r2poiG_tabs{z-index:3;padding:0 var(--s-gutter);border-bottom:1px solid var(--s-line);background:var(--s-bg);justify-content:space-between;align-items:center;gap:12px;display:flex;position:sticky;top:0}.r2poiG_tabList{scrollbar-width:none;gap:4px;min-width:0;display:flex;overflow-x:auto}.r2poiG_studio .r2poiG_tab{min-height:44px;color:var(--s-muted);background:0 0;border:0;border-radius:0;padding:10px 12px;font-size:14px;position:relative}.r2poiG_studio .r2poiG_tab:hover:not(:disabled){color:var(--s-ink);background:0 0}.r2poiG_studio .r2poiG_tab[aria-current=page]{color:var(--s-ink);font-weight:600}.r2poiG_studio .r2poiG_tab[aria-current=page]:after{content:"";background:var(--s-ink);border-radius:2px;height:2px;position:absolute;bottom:-1px;left:10px;right:10px}.r2poiG_count{background:var(--s-sunken);min-width:20px;color:var(--s-muted);text-align:center;border-radius:10px;padding:0 6px;font-size:11px;font-weight:500;line-height:18px}.r2poiG_banner{margin:14px var(--s-gutter) 0;border-radius:var(--s-radius-sm);background:var(--s-bad-soft);color:var(--s-bad);overflow-wrap:anywhere;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;font-size:13px;display:flex}.r2poiG_emptyState{margin:28px var(--s-gutter);border:1px dashed var(--s-line-strong);border-radius:var(--s-radius);text-align:center;color:var(--s-muted);justify-items:center;gap:8px;padding:40px 20px;display:grid}.r2poiG_emptyState strong{color:var(--s-ink);font-size:15px}.r2poiG_detailPane .r2poiG_emptyState,.r2poiG_listPane .r2poiG_emptyState{margin:12px 0}.r2poiG_emptyInline{color:var(--s-faint);padding:4px 0;font-size:13px}.r2poiG_inlineError{color:var(--s-bad);overflow-wrap:anywhere;font-size:12px}.r2poiG_badge{background:var(--s-sunken);height:22px;color:var(--s-muted);white-space:nowrap;border-radius:11px;align-items:center;gap:5px;padding:0 8px;font-size:11.5px;font-weight:500;display:inline-flex}.r2poiG_badge i{background:currentColor;border-radius:50%;width:6px;height:6px}.r2poiG_badge[data-status=running],.r2poiG_badge[data-project=running]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_badge[data-status=running] i,.r2poiG_badge[data-project=running] i{animation:1.4s ease-in-out infinite r2poiG_pulse}.r2poiG_badge[data-status=completed],.r2poiG_badge[data-project=completed]{background:var(--s-ok-soft);color:var(--s-ok)}.r2poiG_badge[data-status=blocked]{color:var(--s-faint)}.r2poiG_badge[data-status=failed],.r2poiG_badge[data-status=interrupted]{background:var(--s-bad-soft);color:var(--s-bad)}.r2poiG_badge[data-status=cancelled]{color:var(--s-faint);text-decoration:line-through}.r2poiG_badge[data-project=review],.r2poiG_badge[data-review=pending]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_badge[data-review=accepted]{color:var(--s-ok);border:1px solid var(--s-ok-soft);background:0 0}.r2poiG_badge[data-review=superseded]{color:var(--s-muted);border:1px dashed var(--s-line-strong);background:0 0}@keyframes r2poiG_pulse{50%{opacity:.35}}.r2poiG_engineTag{white-space:nowrap;background:var(--s-sunken);color:var(--s-ink-2);border-radius:5px;padding:0 7px;font-size:11px;font-weight:600;line-height:19px;display:inline-block}.r2poiG_engineTag[data-engine=codex]{color:#0d8a6b;background:#10a37f1f}.r2poiG_engineTag[data-engine=claude]{color:#b85a3b;background:#d9775724}.r2poiG_engineTag[data-engine=harness]{color:#4060e0;background:#4d6bfe21}.r2poiG_engineTag[data-engine=compatible]{color:#7a4fd0;background:#8c5ce621}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=codex]{color:#4cd3ad}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=claude]{color:#f0a084}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=harness]{color:#93a8ff}body[data-ds-dark-theme] .r2poiG_engineTag[data-engine=compatible]{color:#c3a5ff}.r2poiG_avatar{--h:220;background:hsl(var(--h) 80% 55% / .14);width:34px;height:34px;color:hsl(var(--h) 55% 38%);border-radius:50%;flex:none;place-items:center;font-size:14px;font-weight:600;display:inline-grid}.r2poiG_avatar[data-size=sm]{width:22px;height:22px;font-size:11px}.r2poiG_avatar[data-size=lg]{width:46px;height:46px;font-size:19px}.r2poiG_avatar[data-tone="1"]{--h:265}.r2poiG_avatar[data-tone="2"]{--h:150}.r2poiG_avatar[data-tone="3"]{--h:30}.r2poiG_avatar[data-tone="4"]{--h:330}.r2poiG_avatar[data-tone="5"]{--h:190}.r2poiG_avatar[data-tone=user]{background:var(--s-primary);color:var(--s-on-primary)}body[data-ds-dark-theme] .r2poiG_avatar{color:hsl(var(--h) 80% 76%);background:hsl(var(--h) 60% 55% / .22)}.r2poiG_workArea{grid-template-columns:minmax(300px,400px) minmax(0,1fr);align-items:start;gap:0;display:grid}.r2poiG_listPane{padding:20px var(--s-gutter) 32px;border-right:1px solid var(--s-line);align-self:stretch;min-width:0}.r2poiG_detailPane{padding:20px var(--s-gutter) 40px;min-width:0;scroll-margin-top:52px}.r2poiG_paneHead{justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;display:flex}.r2poiG_toolRow{gap:8px;margin-bottom:10px;display:flex}.r2poiG_toolRow input{flex:1}.r2poiG_menu{position:relative}.r2poiG_menu>summary{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);cursor:pointer;white-space:nowrap;align-items:center;gap:6px;min-height:36px;padding:6px 12px;font-size:13px;font-weight:500;list-style:none;display:inline-flex}.r2poiG_menu>summary::-webkit-details-marker{display:none}.r2poiG_menu>summary:after{content:"\u25BE";color:var(--s-muted);font-size:10px}.r2poiG_menu[open]>summary{background:var(--s-hover)}.r2poiG_menuBody{z-index:5;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--dsw-specific-menu,var(--s-raised));width:280px;box-shadow:var(--s-shadow);gap:2px;padding:6px;display:grid;position:absolute;top:calc(100% + 6px);right:0}.r2poiG_studio .r2poiG_menuBody button{text-align:left;white-space:normal;background:0 0;border:0;justify-items:start;gap:0;width:100%;padding:8px 10px;display:grid}.r2poiG_menuBody button small{color:var(--s-muted);font-weight:400}.r2poiG_menuBody p{border-top:1px solid var(--s-line-soft);padding:6px 10px 4px;margin-top:4px!important}.r2poiG_healthRow{flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px;display:flex}.r2poiG_studio .r2poiG_healthRow>button{min-height:28px;padding:3px 8px;font-size:12px}.r2poiG_healthChip{color:var(--s-muted);align-items:center;gap:5px;font-size:11.5px;display:inline-flex}.r2poiG_healthChip i{background:var(--s-faint);border-radius:50%;width:7px;height:7px}.r2poiG_healthChip[data-available=true] i{background:var(--s-ok)}.r2poiG_healthChip[data-available=false]{color:var(--s-bad)}.r2poiG_healthChip[data-available=false] i{background:var(--s-bad)}.r2poiG_roster{gap:2px;display:grid}.r2poiG_studio .r2poiG_rosterItem{border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px;font-weight:400;display:grid}.r2poiG_studio .r2poiG_rosterItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_rosterItem[data-disabled=true]>:not(.r2poiG_rosterMeta){opacity:.55}.r2poiG_rosterText{min-width:0;display:grid}.r2poiG_rosterText strong{overflow-wrap:anywhere;flex-wrap:wrap;align-items:center;gap:6px;font-size:13.5px;font-weight:600;display:flex}.r2poiG_rosterText small{color:var(--s-muted);overflow-wrap:anywhere}.r2poiG_rosterMeta{justify-items:end;gap:2px;min-width:0;max-width:150px;display:grid}.r2poiG_rosterMeta small{color:var(--s-faint);white-space:nowrap;text-overflow:ellipsis;max-width:100%;font-size:11px;overflow:hidden}.r2poiG_offTag{color:var(--s-muted);border:1px solid var(--s-line-strong);border-radius:4px;padding:0 6px;font-size:10.5px;font-style:normal;font-weight:500;line-height:16px}.r2poiG_editorCard,.r2poiG_detailCard{gap:18px;max-width:860px;display:grid}.r2poiG_editorHead{align-items:center;gap:14px;padding-bottom:4px;display:flex}.r2poiG_editorHead h2{overflow-wrap:anywhere;font-size:19px}.r2poiG_editorHead p{color:var(--s-muted);font-size:13px}.r2poiG_formGroup{border:1px solid var(--s-line);border-radius:var(--s-radius);gap:14px;padding:18px;display:grid}.r2poiG_formGroup>legend{float:left;width:100%;color:var(--s-muted);letter-spacing:.3px;margin-bottom:2px;font-size:12px;font-weight:600}.r2poiG_formGroup>legend+*{clear:both}.r2poiG_field{gap:6px;min-width:0;display:grid}.r2poiG_field>span:first-child{color:var(--s-ink-2);font-size:12.5px;font-weight:500}.r2poiG_field>span:first-child small{color:var(--s-faint);font-weight:400}.r2poiG_fieldPair{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;display:grid}.r2poiG_switch{cursor:pointer;align-items:center;gap:8px;width:fit-content;font-size:13px;display:inline-flex}.r2poiG_segmented{border-radius:var(--s-radius);background:var(--s-sunken);grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:4px;display:grid}.r2poiG_segmented label{cursor:pointer;display:block;position:relative}.r2poiG_segmented input{opacity:0;pointer-events:none;position:absolute}.r2poiG_segmented span{border-radius:var(--s-radius-sm);text-align:center;color:var(--s-muted);overflow-wrap:anywhere;padding:7px 6px;font-size:12.5px;font-weight:500;line-height:1.35;display:block}.r2poiG_segmented input:checked+span{background:var(--s-raised);color:var(--s-ink);box-shadow:0 1px 3px #0000001f}.r2poiG_segmented input:focus-visible+span{outline:2px solid var(--s-accent)}.r2poiG_chips{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_chip{cursor:pointer;position:relative}.r2poiG_chip input{opacity:0;pointer-events:none;position:absolute}.r2poiG_chip span{border:1px solid var(--s-line-strong);color:var(--s-ink-2);border-radius:15px;padding:4px 11px;font-size:12.5px;display:inline-block}.r2poiG_chip input:checked+span{background:var(--s-primary);border-color:var(--s-primary);color:var(--s-on-primary)}.r2poiG_chip input:focus-visible+span{outline:2px solid var(--s-accent);outline-offset:2px}.r2poiG_modelPicker{gap:8px;display:grid}.r2poiG_modelPicker>legend{float:left;width:100%;color:var(--s-ink-2);font-size:12.5px;font-weight:500}.r2poiG_modelPicker>legend small{color:var(--s-faint);font-weight:400}.r2poiG_modelPicker>legend+*{clear:both}.r2poiG_modelList{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);max-height:288px;display:grid;overflow-y:auto}.r2poiG_modelOption{cursor:pointer;border-bottom:1px solid var(--s-line-soft);align-items:flex-start;gap:10px;padding:9px 12px;display:flex}.r2poiG_modelOption:last-child{border-bottom:0}.r2poiG_modelOption:hover{background:var(--s-hover)}.r2poiG_modelOption:has(input:checked){background:var(--s-accent-soft)}.r2poiG_modelOption input{margin-top:3px!important}.r2poiG_modelOption>span{min-width:0;display:grid}.r2poiG_modelOption strong{overflow-wrap:anywhere;font-size:13px;font-weight:600}.r2poiG_modelOption small{color:var(--s-muted);overflow-wrap:anywhere}.r2poiG_modelList>p{padding:9px 12px}.r2poiG_modelTags{flex-wrap:wrap;gap:4px;margin-top:2px;display:flex}.r2poiG_modelTags em{background:var(--s-sunken);color:var(--s-muted);border-radius:4px;padding:0 6px;font-size:10.5px;font-style:normal;line-height:17px}.r2poiG_formFooter{z-index:1;background:linear-gradient(to bottom, transparent, var(--s-bg) 30%);flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;display:flex;position:sticky;bottom:0}.r2poiG_formStatus{color:var(--s-muted);overflow-wrap:anywhere;font-size:12.5px}.r2poiG_formStatus[data-state=ok]{color:var(--s-ok)}.r2poiG_formStatus[data-state=error]{color:var(--s-bad)}.r2poiG_checkList{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);gap:2px;max-height:220px;padding:8px 10px;display:grid;overflow-y:auto}.r2poiG_checkList>legend{color:var(--s-ink-2);padding:0 4px;font-size:12.5px;font-weight:500}.r2poiG_checkList label{cursor:pointer;overflow-wrap:anywhere;align-items:flex-start;gap:8px;padding:5px 4px;font-size:13px;display:flex}.r2poiG_checkList b{color:var(--s-muted);font-weight:500}.r2poiG_checkList input{margin-top:3px!important}.r2poiG_projectBar{padding:18px var(--s-gutter) 18px;border-bottom:1px solid var(--s-line);gap:14px;display:grid}.r2poiG_projectTop{flex-wrap:wrap;align-items:center;gap:10px 12px;display:flex}.r2poiG_projectPicker{flex:0 380px;min-width:0}.r2poiG_projectPicker select{background-color:#0000;border-color:#0000;min-height:40px;margin-left:-8px;padding-left:8px;font-size:16px;font-weight:650}.r2poiG_projectPicker select:hover{border-color:var(--s-line-strong)}.r2poiG_projectActions{margin-left:auto}.r2poiG_summaryGrid{grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:16px;display:grid}.r2poiG_summaryMain,.r2poiG_summarySide{align-content:start;gap:6px;min-width:0;display:grid}.r2poiG_summaryMain h3{color:var(--s-faint);letter-spacing:.3px;font-size:11.5px;font-weight:600}.r2poiG_summaryMain h3:not(:first-child){margin-top:8px}.r2poiG_objective{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7}.r2poiG_criteria{color:var(--s-ink-2);white-space:pre-wrap;overflow-wrap:anywhere;border-left:2px solid var(--s-line-strong);padding-left:12px;font-size:13px}.r2poiG_summarySide{border-radius:var(--s-radius);background:var(--s-sunken);gap:12px;padding:14px 16px}.r2poiG_progressHead{color:var(--s-muted);justify-content:space-between;gap:8px;font-size:12px;display:flex}.r2poiG_progressHead strong{color:var(--s-ink);font-weight:600}.r2poiG_bar{background:var(--s-line);border-radius:3px;height:6px;margin:6px 0 10px;overflow:hidden}.r2poiG_bar span{background:var(--s-ok);border-radius:3px;height:100%;transition:width .3s;display:block}.r2poiG_statList{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;display:grid}.r2poiG_statList div{gap:0;display:grid}.r2poiG_statList dt{color:var(--s-muted);white-space:nowrap;text-overflow:ellipsis;font-size:11px;overflow:hidden}.r2poiG_statList dd{font-size:17px;font-weight:650;line-height:1.3}.r2poiG_statList [data-tone=running] dd{color:var(--s-accent)}.r2poiG_statList [data-tone=review] dd{color:var(--s-warn)}.r2poiG_statList [data-tone=attention] dd{color:var(--s-bad)}.r2poiG_teamStrip{gap:6px;display:grid}.r2poiG_teamStrip ul{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_teamStrip li{background:var(--s-raised);border:1px solid var(--s-line-soft);border-radius:14px;align-items:center;gap:5px;max-width:100%;padding:2px 8px 2px 2px;font-size:12px;display:inline-flex}.r2poiG_teamStrip li span:last-child{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.r2poiG_metaLine{color:var(--s-muted);white-space:nowrap;text-overflow:ellipsis;font-size:12px;overflow:hidden}.r2poiG_success,.r2poiG_notice,.r2poiG_alert{border-radius:var(--s-radius-sm);overflow-wrap:anywhere;gap:4px;padding:10px 14px;font-size:13px;display:grid}.r2poiG_success{background:var(--s-ok-soft);color:var(--s-ok);grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px}.r2poiG_success code{color:var(--s-ink);overflow-wrap:anywhere}.r2poiG_notice{background:var(--s-sunken);color:var(--s-ink-2)}.r2poiG_notice[data-tone=review]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_notice[data-tone=running]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_notice p{color:var(--s-ink-2);font-size:12.5px}.r2poiG_alert{background:var(--s-bad-soft);color:var(--s-bad)}.r2poiG_alert p{white-space:pre-wrap;color:var(--s-ink);font-size:12.5px}.r2poiG_filterRow{flex-wrap:wrap;gap:6px;margin-bottom:12px;display:flex}.r2poiG_studio .r2poiG_filter{border-color:var(--s-line);min-height:28px;color:var(--s-muted);border-radius:14px;gap:5px;padding:2px 10px;font-size:12px}.r2poiG_filter span{color:var(--s-faint);font-weight:600}.r2poiG_studio .r2poiG_filter[aria-pressed=true]{background:var(--s-ink);border-color:var(--s-ink);color:var(--s-bg)}.r2poiG_studio .r2poiG_filter[aria-pressed=true] span{color:inherit;opacity:.7}.r2poiG_pipeline{gap:4px;display:grid;position:relative}.r2poiG_pipeline li{position:relative}.r2poiG_pipeline li:not(:last-child):before{content:"";background:var(--s-line);z-index:0;width:1px;position:absolute;top:40px;bottom:-8px;left:25px}.r2poiG_studio .r2poiG_taskItem{z-index:1;border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"r2poiG_step r2poiG_main""r2poiG_step r2poiG_badges";align-items:start;gap:4px 12px;width:100%;padding:12px;font-weight:400;display:grid;position:relative}.r2poiG_studio .r2poiG_taskItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_step{background:var(--s-bg);border:1.5px solid var(--s-line-strong);width:28px;height:28px;color:var(--s-muted);border-radius:50%;grid-area:r2poiG_step;place-items:center;font-size:12px;font-weight:600;display:grid}li[data-status=completed] .r2poiG_step{border-color:var(--s-ok);color:var(--s-ok);background:var(--s-ok-soft)}li[data-status=running] .r2poiG_step{border-color:var(--s-accent);color:var(--s-accent);background:var(--s-accent-soft)}li[data-status=failed] .r2poiG_step,li[data-status=interrupted] .r2poiG_step{border-color:var(--s-bad);color:var(--s-bad)}li[data-status=blocked] .r2poiG_step{border-style:dashed}.r2poiG_taskMain{grid-area:r2poiG_main;gap:3px;min-width:0;display:grid}.r2poiG_taskMain>strong{overflow-wrap:anywhere;font-size:13.5px;font-weight:600;line-height:1.45}.r2poiG_taskOwner{color:var(--s-ink-2);flex-wrap:wrap;align-items:center;gap:6px;min-width:0;font-size:12.5px;display:inline-flex}.r2poiG_taskOwner small{color:var(--s-faint)}.r2poiG_reason{color:var(--s-muted);font-size:11.5px}.r2poiG_reason[data-kind=revision]{color:var(--s-warn)}.r2poiG_taskBadges{flex-wrap:wrap;grid-area:r2poiG_badges;gap:4px;display:flex}.r2poiG_detailHead{grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px 16px;display:grid}.r2poiG_detailTitle{align-items:flex-start;gap:12px;min-width:0;display:flex}.r2poiG_detailTitle h2{overflow-wrap:anywhere;font-size:18px}.r2poiG_stepLarge{background:var(--s-sunken);color:var(--s-muted);border-radius:6px;flex:none;margin-top:2px;padding:1px 8px;font-size:13px;font-weight:600}.r2poiG_detailBadges{flex-wrap:wrap;justify-content:flex-end;gap:6px;display:flex}.r2poiG_detailHead>.r2poiG_actions{grid-column:1/-1}.r2poiG_block{border-top:1px solid var(--s-line-soft);gap:10px;padding-top:16px;display:grid}.r2poiG_blockHead{justify-content:space-between;align-items:center;gap:8px;display:flex}.r2poiG_blockHead h3 small{color:var(--s-faint);font-weight:400}.r2poiG_linkList{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_studio .r2poiG_taskLink{border-color:var(--s-line);white-space:normal;text-align:left;gap:8px;max-width:100%;min-height:30px;padding:3px 4px 3px 10px;font-weight:400}.r2poiG_taskLink b{color:var(--s-muted);white-space:nowrap;font-weight:600}.r2poiG_revisionCard{border-radius:var(--s-radius-sm);border:1px solid var(--s-warn-soft);background:color-mix(in srgb, var(--s-warn-soft) 55%, transparent);gap:8px;padding:12px 14px;display:grid}.r2poiG_revisionCard>strong{color:var(--s-warn);font-size:12.5px}.r2poiG_revisionCard[data-kind=superseded]{border-style:dashed;border-color:var(--s-line-strong);background:0 0}.r2poiG_revisionCard[data-kind=superseded]>strong{color:var(--s-muted)}.r2poiG_studio blockquote{border-left:3px solid var(--s-warn);background:var(--s-raised);white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0 6px 6px 0;gap:2px;padding:6px 12px;font-size:13px;display:grid}.r2poiG_studio blockquote small{color:var(--s-muted);font-size:11px}.r2poiG_reviewForm{gap:10px;display:grid}.r2poiG_facts{grid-template-columns:110px minmax(0,1fr);gap:10px 16px;font-size:13px;display:grid}.r2poiG_facts dt{color:var(--s-muted);padding-top:2px;font-size:12px}.r2poiG_facts dd{overflow-wrap:anywhere;min-width:0}.r2poiG_pathList{gap:2px;display:grid}.r2poiG_miniTimeline{gap:12px;display:grid}.r2poiG_miniTimeline li{border-left:2px solid var(--s-line);padding-left:12px}.r2poiG_handoffMeta{color:var(--s-muted);flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:12px;display:flex}.r2poiG_handoffMeta strong{color:var(--s-ink);font-size:13px}.r2poiG_handoffMeta time{color:var(--s-faint);margin-left:auto;font-size:11.5px}.r2poiG_disclosure{border:1px solid var(--s-line);border-radius:var(--s-radius)}.r2poiG_disclosure>summary{cursor:pointer;color:var(--s-ink-2);padding:11px 14px;font-size:13px;font-weight:600}.r2poiG_disclosure>summary small{color:var(--s-faint);font-weight:400}.r2poiG_disclosure[open]>summary{border-bottom:1px solid var(--s-line-soft)}.r2poiG_disclosureBody{gap:10px;padding:12px 14px 16px;display:grid}.r2poiG_session{border-radius:var(--s-radius-sm);background:var(--s-sunken);gap:4px;padding:10px 12px;font-size:12.5px;display:grid}.r2poiG_copyLine{align-items:center;gap:8px;min-width:0;display:flex}.r2poiG_copyLine code{background:var(--s-raised);border:1px solid var(--s-line-soft);white-space:nowrap;border-radius:6px;flex:1;min-width:0;padding:5px 9px;overflow-x:auto}.r2poiG_studio .r2poiG_copyLine button{min-height:28px;padding:2px 9px;font-size:12px}.r2poiG_fileGrid{gap:8px;display:grid}.r2poiG_fileCard{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);background:var(--s-raised);overflow:hidden}.r2poiG_thumb{background:var(--s-sunken);border-bottom:1px solid var(--s-line-soft);text-align:center;display:block}.r2poiG_thumb img{object-fit:contain;max-width:100%;max-height:260px;margin:0 auto;display:block}.r2poiG_fileRow{grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 10px;display:grid}.r2poiG_fileIcon{background:var(--s-sunken);min-width:38px;height:26px;color:var(--s-muted);white-space:nowrap;border-radius:6px;place-items:center;padding:0 5px;font-size:10.5px;font-weight:600;display:grid}.r2poiG_fileIcon[data-kind=image]{color:#b23473;background:#e8308c21}.r2poiG_fileIcon[data-kind=document]{color:#345eb2;background:#306ee821}.r2poiG_fileIcon[data-kind=web]{color:#ab602b;background:#ee7c2b24}.r2poiG_fileIcon[data-kind=code]{color:#1f7a5c;background:#1fad7e24}.r2poiG_fileIcon[data-kind=data]{color:#7143b1;background:#8d52e024}body[data-ds-dark-theme] .r2poiG_fileIcon[data-kind]{filter:brightness(1.6)}.r2poiG_fileName{min-width:0;display:grid}.r2poiG_fileName strong{overflow-wrap:anywhere;font-size:13px;font-weight:600}.r2poiG_fileName small{color:var(--s-faint);overflow-wrap:anywhere;font-size:11px}.r2poiG_fileActions{gap:4px;display:flex}.r2poiG_studio .r2poiG_fileActions button,.r2poiG_fileActions .r2poiG_linkButton{min-height:28px;padding:2px 10px;font-size:12px}.r2poiG_codePreview{border-top:1px solid var(--s-line-soft);background:var(--s-sunken);max-height:360px;font-family:var(--s-mono);white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px 14px;font-size:12px;line-height:1.6;overflow:auto}.r2poiG_handoffs{padding:20px var(--s-gutter) 40px;gap:22px;max-width:980px;display:grid}.r2poiG_composer{border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-raised);gap:10px;padding:16px;display:grid}.r2poiG_composerHead,.r2poiG_timelineHead{flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;display:flex}.r2poiG_composerHead h2{font-size:15px}.r2poiG_composerFoot{justify-content:space-between;align-items:center;gap:12px;display:flex}.r2poiG_inlineField{color:var(--s-muted);align-items:center;gap:8px;min-width:0;font-size:12.5px;display:inline-flex}.r2poiG_inlineField select{width:auto;max-width:240px;min-height:32px}.r2poiG_timeline{gap:0;display:grid}.r2poiG_timeline li{grid-template-columns:34px minmax(0,1fr);gap:12px;padding-bottom:16px;display:grid;position:relative}.r2poiG_timeline li:not(:last-child):before{content:"";background:var(--s-line);width:1px;position:absolute;top:38px;bottom:2px;left:16.5px}.r2poiG_timelineDot{padding-top:4px}.r2poiG_timelineCard{border:1px solid var(--s-line);border-radius:var(--s-radius);gap:8px;min-width:0;padding:12px 14px;display:grid}.r2poiG_timeline li[data-from=user] .r2poiG_timelineCard{background:var(--s-sunken);border-color:#0000}.r2poiG_studio .r2poiG_taskChip{border-color:var(--s-line);min-height:24px;color:var(--s-ink-2);white-space:normal;text-align:left;border-radius:12px;justify-self:start;max-width:100%;padding:1px 9px;font-size:11.5px;font-weight:500}.r2poiG_dialog{border:1px solid var(--s-line);background:var(--s-bg);width:min(720px,100vw - 32px);max-height:calc(100vh - 48px);color:var(--s-ink);box-shadow:var(--s-shadow);border-radius:14px;padding:0}.r2poiG_dialog::backdrop{background:#0a0e186b}.r2poiG_dialogForm{grid-template-rows:auto minmax(0,1fr) auto;max-height:calc(100vh - 50px);display:grid}.r2poiG_dialogHead{border-bottom:1px solid var(--s-line-soft);justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;display:flex}.r2poiG_dialogBody{gap:16px;padding:18px 22px;display:grid;overflow-y:auto}.r2poiG_dialogFoot{border-top:1px solid var(--s-line-soft);flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;padding:12px 22px;display:flex}.r2poiG_dialogFoot .r2poiG_formStatus{margin-right:auto}.r2poiG_optionCards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;display:grid}.r2poiG_optionCards>legend,.r2poiG_teamPicker>legend{color:var(--s-ink-2);margin-bottom:6px;font-size:12.5px;font-weight:500}.r2poiG_optionCards>legend{grid-column:1/-1}.r2poiG_teamPicker>legend small{color:var(--s-faint);font-weight:400}.r2poiG_optionCards label{border:1px solid var(--s-line-strong);border-radius:var(--s-radius-sm);cursor:pointer;align-items:flex-start;gap:10px;padding:11px 12px;display:flex}.r2poiG_optionCards label:has(input:checked){border-color:var(--s-accent);background:var(--s-accent-soft)}.r2poiG_optionCards input{margin-top:3px!important}.r2poiG_optionCards span{gap:2px;min-width:0;display:grid}.r2poiG_optionCards strong{font-size:13px;font-weight:600}.r2poiG_optionCards small{color:var(--s-muted)}.r2poiG_teamPicker{gap:4px;display:grid}.r2poiG_teamPicker label{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);cursor:pointer;grid-template-columns:auto 18px auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 10px;display:grid}.r2poiG_teamPicker label[data-checked=false]{opacity:.65}.r2poiG_teamPicker label[data-checked=true]{border-color:var(--s-line-strong)}.r2poiG_order{color:var(--s-accent);text-align:center;font-size:11px;font-weight:700}.r2poiG_studio .r2poiG_meetingItem{border-radius:var(--s-radius);text-align:left;white-space:normal;background:0 0;border:1px solid #0000;justify-content:stretch;gap:6px;width:100%;padding:12px;font-weight:400;display:grid}.r2poiG_studio .r2poiG_meetingItem[aria-current=true]{background:var(--s-active);border-color:var(--s-line)}.r2poiG_meetingItem>small{color:var(--s-muted);text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.r2poiG_meetingItemHead{justify-content:space-between;align-items:flex-start;gap:8px;min-width:0;display:flex}.r2poiG_meetingItemHead strong{overflow-wrap:anywhere;font-size:13.5px;font-weight:600}.r2poiG_avatarStack{display:flex}.r2poiG_avatarStack>span{box-shadow:0 0 0 2px var(--s-bg);margin-right:-5px}.r2poiG_badge[data-meeting=open],.r2poiG_badge[data-meeting=drafting]{background:var(--s-accent-soft);color:var(--s-accent)}.r2poiG_badge[data-meeting=drafting] i{animation:1.4s ease-in-out infinite r2poiG_pulse}.r2poiG_badge[data-meeting=review]{background:var(--s-warn-soft);color:var(--s-warn)}.r2poiG_badge[data-meeting=closed]{color:var(--s-faint)}.r2poiG_reason[data-kind=speaking]{color:var(--s-accent)}.r2poiG_meetingCard{gap:14px;max-width:900px;display:grid}.r2poiG_meetingHead{border-bottom:1px solid var(--s-line-soft);gap:10px;padding-bottom:14px;display:grid}.r2poiG_meetingTitle{flex-wrap:wrap;align-items:center;gap:10px;display:flex}.r2poiG_meetingTitle h2{overflow-wrap:anywhere;font-size:18px}.r2poiG_agenda{color:var(--s-ink-2);white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.r2poiG_attendeeRow{flex-wrap:wrap;gap:6px;display:flex}.r2poiG_attendeeRow li{border:1px solid var(--s-line);border-radius:14px;align-items:center;gap:5px;max-width:100%;padding:2px 9px 2px 2px;font-size:12px;display:inline-flex}.r2poiG_attendeeRow li[data-host=true]{border-color:var(--s-accent)}.r2poiG_attendeeRow em,.r2poiG_bubbleMeta em{color:var(--s-accent);background:var(--s-accent-soft);border-radius:4px;padding:0 5px;font-size:10.5px;font-style:normal;font-weight:600;line-height:16px}.r2poiG_chat{gap:14px;padding:4px 0;display:grid}.r2poiG_chatEmpty{border:1px dashed var(--s-line-strong);border-radius:var(--s-radius);color:var(--s-muted);text-align:center;padding:24px 16px;font-size:13px}.r2poiG_bubbleRow{grid-template-columns:34px minmax(0,1fr);align-items:start;gap:10px;display:grid}.r2poiG_bubbleRow[data-own=true]{grid-template-columns:minmax(0,1fr) 34px}.r2poiG_bubbleRow[data-own=true]>.r2poiG_avatar{grid-area:1/2}.r2poiG_bubbleRow[data-own=true]>.r2poiG_bubbleBody{grid-area:1/1;justify-items:end}.r2poiG_bubbleBody{justify-items:start;gap:4px;min-width:0;display:grid}.r2poiG_bubbleMeta{color:var(--s-muted);flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:12px;display:flex}.r2poiG_bubbleMeta strong{color:var(--s-ink);font-size:12.5px}.r2poiG_bubbleMeta time{color:var(--s-faint);font-size:11px}.r2poiG_bubble{background:var(--s-sunken);border:1px solid var(--s-line-soft);border-radius:4px 14px 14px;gap:4px;min-width:0;max-width:min(640px,100%);padding:9px 13px;display:grid}.r2poiG_bubbleRow[data-own=true] .r2poiG_bubble{background:var(--s-accent-soft);border-color:#0000;border-radius:14px 4px 14px 14px}.r2poiG_mentionLine{flex-wrap:wrap;gap:4px;display:flex}.r2poiG_mentionLine span{color:var(--s-accent);font-size:11.5px;font-weight:600}.r2poiG_sessionNote{color:var(--s-faint);max-width:100%;font-size:11px}.r2poiG_sessionNote summary{cursor:pointer}.r2poiG_sessionNote code{background:var(--s-sunken);white-space:nowrap;color:var(--s-ink-2);border-radius:5px;margin-top:4px;padding:3px 8px;display:block;overflow-x:auto}.r2poiG_typing{background:var(--s-sunken);color:var(--s-muted);border-radius:4px 14px 14px;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 13px;font-size:12.5px;display:inline-flex}.r2poiG_typing small{color:var(--s-faint)}.r2poiG_dots{gap:3px;display:inline-flex}.r2poiG_dots i{background:var(--s-accent);border-radius:50%;width:5px;height:5px;animation:1.2s ease-in-out infinite r2poiG_pulse}.r2poiG_dots i:nth-child(2){animation-delay:.2s}.r2poiG_dots i:nth-child(3){animation-delay:.4s}.r2poiG_chatComposer{z-index:2;border:1px solid var(--s-line);border-radius:var(--s-radius);background:var(--s-bg);gap:8px;padding:12px 14px;display:grid;position:sticky;bottom:0;box-shadow:0 -8px 20px -12px #0000002e}.r2poiG_mentionChips{flex-wrap:wrap;align-items:center;gap:6px;display:flex}.r2poiG_minutes{border:1px solid var(--s-warn-soft);border-radius:var(--s-radius);background:color-mix(in srgb, var(--s-warn-soft) 30%, transparent);gap:14px;padding:16px 18px;display:grid}.r2poiG_minutes .r2poiG_blockHead{flex-wrap:wrap}.r2poiG_minutesTasks{gap:10px;display:grid}.r2poiG_minutesTasks>legend{color:var(--s-ink-2);margin-bottom:4px;font-size:12.5px;font-weight:500}.r2poiG_studio .r2poiG_minutesTasks>button{justify-self:start}.r2poiG_minutesTask{border:1px solid var(--s-line);border-radius:var(--s-radius-sm);background:var(--s-bg);grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:10px;padding:10px;display:grid}.r2poiG_minutesTask>.r2poiG_step{grid-area:auto;margin-top:2px}.r2poiG_minutesTaskFields{gap:8px;min-width:0;display:grid}.r2poiG_minutesTaskActions{gap:2px;display:grid}.r2poiG_studio .r2poiG_minutesTaskActions button{width:28px;min-height:26px;padding:0}@media (width<=1100px){.r2poiG_workArea{grid-template-columns:minmax(0,1fr)}.r2poiG_listPane{border-right:0;border-bottom:1px solid var(--s-line)}.r2poiG_summaryGrid{grid-template-columns:minmax(0,1fr)}.r2poiG_roster{grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))}.r2poiG_pipeline li:before{display:none}}@media (width<=720px){.r2poiG_studio{--s-gutter:16px}.r2poiG_topbar{flex-direction:column;align-items:stretch;gap:12px;padding-top:18px}.r2poiG_brand h1{font-size:21px}.r2poiG_workspace{flex-direction:column;align-items:stretch}.r2poiG_workspacePicker{width:100%}.r2poiG_workspace>button{align-self:flex-start;padding-left:0}.r2poiG_fieldPair,.r2poiG_optionCards{grid-template-columns:minmax(0,1fr)}.r2poiG_projectPicker{flex-basis:100%}.r2poiG_projectActions{margin-left:0}.r2poiG_statList{grid-template-columns:repeat(2,minmax(0,1fr))}.r2poiG_detailHead{grid-template-columns:minmax(0,1fr)}.r2poiG_detailBadges{justify-content:flex-start}.r2poiG_facts{grid-template-columns:minmax(0,1fr);gap:2px}.r2poiG_facts dd{margin-bottom:8px}.r2poiG_segmented{grid-template-columns:repeat(2,minmax(0,1fr))}.r2poiG_composerFoot{flex-direction:column;align-items:stretch}.r2poiG_success{grid-template-columns:minmax(0,1fr)}.r2poiG_inputWithButton{flex-direction:column}.r2poiG_dialog{border-radius:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0}.r2poiG_dialogForm{height:100%;max-height:100dvh}}@media (width<=480px){.r2poiG_tabs{padding-right:8px}.r2poiG_studio .r2poiG_tab{padding:10px 8px;font-size:13px}.r2poiG_tabs>.r2poiG_primary{min-width:34px;padding:6px 10px}.r2poiG_wideLabel{display:none}.r2poiG_rosterItem{grid-template-columns:auto minmax(0,1fr)!important}.r2poiG_rosterMeta{grid-column:2;justify-items:start;max-width:100%}.r2poiG_fileRow{grid-template-columns:auto minmax(0,1fr)}.r2poiG_fileActions{grid-column:1/-1;justify-content:flex-end}.r2poiG_teamPicker label{grid-template-columns:auto 14px auto minmax(0,1fr)}.r2poiG_teamPicker label>:last-child{grid-column:4;justify-self:start}.r2poiG_timeline li{grid-template-columns:minmax(0,1fr)}.r2poiG_timeline li:before,.r2poiG_timelineDot{display:none}.r2poiG_minutesTask{grid-template-columns:minmax(0,1fr)}.r2poiG_minutesTask>.r2poiG_step{display:none}.r2poiG_minutesTaskActions{justify-content:flex-end;display:flex}.r2poiG_bubbleRow,.r2poiG_bubbleRow[data-own=true]{grid-template-columns:minmax(0,1fr)}.r2poiG_bubbleRow>.r2poiG_avatar{display:none}.r2poiG_bubbleRow[data-own=true]>.r2poiG_bubbleBody{grid-column:1}}';
 }
-var Studio_default = { "intakeFields": "r2poiG_intakeFields", "tableHead": "r2poiG_tableHead", "tabs": "r2poiG_tabs", "messageForm": "r2poiG_messageForm", "projectToolbar": "r2poiG_projectToolbar", "empty": "r2poiG_empty", "studio": "r2poiG_studio", "messageRow": "r2poiG_messageRow", "check": "r2poiG_check", "hint": "r2poiG_hint", "checklist": "r2poiG_checklist", "actions": "r2poiG_actions", "projectIntake": "r2poiG_projectIntake", "engineName": "r2poiG_engineName", "danger": "r2poiG_danger", "sectionHeading": "r2poiG_sectionHeading", "selectedRow": "r2poiG_selectedRow", "taskRow": "r2poiG_taskRow", "teamSelection": "r2poiG_teamSelection", "list": "r2poiG_list", "activeTab": "r2poiG_activeTab", "employeeName": "r2poiG_employeeName", "avatar": "r2poiG_avatar", "status": "r2poiG_status", "stackedField": "r2poiG_stackedField", "health": "r2poiG_health", "split": "r2poiG_split", "error": "r2poiG_error", "header": "r2poiG_header", "primary": "r2poiG_primary", "field": "r2poiG_field", "privacy": "r2poiG_privacy", "report": "r2poiG_report", "numericFields": "r2poiG_numericFields", "fileList": "r2poiG_fileList", "editor": "r2poiG_editor", "objectiveRow": "r2poiG_objectiveRow", "messages": "r2poiG_messages", "employeeRow": "r2poiG_employeeRow" };
+var Studio_default = { "ghost": "r2poiG_ghost", "spin": "r2poiG_spin", "workspacePicker": "r2poiG_workspacePicker", "fieldPair": "r2poiG_fieldPair", "projectPicker": "r2poiG_projectPicker", "menuBody": "r2poiG_menuBody", "dots": "r2poiG_dots", "linkButton": "r2poiG_linkButton", "stepLarge": "r2poiG_stepLarge", "blockHead": "r2poiG_blockHead", "hint": "r2poiG_hint", "agenda": "r2poiG_agenda", "revisionCard": "r2poiG_revisionCard", "taskChip": "r2poiG_taskChip", "switch": "r2poiG_switch", "report": "r2poiG_report", "composerHead": "r2poiG_composerHead", "detailPane": "r2poiG_detailPane", "teamPicker": "r2poiG_teamPicker", "bubble": "r2poiG_bubble", "chips": "r2poiG_chips", "workspace": "r2poiG_workspace", "studio": "r2poiG_studio", "linkList": "r2poiG_linkList", "fileName": "r2poiG_fileName", "checkList": "r2poiG_checkList", "footnote": "r2poiG_footnote", "copyLine": "r2poiG_copyLine", "summaryGrid": "r2poiG_summaryGrid", "teamStrip": "r2poiG_teamStrip", "timelineHead": "r2poiG_timelineHead", "session": "r2poiG_session", "meetingTitle": "r2poiG_meetingTitle", "meetingHead": "r2poiG_meetingHead", "step": "r2poiG_step", "progressHead": "r2poiG_progressHead", "dialogBody": "r2poiG_dialogBody", "ghostDanger": "r2poiG_ghostDanger", "formFooter": "r2poiG_formFooter", "disclosureBody": "r2poiG_disclosureBody", "minutesTasks": "r2poiG_minutesTasks", "wideLabel": "r2poiG_wideLabel", "reason": "r2poiG_reason", "detailBadges": "r2poiG_detailBadges", "objective": "r2poiG_objective", "healthRow": "r2poiG_healthRow", "detailTitle": "r2poiG_detailTitle", "field": "r2poiG_field", "workspaceForm": "r2poiG_workspaceForm", "tabList": "r2poiG_tabList", "dialogHead": "r2poiG_dialogHead", "mentionLine": "r2poiG_mentionLine", "modelOption": "r2poiG_modelOption", "projectBar": "r2poiG_projectBar", "rosterMeta": "r2poiG_rosterMeta", "bubbleRow": "r2poiG_bubbleRow", "spinner": "r2poiG_spinner", "inlineError": "r2poiG_inlineError", "main": "r2poiG_main", "actions": "r2poiG_actions", "miniTimeline": "r2poiG_miniTimeline", "paneHead": "r2poiG_paneHead", "bar": "r2poiG_bar", "projectTop": "r2poiG_projectTop", "listPane": "r2poiG_listPane", "modelList": "r2poiG_modelList", "projectActions": "r2poiG_projectActions", "composerFoot": "r2poiG_composerFoot", "bubbleMeta": "r2poiG_bubbleMeta", "dangerSolid": "r2poiG_dangerSolid", "minutesTaskActions": "r2poiG_minutesTaskActions", "primary": "r2poiG_primary", "alert": "r2poiG_alert", "rosterText": "r2poiG_rosterText", "optionCards": "r2poiG_optionCards", "pipeline": "r2poiG_pipeline", "handoffMeta": "r2poiG_handoffMeta", "editorHead": "r2poiG_editorHead", "taskBadges": "r2poiG_taskBadges", "healthChip": "r2poiG_healthChip", "timelineDot": "r2poiG_timelineDot", "composer": "r2poiG_composer", "inputWithButton": "r2poiG_inputWithButton", "taskLink": "r2poiG_taskLink", "taskOwner": "r2poiG_taskOwner", "formGroup": "r2poiG_formGroup", "detailHead": "r2poiG_detailHead", "meetingItemHead": "r2poiG_meetingItemHead", "thumb": "r2poiG_thumb", "fileIcon": "r2poiG_fileIcon", "dialogFoot": "r2poiG_dialogFoot", "statList": "r2poiG_statList", "mono": "r2poiG_mono", "taskItem": "r2poiG_taskItem", "pulse": "r2poiG_pulse", "badges": "r2poiG_badges", "taskMain": "r2poiG_taskMain", "minutesTask": "r2poiG_minutesTask", "roster": "r2poiG_roster", "bubbleBody": "r2poiG_bubbleBody", "meetingItem": "r2poiG_meetingItem", "disclosure": "r2poiG_disclosure", "timelineCard": "r2poiG_timelineCard", "sessionNote": "r2poiG_sessionNote", "muted": "r2poiG_muted", "modelPicker": "r2poiG_modelPicker", "summaryMain": "r2poiG_summaryMain", "pathList": "r2poiG_pathList", "codePreview": "r2poiG_codePreview", "avatarStack": "r2poiG_avatarStack", "dialog": "r2poiG_dialog", "chatEmpty": "r2poiG_chatEmpty", "offTag": "r2poiG_offTag", "formStatus": "r2poiG_formStatus", "meetingCard": "r2poiG_meetingCard", "typing": "r2poiG_typing", "filterRow": "r2poiG_filterRow", "fileCard": "r2poiG_fileCard", "fileGrid": "r2poiG_fileGrid", "topbar": "r2poiG_topbar", "workArea": "r2poiG_workArea", "chat": "r2poiG_chat", "emptyState": "r2poiG_emptyState", "fileActions": "r2poiG_fileActions", "emptyInline": "r2poiG_emptyInline", "tabs": "r2poiG_tabs", "badge": "r2poiG_badge", "menu": "r2poiG_menu", "editorCard": "r2poiG_editorCard", "dialogForm": "r2poiG_dialogForm", "chip": "r2poiG_chip", "minutesTaskFields": "r2poiG_minutesTaskFields", "iconButton": "r2poiG_iconButton", "srOnly": "r2poiG_srOnly", "count": "r2poiG_count", "chatComposer": "r2poiG_chatComposer", "modelTags": "r2poiG_modelTags", "notice": "r2poiG_notice", "detailCard": "r2poiG_detailCard", "fileRow": "r2poiG_fileRow", "toolRow": "r2poiG_toolRow", "filter": "r2poiG_filter", "order": "r2poiG_order", "metaLine": "r2poiG_metaLine", "brand": "r2poiG_brand", "avatar": "r2poiG_avatar", "summarySide": "r2poiG_summarySide", "handoffs": "r2poiG_handoffs", "attendeeRow": "r2poiG_attendeeRow", "block": "r2poiG_block", "inlineField": "r2poiG_inlineField", "segmented": "r2poiG_segmented", "banner": "r2poiG_banner", "engineTag": "r2poiG_engineTag", "rosterItem": "r2poiG_rosterItem", "tab": "r2poiG_tab", "success": "r2poiG_success", "criteria": "r2poiG_criteria", "reviewForm": "r2poiG_reviewForm", "timeline": "r2poiG_timeline", "mentionChips": "r2poiG_mentionChips", "minutes": "r2poiG_minutes", "facts": "r2poiG_facts" };
 
-// src/client/EmployeeEditor.tsx
+// src/client/parts.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
-var efforts = {
-  claude: ["", "low", "medium", "high", "xhigh", "max"],
-  codex: ["", "low", "medium", "high", "xhigh", "max", "ultra"],
-  harness: ["", "off", "low", "high", "max"],
-  compatible: ["", "minimal", "low", "medium", "high", "xhigh"]
-};
-function EmployeeEditor({ employee, catalog, busy, t, save, remove }) {
-  const [draft, setDraft] = (0, import_react.useState)(employee);
-  const [customModel, setCustomModel] = (0, import_react.useState)(false);
-  const change = (key, value) => {
-    setDraft((previous) => ({ ...previous, [key]: value }));
-  };
-  const models = draft.engine === "compatible" ? void 0 : catalog?.[draft.engine === "claude" ? "claude" : draft.engine === "codex" ? "codex" : "harness"];
-  const selectedModel = models?.find((model2) => model2.id === draft.model);
-  const isCustomModel = customModel || draft.engine === "compatible" || !!draft.model && !selectedModel;
-  const effortOptions = selectedModel?.efforts.length ? ["", ...selectedModel.efforts] : efforts[draft.engine];
-  const field = (key, placeholder = "") => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.field, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t(key) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { value: draft[key], placeholder, onChange: (event) => {
-      change(key, event.target.value);
-    } })
+function Avatar({ id: id2, name, size = "md" }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: Studio_default.avatar, "data-tone": tone(id2), "data-size": size, "aria-hidden": "true", children: initial(name) });
+}
+function TaskStatus({ phase, t }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: Studio_default.badge, "data-status": phase, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { "aria-hidden": "true" }),
+    t(phase)
   ] });
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { className: Studio_default.editor, onSubmit: (event) => {
-    event.preventDefault();
-    void save(draft);
-  }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: t("employeeSettings") }),
-    field("name"),
-    field("role"),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.field, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t("responsibilities") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { rows: 3, value: draft.responsibilities, onChange: (event) => {
-        change("responsibilities", event.target.value);
-      } })
+}
+function ReviewStatus({ task, t }) {
+  if (task.status !== "completed") return null;
+  const key = task.reviewStatus === "superseded" ? "superseded" : task.reviewStatus === "accepted" ? "accepted" : "awaitingReview";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: Studio_default.badge, "data-review": task.reviewStatus, children: t(key) });
+}
+function ProjectStatus({ status, t }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: Studio_default.badge, "data-project": status, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { "aria-hidden": "true" }),
+    t(status === "paused" ? "projectPaused" : status === "running" ? "projectRunning" : status === "review" ? "review" : "projectCompleted")
+  ] });
+}
+function EngineTag({ engine: engine2, t }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: Studio_default.engineTag, "data-engine": engine2, children: t(engine2) });
+}
+function Section({ title, action, children, className }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: `${Studio_default.block} ${className ?? ""}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: Studio_default.blockHead, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: title }),
+      action
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.field, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t("engine") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { "aria-label": t("engine"), value: draft.engine, onChange: (event) => {
-        const engine2 = event.target.value;
-        setCustomModel(false);
-        setDraft((previous) => ({ ...previous, engine: engine2, model: engine2 === "claude" ? "sonnet" : "", effort: "", thinkingFormat: engine2 === "compatible" ? "zai" : "none" }));
-      }, children: ["codex", "claude", "harness", "compatible"].map((engine2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: engine2, children: t(engine2) }, engine2)) })
+    children
+  ] });
+}
+function Busy({ on }) {
+  return on ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: Studio_default.spinner, "aria-hidden": "true" }) : null;
+}
+
+// src/client/HandoffTimeline.tsx
+var import_jsx_runtime2 = require("react/jsx-runtime");
+function HandoffTimeline({ state, project, busy, error, t, command, onOpenTask }) {
+  const [message, setMessage] = (0, import_react2.useState)("");
+  const [recipient, setRecipient] = (0, import_react2.useState)("team");
+  const [person, setPerson] = (0, import_react2.useState)("all");
+  const [failed, setFailed] = (0, import_react2.useState)(false);
+  const { pending, run } = usePending();
+  const tasks = state.tasks.filter((task) => task.projectId === project.id);
+  const all = state.messages.filter((value) => value.projectId === project.id);
+  const shown = person === "all" ? all : all.filter((value) => value.from === person || value.to === person || value.to === "team" && person !== "user");
+  const name = (id2) => id2 === "user" ? t("user") : id2 === "team" ? t("everyone") : employeeOf(state.employees, id2)?.name ?? t("unknownEmployee");
+  const people = [...new Set(all.flatMap((value) => [value.from, value.to]))].filter((id2) => id2 !== "team");
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.handoffs, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("form", { className: Studio_default.composer, onSubmit: (event) => {
+      event.preventDefault();
+      void run("send", () => command("message", { projectId: project.id, to: recipient, message })).then((ok) => {
+        setFailed(!ok);
+        if (ok) setMessage("");
+      });
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.composerHead, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: t("newInstruction") }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: Studio_default.inlineField, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: t("to") }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("select", { value: recipient, onChange: (event) => {
+            setRecipient(event.target.value);
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "team", children: t("everyone") }),
+            state.employees.map((employee) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("option", { value: employee.id, children: [
+              employee.name,
+              employee.role && ` \xB7 ${employee.role}`
+            ] }, employee.id))
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { "aria-label": t("message"), placeholder: t("message"), required: true, rows: 3, value: message, onChange: (event) => {
+        setMessage(event.target.value);
+      } }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.composerFoot, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.muted, children: t("noReasoning") }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { className: Studio_default.primary, disabled: busy || !message.trim(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Busy, { on: pending === "send" }),
+          t("send")
+        ] })
+      ] }),
+      failed && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: error || t("failure") })
     ] }),
-    draft.engine !== "compatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.field, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t("model") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { "aria-label": t("model"), value: isCustomModel ? "__custom__" : draft.model, onChange: (event) => {
-        const custom = event.target.value === "__custom__";
-        setCustomModel(custom);
-        if (!custom) setDraft({ ...draft, model: event.target.value, effort: "" });
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: t("nativeDefault") }),
-        models?.filter((model2) => model2.id !== "").map((model2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: model2.id, children: [
-          model2.name,
-          " \xB7 ",
-          model2.id,
-          model2.imageInput ? ` \xB7 ${t("imageInput")}` : ""
-        ] }, model2.id)),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "__custom__", children: t("customModel") })
-      ] })
-    ] }),
-    isCustomModel && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.field, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t("modelId") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { "aria-label": t("modelId"), value: draft.model, placeholder: t("modelIdPlaceholder"), onChange: (event) => {
-        setDraft({ ...draft, model: event.target.value, effort: "" });
-      } })
-    ] }),
-    draft.engine === "claude" && catalog?.claudeError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { role: "alert", className: Studio_default.error, children: catalog.claudeError }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.field, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t("effort") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { "aria-label": t("effort"), value: draft.effort, onChange: (event) => {
-        change("effort", event.target.value);
-      }, children: effortOptions.map((effort) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: effort, children: effort || t("nativeDefault") }, effort)) })
-    ] }),
-    field("cwd", t("unassignedCwd")),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.field, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t("permission") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { "aria-label": t("permission"), value: draft.permission, onChange: (event) => {
-        change("permission", event.target.value);
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "read-only", children: t("readOnly") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "workspace-write", children: t("workspaceWrite") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "full-access", children: t("fullAccess") })
-      ] })
-    ] }),
-    draft.engine === "compatible" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-      field("baseURL"),
-      field("apiKeyEnv"),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.field, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t("thinkingFormat") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { "aria-label": t("thinkingFormat"), value: draft.thinkingFormat, onChange: (event) => {
-          change("thinkingFormat", event.target.value);
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.timelineHead, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("h2", { children: [
+        t("messages"),
+        " ",
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("small", { className: Studio_default.muted, children: [
+          "\xB7 ",
+          all.length
+        ] })
+      ] }),
+      people.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: Studio_default.inlineField, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: t("filterPerson") }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("select", { value: person, onChange: (event) => {
+          setPerson(event.target.value);
         }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "none", children: t("protocolNone") }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "zai", children: t("zai") }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "deepseek", children: t("deepseekProtocol") })
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "all", children: t("everyone") }),
+          people.map((id2) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: id2, children: name(id2) }, id2))
         ] })
       ] })
     ] }),
-    (draft.engine === "compatible" || draft.engine === "harness") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: Studio_default.numericFields, children: ["contextWindow", "maxTokens"].map((key) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: t(key) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "number", min: key === "contextWindow" ? 1024 : 1, value: draft[key], onChange: (event) => {
-        change(key, Number(event.target.value));
-      } })
-    ] }, key)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: Studio_default.check, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: draft.enabled, onChange: (event) => {
-        change("enabled", event.target.checked);
-      } }),
-      t("enabled")
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ol", { className: Studio_default.timeline, children: shown.map((value) => {
+      const task = value.taskId ? tasks.find((item) => item.id === value.taskId) : void 0;
+      return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("li", { "data-from": value.from === "user" ? "user" : "employee", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: Studio_default.timelineDot, children: value.from === "user" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: Studio_default.avatar, "data-tone": "user", "data-size": "md", "aria-hidden": "true", children: t("userInitial") }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Avatar, { id: value.from, name: name(value.from) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.timelineCard, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: Studio_default.handoffMeta, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: name(value.from) }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { "aria-hidden": "true", children: "\u2192" }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: name(value.to) }),
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("time", { dateTime: value.createdAt, children: formatTime(value.createdAt) })
+          ] }),
+          task && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { className: Studio_default.taskChip, onClick: () => {
+            onOpenTask(task.id);
+          }, children: [
+            "#",
+            tasks.indexOf(task) + 1,
+            " ",
+            task.title
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("pre", { className: Studio_default.report, children: value.message })
+        ] })
+      ] }, value.id);
+    }) }),
+    !all.length && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: Studio_default.emptyState, children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: t("noMessages") }) })
+  ] });
+}
+
+// src/client/MeetingRoom.tsx
+var import_react3 = require("react");
+var import_jsx_runtime3 = require("react/jsx-runtime");
+var statusKey = { open: "meetingOpen", drafting: "meetingDrafting", review: "meetingReview", closed: "meetingClosed" };
+function MeetingRoom({ state, workspace, busy, error, t, command, onOpenProject }) {
+  const meetings = state.meetings.filter((value) => value.workspaceId === workspace.id);
+  const [selected, setSelected] = (0, import_react3.useState)(null);
+  const [creating, setCreating] = (0, import_react3.useState)(false);
+  const meeting2 = meetings.find((value) => value.id === selected) ?? meetings.at(-1);
+  const name = (id2) => employeeOf(state.employees, id2)?.name ?? t("unknownEmployee");
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.workArea, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: Studio_default.listPane, "aria-label": t("meetingsTab"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.paneHead, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: t("meetingsTab") }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.muted, children: t("meetingSummary", { open: meetings.filter((value) => value.status !== "closed").length, total: meetings.length }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.primary, onClick: () => {
+          setCreating(true);
+        }, children: t("newMeeting") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("ul", { className: Studio_default.roster, children: [...meetings].reverse().map((value) => {
+        const last = value.messages.at(-1);
+        return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("button", { className: Studio_default.meetingItem, "aria-current": meeting2?.id === value.id && !creating ? "true" : void 0, onClick: () => {
+          setSelected(value.id);
+          setCreating(false);
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: Studio_default.meetingItemHead, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: value.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: Studio_default.badge, "data-meeting": value.status, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("i", { "aria-hidden": "true" }),
+              t(statusKey[value.status])
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: Studio_default.avatarStack, children: value.attendeeIds.map((id2) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Avatar, { id: id2, name: name(id2), size: "sm" }, id2)) }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("small", { children: last ? `${last.from === "user" ? t("user") : name(last.from)}\uFF1A${last.message.slice(0, 60)}` : t("meetingNoMessages") }),
+          value.speaking && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("small", { className: Studio_default.reason, "data-kind": "speaking", children: t("speakingNow", { name: name(value.speaking) }) })
+        ] }) }, value.id);
+      }) }),
+      !meetings.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.emptyState, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: t("noMeetingsTitle") }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: t("noMeetings") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.footnote, children: t("meetingHelp") })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: Studio_default.hint, children: t(draft.engine === "compatible" ? "providerHelp" : "nativeHelp") }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: Studio_default.actions, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "submit", className: Studio_default.primary, disabled: busy, children: t(busy ? "saving" : "save") }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: Studio_default.danger, disabled: busy, onClick: () => {
-        void remove(draft.id);
-      }, children: t("delete") })
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: Studio_default.detailPane, children: creating || !meeting2 ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+      MeetingForm,
+      {
+        state,
+        workspace,
+        busy,
+        error,
+        t,
+        command,
+        first: !meetings.length,
+        onDone: (id2) => {
+          setCreating(false);
+          setSelected(id2);
+        }
+      }
+    ) : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(MeetingThread, { meeting: meeting2, state, busy, error, t, command, onOpenProject }, meeting2.id) })
+  ] });
+}
+function MeetingForm({ state, workspace, busy, error, t, command, first, onDone, meeting: meeting2 }) {
+  const enabled = state.employees.filter((employee) => employee.enabled || meeting2?.attendeeIds.includes(employee.id));
+  const [title, setTitle] = (0, import_react3.useState)(meeting2?.title ?? "");
+  const [agenda, setAgenda] = (0, import_react3.useState)(meeting2?.agenda ?? "");
+  const [hostId, setHostId] = (0, import_react3.useState)(meeting2?.hostId ?? enabled[0]?.id ?? "");
+  const [attendees, setAttendees] = (0, import_react3.useState)(meeting2?.attendeeIds ?? enabled.map((employee) => employee.id));
+  const [failed, setFailed] = (0, import_react3.useState)(false);
+  const { pending, run } = usePending();
+  const id2 = (0, import_react3.useId)();
+  const chosen = [.../* @__PURE__ */ new Set([hostId, ...attendees])].filter(Boolean);
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("form", { className: Studio_default.editorCard, "aria-labelledby": `${id2}-title`, onSubmit: (event) => {
+    event.preventDefault();
+    const input = { title, agenda, hostId, attendeeIds: chosen };
+    void run("save", () => command(meeting2 ? "updateMeeting" : "createMeeting", meeting2 ? { ...input, id: meeting2.id } : { ...input, workspaceId: workspace.id })).then((ok) => {
+      setFailed(!ok);
+      if (!ok) return;
+      onDone(meeting2 ? meeting2.id : null);
+    });
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("header", { className: Studio_default.detailHead, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { id: `${id2}-title`, children: t(meeting2 ? "editAttendees" : "newMeeting") }),
+      !meeting2 && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.muted, children: t(first ? "meetingIntro" : "meetingHelp") })
+    ] }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("meetingTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { required: true, value: title, placeholder: t("meetingTitlePlaceholder"), onChange: (event) => {
+        setTitle(event.target.value);
+      } })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("agenda") }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("textarea", { rows: 3, value: agenda, placeholder: t("agendaPlaceholder"), onChange: (event) => {
+        setAgenda(event.target.value);
+      } })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("host") }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("select", { required: true, value: hostId, onChange: (event) => {
+        setHostId(event.target.value);
+      }, children: enabled.map((employee) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("option", { value: employee.id, children: [
+        employee.name,
+        employee.role && ` \xB7 ${employee.role}`
+      ] }, employee.id)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("small", { className: Studio_default.muted, children: t("hostHelp") })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("fieldset", { className: Studio_default.teamPicker, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("legend", { children: [
+        t("attendees"),
+        " ",
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("small", { children: [
+          "\xB7 ",
+          t("selectedCount", { count: chosen.length })
+        ] })
+      ] }),
+      enabled.map((employee) => {
+        const isHost = employee.id === hostId;
+        const checked = isHost || attendees.includes(employee.id);
+        return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { "data-checked": checked, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { type: "checkbox", checked, disabled: isHost, onChange: (event) => {
+            setAttendees(event.target.checked ? [...attendees, employee.id] : attendees.filter((value) => value !== employee.id));
+          } }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: Studio_default.order, children: isHost ? "\u2605" : "" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Avatar, { id: employee.id, name: employee.name, size: "sm" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: Studio_default.rosterText, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: employee.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("small", { children: [
+              employee.role || t("noRole"),
+              isHost && ` \xB7 ${t("hostTag")}`
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(EngineTag, { engine: employee.engine, t })
+        ] }, employee.id);
+      }),
+      !enabled.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.inlineError, children: t("noEnabledEmployees") })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("footer", { className: Studio_default.formFooter, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("button", { className: Studio_default.primary, disabled: busy || !hostId, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Busy, { on: pending === "save" }),
+          t(meeting2 ? "saveAttendees" : "startMeeting")
+        ] }),
+        (meeting2 || !first) && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", className: Studio_default.ghost, onClick: () => {
+          onDone(null);
+        }, children: t("cancelAction") })
+      ] }),
+      failed && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: error || t("failure") })
+    ] })
+  ] });
+}
+function MeetingThread({ meeting: meeting2, state, busy, error, t, command, onOpenProject }) {
+  const [message, setMessage] = (0, import_react3.useState)("");
+  const [mentions, setMentions] = (0, import_react3.useState)([]);
+  const [editing, setEditing] = (0, import_react3.useState)(false);
+  const [confirmEnd, setConfirmEnd] = (0, import_react3.useState)(false);
+  const [failed, setFailed] = (0, import_react3.useState)(false);
+  const { pending, run } = usePending();
+  const list = (0, import_react3.useRef)(null);
+  const stick = (0, import_react3.useRef)(true);
+  const employee = (id2) => employeeOf(state.employees, id2);
+  const name = (id2) => id2 === "user" ? t("client") : employee(id2)?.name ?? t("unknownEmployee");
+  const project = meeting2.projectId ? state.projects.find((value) => value.id === meeting2.projectId) : void 0;
+  const active = meeting2.speaking !== null || meeting2.queue.length > 0;
+  const next = meeting2.speaking ?? (meeting2.status === "drafting" ? meeting2.hostId : meeting2.queue[0]);
+  (0, import_react3.useLayoutEffect)(() => {
+    const node = list.current?.closest("main");
+    if (node && stick.current) node.scrollTop = node.scrollHeight;
+  }, [meeting2.messages.length, meeting2.speaking]);
+  (0, import_react3.useEffect)(() => {
+    const node = list.current?.closest("main");
+    if (!node) return;
+    const update = () => {
+      stick.current = node.scrollHeight - node.scrollTop - node.clientHeight < 160;
+    };
+    node.addEventListener("scroll", update, { passive: true });
+    return () => {
+      node.removeEventListener("scroll", update);
+    };
+  }, []);
+  const act = (key, action) => () => {
+    void run(key, () => command(action, { id: meeting2.id })).then((ok) => {
+      setFailed(!ok);
+    });
+  };
+  const send = () => {
+    if (!message.trim()) return;
+    stick.current = true;
+    void run("send", () => command("meetingMessage", { id: meeting2.id, message, mentions })).then((ok) => {
+      setFailed(!ok);
+      if (ok) {
+        setMessage("");
+        setMentions([]);
+      }
+    });
+  };
+  if (editing) return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+    MeetingForm,
+    {
+      state,
+      workspace: state.workspaces.find((value) => value.id === meeting2.workspaceId),
+      busy,
+      error,
+      t,
+      command,
+      first: false,
+      meeting: meeting2,
+      onDone: () => {
+        setEditing(false);
+      }
+    }
+  );
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("article", { className: Studio_default.meetingCard, "aria-labelledby": `meeting-${meeting2.id}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("header", { className: Studio_default.meetingHead, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.meetingTitle, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { id: `meeting-${meeting2.id}`, children: meeting2.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: Studio_default.badge, "data-meeting": meeting2.status, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("i", { "aria-hidden": "true" }),
+          t(statusKey[meeting2.status])
+        ] })
+      ] }),
+      meeting2.agenda && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.agenda, children: meeting2.agenda }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("ul", { className: Studio_default.attendeeRow, children: meeting2.attendeeIds.map((id2) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("li", { "data-host": id2 === meeting2.hostId, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Avatar, { id: id2, name: name(id2), size: "sm" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: name(id2) }),
+        id2 === meeting2.hostId && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("em", { children: t("hostTag") })
+      ] }, id2)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.actions, children: [
+        meeting2.status === "open" && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("button", { className: Studio_default.primary, disabled: busy || active || !meeting2.messages.length, title: active ? t("waitForSpeaker") : void 0, onClick: act("minutes", "draftMinutes"), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Busy, { on: pending === "minutes" }),
+          t("draftMinutes")
+        ] }),
+        meeting2.status === "open" && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.ghost, disabled: busy, onClick: () => {
+          setEditing(true);
+        }, children: t("editAttendees") }),
+        active && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("button", { className: Studio_default.ghostDanger, disabled: busy, onClick: act("stop", "stopMeeting"), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Busy, { on: pending === "stop" }),
+          t("stopSpeaking")
+        ] }),
+        meeting2.status !== "closed" && (confirmEnd ? /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.dangerSolid, disabled: busy, onClick: () => {
+            setConfirmEnd(false);
+            act("end", "closeMeeting")();
+          }, children: t("confirmEnd") }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.ghost, onClick: () => {
+            setConfirmEnd(false);
+          }, children: t("cancelAction") })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.ghost, disabled: busy, onClick: () => {
+          setConfirmEnd(true);
+        }, children: t("endMeeting") })),
+        project && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.primary, onClick: () => {
+          onOpenProject(project.id);
+        }, children: t("viewProject") })
+      ] })
+    ] }),
+    meeting2.error && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: Studio_default.alert, role: "alert", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: meeting2.error }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("ol", { className: Studio_default.chat, ref: list, "aria-live": "polite", children: [
+      !meeting2.messages.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("li", { className: Studio_default.chatEmpty, children: t("meetingEmpty", { host: name(meeting2.hostId) }) }),
+      meeting2.messages.map((value) => {
+        const own = value.from === "user";
+        const person = own ? void 0 : employee(value.from);
+        return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("li", { className: Studio_default.bubbleRow, "data-own": own, children: [
+          own ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: Studio_default.avatar, "data-tone": "user", "data-size": "md", "aria-hidden": "true", children: t("userInitial") }) : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Avatar, { id: value.from, name: person?.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.bubbleBody, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { className: Studio_default.bubbleMeta, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: name(value.from) }),
+              person?.role && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: person.role }),
+              value.from === meeting2.hostId && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("em", { children: t("hostTag") }),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("time", { dateTime: value.createdAt, children: formatTime(value.createdAt) })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.bubble, children: [
+              !!value.mentions.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.mentionLine, children: value.mentions.map((id2) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { children: [
+                "@",
+                name(id2)
+              ] }, id2)) }),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.report, children: value.message })
+            ] }),
+            value.nativeSession && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("details", { className: Studio_default.sessionNote, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("summary", { children: [
+                t(value.nativeSession.engine),
+                " \xB7 ",
+                t("nativeSession")
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("code", { children: resumeCommand(value.nativeSession) })
+            ] })
+          ] })
+        ] }, value.id);
+      }),
+      next && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("li", { className: Studio_default.bubbleRow, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Avatar, { id: next, name: name(next) }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: Studio_default.bubbleBody, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.typing, role: "status", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: Studio_default.dots, "aria-hidden": "true", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("i", {}),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("i", {}),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("i", {})
+          ] }),
+          t(meeting2.status === "drafting" ? "draftingNow" : meeting2.speaking ? "speakingNow" : "aboutToSpeak", { name: name(next) }),
+          meeting2.queue.length > (meeting2.speaking ? 0 : 1) && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("small", { children: [
+            " \xB7 ",
+            t("upNext", { names: meeting2.queue.slice(meeting2.speaking ? 0 : 1).map(name).join("\u3001") })
+          ] })
+        ] }) })
+      ] })
+    ] }),
+    meeting2.status === "open" && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("form", { className: Studio_default.chatComposer, onSubmit: (event) => {
+      event.preventDefault();
+      send();
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.mentionChips, role: "group", "aria-label": t("mention"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: Studio_default.muted, children: t("mention") }),
+        meeting2.attendeeIds.map((id2) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: Studio_default.filter,
+            "aria-pressed": mentions.includes(id2),
+            onClick: () => {
+              setMentions(mentions.includes(id2) ? mentions.filter((value) => value !== id2) : [...mentions, id2]);
+            },
+            children: [
+              "@",
+              name(id2)
+            ]
+          },
+          id2
+        ))
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+        "textarea",
+        {
+          "aria-label": t("composerPlaceholder"),
+          placeholder: t("composerPlaceholder"),
+          rows: 3,
+          value: message,
+          onChange: (event) => {
+            setMessage(event.target.value);
+          },
+          onKeyDown: (event) => {
+            if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              send();
+            }
+          }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.composerFoot, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { className: Studio_default.muted, children: [
+          mentions.length ? t("mentionReply", { names: mentions.map(name).join("\u3001") }) : t("hostReply", { name: name(meeting2.hostId) }),
+          " \xB7 ",
+          t("sendShortcut")
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("button", { className: Studio_default.primary, disabled: busy || !message.trim(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Busy, { on: pending === "send" }),
+          t("sendMessage")
+        ] })
+      ] }),
+      failed && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: error || t("failure") })
+    ] }),
+    meeting2.status === "review" && meeting2.minutes && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(MinutesEditor, { meeting: meeting2, minutes: meeting2.minutes, state, busy, error, t, command }),
+    meeting2.status === "closed" && meeting2.minutes && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(MinutesView, { minutes: meeting2.minutes, name, t }),
+    failed && meeting2.status !== "open" && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: error || t("failure") })
+  ] });
+}
+function MinutesEditor({ meeting: meeting2, minutes, state, busy, error, t, command }) {
+  const [draft, setDraft] = (0, import_react3.useState)({ ...minutes, decisionsText: minutes.decisions.join("\n") });
+  const [cwd, setCwd] = (0, import_react3.useState)("");
+  const [sessionMode, setSessionMode] = (0, import_react3.useState)("employee-project");
+  const [failed, setFailed] = (0, import_react3.useState)(false);
+  const [saved, setSaved] = (0, import_react3.useState)(false);
+  const { pending, run } = usePending();
+  const id2 = (0, import_react3.useId)();
+  const candidates = state.employees.filter((employee) => employee.enabled && meeting2.attendeeIds.includes(employee.id));
+  const workspace = state.workspaces.find((value2) => value2.id === meeting2.workspaceId);
+  const value = () => ({
+    summary: draft.summary,
+    projectName: draft.projectName,
+    objective: draft.objective,
+    acceptanceCriteria: draft.acceptanceCriteria,
+    tasks: draft.tasks,
+    decisions: draft.decisionsText.split("\n").map((line) => line.trim()).filter(Boolean)
+  });
+  const setTask = (index, patch) => {
+    setSaved(false);
+    setDraft({ ...draft, tasks: draft.tasks.map((task, position) => position === index ? { ...task, ...patch } : task) });
+  };
+  const move = (index, offset) => {
+    const tasks = [...draft.tasks];
+    const [task] = tasks.splice(index, 1);
+    if (task) tasks.splice(index + offset, 0, task);
+    setDraft({ ...draft, tasks });
+  };
+  const field = (key, label, rows) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t(label) }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("textarea", { rows, value: draft[key], onChange: (event) => {
+      setSaved(false);
+      setDraft({ ...draft, [key]: event.target.value });
+    } })
+  ] });
+  const complete = !!draft.projectName.trim() && !!draft.objective.trim() && draft.tasks.length > 0 && draft.tasks.every((task) => task.title.trim() && task.instruction.trim());
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: Studio_default.minutes, "aria-labelledby": `${id2}-title`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("header", { className: Studio_default.blockHead, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { id: `${id2}-title`, children: t("minutes") }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: Studio_default.muted, children: t("minutesHelp") })
+    ] }),
+    field("summary", "summary", 4),
+    field("decisionsText", "decisions", 3),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.fieldPair, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("projectName") }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { required: true, value: draft.projectName, onChange: (event) => {
+          setSaved(false);
+          setDraft({ ...draft, projectName: event.target.value });
+        } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("projectDirectory") }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { className: Studio_default.mono, placeholder: workspace?.path, value: cwd, onChange: (event) => {
+          setCwd(event.target.value);
+        } })
+      ] })
+    ] }),
+    field("objective", "objective", 2),
+    field("acceptanceCriteria", "acceptanceCriteria", 3),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("fieldset", { className: Studio_default.minutesTasks, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("legend", { children: t("minutesTasks") }),
+      draft.tasks.map((task, index) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.minutesTask, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: Studio_default.step, children: index + 1 }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.minutesTaskFields, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.fieldPair, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("assignee") }),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("select", { value: task.employeeId, onChange: (event) => {
+                setTask(index, { employeeId: event.target.value });
+              }, children: candidates.map((employee) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("option", { value: employee.id, children: [
+                employee.name,
+                employee.role && ` \xB7 ${employee.role}`
+              ] }, employee.id)) })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("taskTitle") }),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { required: true, value: task.title, onChange: (event) => {
+                setTask(index, { title: event.target.value });
+              } })
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.field, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("instruction") }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("textarea", { required: true, rows: 2, value: task.instruction, onChange: (event) => {
+              setTask(index, { instruction: event.target.value });
+            } })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.minutesTaskActions, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", className: Studio_default.ghost, "aria-label": t("moveUp"), disabled: index === 0, onClick: () => {
+            move(index, -1);
+          }, children: "\u2191" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", className: Studio_default.ghost, "aria-label": t("moveDown"), disabled: index === draft.tasks.length - 1, onClick: () => {
+            move(index, 1);
+          }, children: "\u2193" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", className: Studio_default.ghostDanger, "aria-label": t("removeTask"), onClick: () => {
+            setDraft({ ...draft, tasks: draft.tasks.filter((_, position) => position !== index) });
+          }, children: "\xD7" })
+        ] })
+      ] }, index)),
+      !draft.tasks.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.emptyInline, children: t("noMinutesTasks") }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("button", { type: "button", className: Studio_default.ghost, disabled: !candidates.length, onClick: () => {
+        const first = candidates[0];
+        if (first) setDraft({ ...draft, tasks: [...draft.tasks, { employeeId: first.id, title: "", instruction: "" }] });
+      }, children: [
+        "+ ",
+        t("addMinutesTask")
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("fieldset", { className: Studio_default.optionCards, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("legend", { children: t("sessionMode") }),
+      ["employee-project", "new-task"].map((mode) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { type: "radio", name: `${id2}-session`, checked: sessionMode === mode, onChange: () => {
+          setSessionMode(mode);
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: t(mode === "employee-project" ? "employeeSession" : "freshSession") }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("small", { children: t(mode === "employee-project" ? "employeeSessionHelp" : "freshSessionHelp") })
+        ] })
+      ] }, mode))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("footer", { className: Studio_default.formFooter, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("button", { className: Studio_default.primary, disabled: busy || !complete, onClick: () => {
+          void run("project", () => command("meetingProject", { id: meeting2.id, minutes: value(), cwd, sessionMode })).then((ok) => {
+            setFailed(!ok);
+          });
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Busy, { on: pending === "project" }),
+          t("createFromMinutes")
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("button", { className: Studio_default.ghost, disabled: busy, onClick: () => {
+          void run("save", () => command("saveMinutes", { id: meeting2.id, minutes: value() })).then((ok) => {
+            setFailed(!ok);
+            setSaved(ok);
+          });
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Busy, { on: pending === "save" }),
+          t("saveMinutes")
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.ghost, disabled: busy, onClick: () => {
+          void run("resume", () => command("resumeMeeting", { id: meeting2.id })).then((ok) => {
+            setFailed(!ok);
+          });
+        }, children: t("resumeMeeting") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.formStatus, role: "status", "data-state": failed ? "error" : saved ? "ok" : "idle", children: failed ? error || t("failure") : saved ? t("settingsSaved") : complete ? "" : t("minutesIncomplete") })
+    ] })
+  ] });
+}
+function MinutesView({ minutes, name, t }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: Studio_default.minutes, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("header", { className: Studio_default.blockHead, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: t("minutes") }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("dl", { className: Studio_default.facts, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: t("summary") }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.report, children: minutes.summary }) }),
+      !!minutes.decisions.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: t("decisionsShort") }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("ul", { className: Studio_default.pathList, children: minutes.decisions.map((value, index) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("li", { children: [
+          "\xB7 ",
+          value
+        ] }, index)) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: t("projectName") }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: minutes.projectName }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: t("objective") }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.report, children: minutes.objective }) }),
+      minutes.acceptanceCriteria && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: t("acceptanceCriteria") }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.report, children: minutes.acceptanceCriteria }) })
+      ] }),
+      !!minutes.tasks.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dt", { children: t("minutesTasks") }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("ol", { className: Studio_default.pathList, children: minutes.tasks.map((task, index) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("li", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("b", { children: [
+            "#",
+            index + 1
+          ] }),
+          " ",
+          task.title,
+          " \xB7 ",
+          name(task.employeeId)
+        ] }, index)) }) })
+      ] })
     ] })
   ] });
 }
 
+// src/client/ProjectView.tsx
+var import_react4 = require("react");
+var import_jsx_runtime4 = require("react/jsx-runtime");
+function ProjectBar({ state, projects, project, busy, t, command, onSelect }) {
+  const { pending, run } = usePending();
+  const [exported, setExported] = (0, import_react4.useState)("");
+  const tasks = state.tasks.filter((task) => task.projectId === project.id);
+  const stats = projectStats(tasks);
+  const workspace = state.workspaces.find((value) => value.id === project.workspaceId);
+  const anyRunning = tasks.some((task) => task.status === "running");
+  const team = [...new Set(tasks.map((task) => task.employeeId))].map((id2) => ({ id: id2, employee: employeeOf(state.employees, id2) }));
+  const percent2 = stats.active ? Math.round(stats.completed / stats.active * 100) : 0;
+  const act = (key, action) => () => {
+    void run(key, () => command(action, { id: project.id }));
+  };
+  const separator = workspace?.path.includes("\\") ? "\\" : "/";
+  const exportPath = workspace ? [workspace.path.replace(/[\\/]+$/, ""), ".studio", "projects", project.id].join(separator) : "";
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: Studio_default.projectBar, "aria-label": t("project"), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.projectTop, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: Studio_default.projectPicker, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: Studio_default.srOnly, children: t("project") }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("select", { "aria-label": t("project"), value: project.id, onChange: (event) => {
+          setExported("");
+          onSelect(event.target.value);
+        }, children: projects.map((value) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: value.id, children: value.name }, value.id)) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProjectStatus, { status: project.status, t }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: `${Studio_default.actions} ${Studio_default.projectActions}`, children: [
+        project.status === "paused" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("button", { className: Studio_default.primary, disabled: busy || !stats.ready, title: stats.ready ? void 0 : t("noReadyTasks"), onClick: act("start", "startProject"), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Busy, { on: pending === "start" }),
+          t("start")
+        ] }),
+        project.status === "review" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("button", { className: Studio_default.primary, disabled: busy, onClick: act("accept", "acceptProject"), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Busy, { on: pending === "accept" }),
+          t("acceptProject")
+        ] }),
+        project.status === "running" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("button", { disabled: busy, onClick: act("pause", "pauseProject"), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Busy, { on: pending === "pause" }),
+          t("pause")
+        ] }),
+        (project.status === "running" || anyRunning) && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("button", { className: Studio_default.ghostDanger, disabled: busy, onClick: act("stop", "stopProject"), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Busy, { on: pending === "stop" }),
+          t("stop")
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("button", { className: project.status === "completed" ? Studio_default.primary : Studio_default.ghost, disabled: busy, onClick: () => {
+          void run("export", () => command("exportProject", { id: project.id })).then((ok) => {
+            setExported(ok ? exportPath : "");
+          });
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Busy, { on: pending === "export" }),
+          t("exportProject")
+        ] })
+      ] })
+    ] }),
+    exported && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.success, role: "status", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { children: t("exported") }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("code", { children: exported }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { className: Studio_default.ghost, onClick: () => {
+        setExported("");
+      }, children: t("close") })
+    ] }),
+    project.status === "review" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.notice, "data-tone": "review", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { children: t("reviewReady") }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: t("reviewReadyHelp") })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.summaryGrid, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.summaryMain, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: t("objective") }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: Studio_default.objective, children: project.objective }),
+        project.acceptanceCriteria && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: t("acceptanceCriteria") }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: Studio_default.criteria, children: project.acceptanceCriteria })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.summarySide, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.progress, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.progressHead, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: t("progress") }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("strong", { children: t("taskSummary", { done: stats.completed, total: stats.active }) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: Studio_default.bar, role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": percent2, "aria-label": t("progress"), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { style: { width: `${percent2}%` } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("dl", { className: Studio_default.statList, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { "data-tone": "running", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("dt", { children: t("running") }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("dd", { children: stats.running })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { "data-tone": "waiting", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("dt", { children: t("filter_waiting") }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("dd", { children: stats.ready + stats.blocked })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { "data-tone": "review", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("dt", { children: t("awaitingReview") }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("dd", { children: stats.review })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { "data-tone": "attention", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("dt", { children: t("filter_attention") }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("dd", { children: stats.attention })
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: Studio_default.teamStrip, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: Studio_default.muted, children: t("team") }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ul", { children: team.map(({ id: id2, employee }) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { title: `${employee?.name ?? ""}${employee?.role ? ` \xB7 ${employee.role}` : ""}`, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Avatar, { id: id2, name: employee?.name, size: "sm" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: employee?.name ?? t("unknownEmployee") })
+          ] }, id2)) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: Studio_default.metaLine, children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: t(project.sessionMode === "employee-project" ? "employeeSession" : "freshSession") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: `${Studio_default.metaLine} ${Studio_default.mono}`, title: project.cwd, children: project.cwd })
+      ] })
+    ] })
+  ] });
+}
+
+// src/client/ProjectDialog.tsx
+var import_react5 = require("react");
+var import_jsx_runtime5 = require("react/jsx-runtime");
+var empty = { name: "", cwd: "", objective: "", acceptanceCriteria: "", sessionMode: "employee-project", employeeIds: null };
+function ProjectDialog({ open, state, workspace, busy, error, t, command, onClose, onCreated }) {
+  const dialog = (0, import_react5.useRef)(null);
+  const id2 = (0, import_react5.useId)();
+  const [draft, setDraft] = (0, import_react5.useState)(empty);
+  const [failed, setFailed] = (0, import_react5.useState)(false);
+  const { pending, run } = usePending();
+  (0, import_react5.useEffect)(() => {
+    const node = dialog.current;
+    if (!node) return;
+    if (open && !node.open) node.showModal();
+    if (!open && node.open) node.close();
+  }, [open]);
+  const enabled = state.employees.filter((employee) => employee.enabled);
+  const chosen = draft.employeeIds ?? enabled.map((employee) => employee.id);
+  const team = enabled.filter((employee) => chosen.includes(employee.id));
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("dialog", { ref: dialog, className: Studio_default.dialog, "aria-labelledby": `${id2}-title`, onClose, children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("form", { method: "dialog", className: Studio_default.dialogForm, onSubmit: (event) => {
+    event.preventDefault();
+    void run("create", () => command("createProject", { ...draft, workspaceId: workspace.id, employeeIds: team.map((employee) => employee.id) })).then((ok) => {
+      setFailed(!ok);
+      if (ok) {
+        setDraft(empty);
+        onCreated();
+      }
+    });
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("header", { className: Studio_default.dialogHead, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { id: `${id2}-title`, children: t("projectSettings") }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: Studio_default.muted, children: t("projectIn", { name: workspace.name }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", className: Studio_default.iconButton, "aria-label": t("close"), onClick: onClose, children: "\xD7" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: Studio_default.dialogBody, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: t("projectName") }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("input", { required: true, value: draft.name, onChange: (event) => {
+          setDraft({ ...draft, name: event.target.value });
+        } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: t("objective") }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("textarea", { required: true, rows: 3, placeholder: t("objectivePlaceholder"), value: draft.objective, onChange: (event) => {
+          setDraft({ ...draft, objective: event.target.value });
+        } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: t("acceptanceCriteria") }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("textarea", { rows: 3, placeholder: t("criteriaPlaceholder"), value: draft.acceptanceCriteria, onChange: (event) => {
+          setDraft({ ...draft, acceptanceCriteria: event.target.value });
+        } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: t("projectDirectory") }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("input", { className: Studio_default.mono, placeholder: workspace.path, value: draft.cwd, onChange: (event) => {
+          setDraft({ ...draft, cwd: event.target.value });
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("small", { className: Studio_default.muted, children: t("projectDirectoryHelp") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("fieldset", { className: Studio_default.optionCards, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("legend", { children: t("sessionMode") }),
+        ["employee-project", "new-task"].map((mode) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("input", { type: "radio", name: `${id2}-session`, checked: draft.sessionMode === mode, onChange: () => {
+            setDraft({ ...draft, sessionMode: mode });
+          } }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: t(mode === "employee-project" ? "employeeSession" : "freshSession") }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("small", { children: t(mode === "employee-project" ? "employeeSessionHelp" : "freshSessionHelp") })
+          ] })
+        ] }, mode))
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("fieldset", { className: Studio_default.teamPicker, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("legend", { children: [
+          t("selectTeam"),
+          " ",
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("small", { children: [
+            "\xB7 ",
+            t("selectedCount", { count: team.length })
+          ] })
+        ] }),
+        enabled.map((employee) => {
+          const order2 = team.findIndex((value) => value.id === employee.id);
+          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { "data-checked": order2 >= 0, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("input", { type: "checkbox", checked: order2 >= 0, onChange: (event) => {
+              setDraft({ ...draft, employeeIds: event.target.checked ? [...chosen, employee.id] : chosen.filter((value) => value !== employee.id) });
+            } }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: Studio_default.order, children: order2 >= 0 ? order2 + 1 : "" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Avatar, { id: employee.id, name: employee.name, size: "sm" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { className: Studio_default.rosterText, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: employee.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("small", { children: employee.role || t("noRole") })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(EngineTag, { engine: employee.engine, t })
+          ] }, employee.id);
+        }),
+        !enabled.length && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: Studio_default.inlineError, children: t("noEnabledEmployees") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: Studio_default.hint, children: [
+        t("roleTask"),
+        " ",
+        t("nativeSessionHelp")
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("footer", { className: Studio_default.dialogFoot, children: [
+      failed && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: error || t("failure") }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", className: Studio_default.ghost, onClick: onClose, children: t("cancelAction") }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("button", { type: "submit", className: Studio_default.primary, disabled: busy || !team.length, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Busy, { on: pending === "create" }),
+        t("createProject")
+      ] })
+    ] })
+  ] }) });
+}
+
 // src/client/TaskBoard.tsx
-var import_react2 = require("react");
-var import_jsx_runtime2 = require("react/jsx-runtime");
-function TaskBoard({ state, project, busy, t, command }) {
+var import_react8 = require("react");
+
+// src/client/TaskDetail.tsx
+var import_react7 = require("react");
+
+// src/client/ArtifactList.tsx
+var import_react6 = require("react");
+var import_jsx_runtime6 = require("react/jsx-runtime");
+var order = ["image", "document", "web", "code", "data", "other"];
+var textLimit = 64 * 1024;
+function ArtifactList({ artifacts, t }) {
+  if (!artifacts.length) return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: Studio_default.emptyInline, children: t("noArtifacts") });
+  const sorted = [...artifacts].sort((a, b) => order.indexOf(fileKind(a.name)) - order.indexOf(fileKind(b.name)));
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { className: Studio_default.fileGrid, children: sorted.map((file) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(ArtifactItem, { file, t }, file.id)) });
+}
+function ArtifactItem({ file, t }) {
+  const kind = fileKind(file.name);
+  const type = imageType(file.name);
+  const [image, setImage] = (0, import_react6.useState)("");
+  const [text2, setText] = (0, import_react6.useState)(null);
+  const [open, setOpen] = (0, import_react6.useState)(false);
+  const [failed, setFailed] = (0, import_react6.useState)(false);
+  (0, import_react6.useEffect)(() => {
+    if (!type || file.size > 8 * 1024 * 1024) return;
+    const controller = new AbortController();
+    let url = "";
+    void fetch(artifactUrl(file), { signal: controller.signal, credentials: "same-origin" }).then(async (response) => {
+      if (!response.ok) throw new Error(String(response.status));
+      url = URL.createObjectURL(new Blob([await response.arrayBuffer()], { type }));
+      setImage(url);
+    }).catch(() => {
+      if (!controller.signal.aborted) setFailed(true);
+    });
+    return () => {
+      controller.abort();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [file.id, type]);
+  const toggle = () => {
+    setOpen((value) => !value);
+    if (text2 !== null) return;
+    void fetch(artifactUrl(file), { credentials: "same-origin" }).then(async (response) => {
+      if (!response.ok) throw new Error(String(response.status));
+      const body = await response.text();
+      setText(body.length > textLimit ? `${body.slice(0, textLimit)}
+\u2026` : body);
+    }).catch(() => {
+      setFailed(true);
+    });
+  };
+  const base = file.name.split(/[\\/]/).at(-1) ?? file.name;
+  const folder = file.name.slice(0, file.name.length - base.length);
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("li", { className: Studio_default.fileCard, "data-kind": kind, children: [
+    image && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("a", { className: Studio_default.thumb, href: image, target: "_blank", rel: "noreferrer", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("img", { src: image, alt: base, onError: () => {
+      setImage("");
+      setFailed(true);
+    } }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: Studio_default.fileRow, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: Studio_default.fileIcon, "data-kind": kind, "aria-hidden": "true", children: t(`kind_${kind}`) }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: Studio_default.fileName, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { title: file.name, children: base }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("small", { children: [
+          folder && /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: Studio_default.mono, children: [
+            folder,
+            " \xB7 "
+          ] }),
+          formatSize(file.size),
+          " \xB7 ",
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: Studio_default.mono, title: file.sha256, children: file.sha256.slice(0, 10) })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: Studio_default.fileActions, children: [
+        previewableText(file) && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: Studio_default.ghost, "aria-expanded": open, onClick: toggle, children: t(open ? "hidePreview" : "preview") }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("a", { className: Studio_default.linkButton, href: artifactUrl(file), download: true, children: t("download") })
+      ] })
+    ] }),
+    failed && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: Studio_default.inlineError, children: t("previewFailed") }),
+    open && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("pre", { className: Studio_default.codePreview, children: text2 ?? t("loading") })
+  ] });
+}
+
+// src/client/TaskDetail.tsx
+var import_jsx_runtime7 = require("react/jsx-runtime");
+function TaskDetail({ task, tasks, state, project, busy, t, command, onSelect, onEdit }) {
+  const [changes, setChanges] = (0, import_react7.useState)("");
+  const { pending, run } = usePending();
+  const phase = taskPhase(task, tasks);
+  const owner = employeeOf(state.employees, task.employeeId);
+  const step = (value) => `#${tasks.indexOf(value) + 1}`;
+  const waiting = waitingOn(task, tasks);
+  const original = revisionOf(task, tasks);
+  const revisions = revisionsFor(task, tasks);
+  const request = changeRequest(task, state.messages);
+  const artifacts = state.artifacts.filter((file) => file.taskId === task.id);
+  const handoffs = state.messages.filter((message) => message.taskId === task.id && message.id !== request?.id);
+  const name = (id2) => id2 === "user" ? t("user") : id2 === "team" ? t("everyone") : employeeOf(state.employees, id2)?.name ?? t("unknownEmployee");
+  const link = (value) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("button", { className: Studio_default.taskLink, onClick: () => {
+    onSelect(value.id);
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("b", { children: step(value) }),
+    value.title,
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(TaskStatus, { phase: taskPhase(value, tasks), t })
+  ] }, value.id);
+  const canReview = task.status === "completed" && task.reviewStatus !== "superseded";
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("article", { className: Studio_default.detailCard, "aria-labelledby": `task-${task.id}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("header", { className: Studio_default.detailHead, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.detailTitle, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: Studio_default.stepLarge, children: step(task) }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { id: `task-${task.id}`, children: task.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: Studio_default.taskOwner, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Avatar, { id: task.employeeId, name: owner?.name, size: "sm" }),
+            owner?.name ?? t("unknownEmployee"),
+            owner?.role && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("small", { children: [
+              " \xB7 ",
+              owner.role
+            ] })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.detailBadges, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(TaskStatus, { phase, t }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(ReviewStatus, { task, t })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.actions, children: [
+        task.status === "pending" && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: Studio_default.ghost, onClick: onEdit, children: t("edit") }),
+        ["failed", "cancelled", "interrupted"].includes(task.status) && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("button", { className: Studio_default.primary, disabled: busy, onClick: () => {
+          void run("retry", () => command("retryTask", { id: task.id }));
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Busy, { on: pending === "retry" }),
+          t("retry")
+        ] }),
+        ["pending", "running"].includes(task.status) && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("button", { className: Studio_default.ghostDanger, disabled: busy, onClick: () => {
+          void run("cancel", () => command("cancelTask", { id: task.id }));
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Busy, { on: pending === "cancel" }),
+          t("cancel")
+        ] })
+      ] })
+    ] }),
+    task.error && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.alert, role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: t("failureReason") }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: task.error })
+    ] }),
+    !!waiting.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.notice, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: t("waitingTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: Studio_default.linkList, children: waiting.map(link) })
+    ] }),
+    task.status === "running" && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.notice, "data-tone": "running", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: t("runningNotice", { name: owner?.name ?? "" }) }),
+      task.startedAt && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: t("startedAt", { time: formatTime(task.startedAt) }) })
+    ] }),
+    original && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.revisionCard, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: t("revisionOf") }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: Studio_default.linkList, children: link(original) }),
+      request && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("blockquote", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { children: t("changeInstruction") }),
+        request.message
+      ] })
+    ] }),
+    !!revisions.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.revisionCard, "data-kind": "superseded", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: t("supersededBy") }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: Studio_default.linkList, children: revisions.map(link) }),
+      revisions.map((value) => changeRequest(value, state.messages)).filter(Boolean).map((value) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("blockquote", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { children: t("changeInstruction") }),
+        value?.message
+      ] }, value?.id))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Section, { title: t("result"), children: task.result ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("pre", { className: Studio_default.report, children: task.result }) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: Studio_default.emptyInline, children: t("noResult") }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Section, { title: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+      t("artifacts"),
+      !!artifacts.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("small", { children: [
+        " \xB7 ",
+        artifacts.length
+      ] })
+    ] }), children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(ArtifactList, { artifacts, t }) }),
+    canReview && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Section, { title: t("reviewResult"), children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("form", { className: Studio_default.reviewForm, onSubmit: (event) => {
+      event.preventDefault();
+      void run("changes", () => command("requestChanges", { id: task.id, instruction: changes })).then((ok) => {
+        if (ok) setChanges("");
+      });
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: t("changeInstruction") }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("textarea", { required: true, rows: 3, placeholder: t("changePlaceholder"), value: changes, onChange: (event) => {
+          setChanges(event.target.value);
+        } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("button", { disabled: busy || project.status === "running", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Busy, { on: pending === "changes" }),
+          t("requestChanges")
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: Studio_default.muted, children: t(project.status === "running" ? "pauseBeforeChanges" : "changesHelp") })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Section, { title: t("overview"), children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("dl", { className: Studio_default.facts, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dt", { children: t("instruction") }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("pre", { className: Studio_default.report, children: task.instruction }) }),
+      !!task.dependsOn.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dt", { children: t("dependencies") }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dd", { className: Studio_default.linkList, children: task.dependsOn.map((id2) => tasks.find((value) => value.id === id2)).filter((value) => !!value).map(link) })
+      ] }),
+      !!task.outputFiles.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dt", { children: t("declaredFiles") }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ul", { className: Studio_default.pathList, children: task.outputFiles.map((file) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("li", { className: Studio_default.mono, children: file }, file)) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dt", { children: t("attempt") }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dd", { children: task.attempt }),
+      task.startedAt && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("dt", { children: t("timeline") }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("dd", { children: [
+          formatTime(task.startedAt),
+          task.finishedAt && ` \u2192 ${formatTime(task.finishedAt)}`
+        ] })
+      ] })
+    ] }) }),
+    !!handoffs.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Section, { title: t("relatedHandoffs"), children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ul", { className: Studio_default.miniTimeline, children: handoffs.map((message) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: Studio_default.handoffMeta, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: name(message.from) }),
+        " \u2192 ",
+        name(message.to),
+        " \xB7 ",
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("time", { dateTime: message.createdAt, children: formatTime(message.createdAt) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("pre", { className: Studio_default.report, children: message.message })
+    ] }, message.id)) }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("details", { className: Studio_default.disclosure, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("summary", { children: [
+        t("executionInfo"),
+        !!task.nativeSessions.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("small", { children: [
+          " \xB7 ",
+          t("sessionCount", { count: task.nativeSessions.length })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.disclosureBody, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: Studio_default.hint, children: t("nativeSessionHelp") }),
+        task.nativeSessions.map((session) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.session, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: t(session.engine) }),
+            " \xB7 ",
+            t(session.continued ? "continuedSession" : "newSession"),
+            " \xB7 ",
+            t("attemptN", { n: session.attempt })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(CopyLine, { text: resumeCommand(session), t }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: `${Studio_default.muted} ${Studio_default.mono}`, children: session.cwd })
+        ] }, `${session.id}-${session.attempt}`)),
+        !task.nativeSessions.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: Studio_default.muted, children: t("noSessions") }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h4", { children: t("assignment") }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("pre", { className: Studio_default.report, children: task.assignment || task.instruction })
+      ] })
+    ] })
+  ] });
+}
+function CopyLine({ text: text2, t }) {
+  const [copied, setCopied] = (0, import_react7.useState)(false);
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: Studio_default.copyLine, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("code", { children: text2 }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: Studio_default.ghost, onClick: () => {
+      void navigator.clipboard.writeText(text2).then(() => {
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 1500);
+      });
+    }, children: t(copied ? "copied" : "copy") })
+  ] });
+}
+
+// src/client/TaskBoard.tsx
+var import_jsx_runtime8 = require("react/jsx-runtime");
+var filters = {
+  all: [],
+  active: ["running"],
+  waiting: ["pending", "blocked"],
+  done: ["completed"],
+  attention: ["failed", "interrupted", "cancelled"]
+};
+function TaskBoard({ state, project, busy, error, t, command, selected, onSelect }) {
   const tasks = state.tasks.filter((task2) => task2.projectId === project.id);
-  const [selected, setSelected] = (0, import_react2.useState)(tasks[0]?.id ?? null);
-  const [draft, setDraft] = (0, import_react2.useState)(null);
-  const task = tasks.find((value) => value.id === selected);
-  const [changes, setChanges] = (0, import_react2.useState)("");
+  const [filter, setFilter] = (0, import_react8.useState)("all");
+  const [draft, setDraft] = (0, import_react8.useState)(null);
+  const detail = (0, import_react8.useRef)(null);
+  const task = tasks.find((value) => value.id === selected) ?? tasks[0];
+  const stats = projectStats(tasks);
+  const counts = { all: stats.total, active: stats.running, waiting: stats.ready + stats.blocked, done: stats.completed, attention: stats.attention };
+  const shown = filter === "all" ? tasks : tasks.filter((value) => filters[filter].includes(taskPhase(value, tasks)));
   const edit = (value) => {
     setDraft({
       id: value?.id ?? null,
@@ -1257,186 +2486,425 @@ function TaskBoard({ state, project, busy, t, command }) {
       dependsOn: value?.dependsOn ?? [],
       files: value?.outputFiles.join("\n") ?? ""
     });
+    reveal();
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.split, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: Studio_default.list, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.hint, children: project.objective }),
-      project.acceptanceCriteria && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: Studio_default.hint, children: [
-        t("acceptanceCriteria"),
-        ": ",
-        project.acceptanceCriteria
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.hint, children: t("exportLocation", { path: `.studio/projects/${project.id}/` }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.sectionHeading, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: t("tasks") }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: Studio_default.primary, disabled: busy, onClick: () => {
+  const reveal = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1100px)").matches) {
+      requestAnimationFrame(() => {
+        detail.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  };
+  const select = (id2) => {
+    onSelect(id2);
+    setDraft(null);
+    reveal();
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: Studio_default.workArea, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: Studio_default.listPane, "aria-label": t("tasks"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: Studio_default.paneHead, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: t("tasks") }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: Studio_default.muted, children: t("taskSummary", { done: stats.completed, total: stats.active }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: Studio_default.primary, disabled: busy, onClick: () => {
           edit();
         }, children: t("addTask") })
       ] }),
-      tasks.map((value) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { className: `${Studio_default.taskRow} ${selected === value.id ? Studio_default.selectedRow : ""}`, onClick: () => {
-        setSelected(value.id);
-        setDraft(null);
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: value.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("small", { children: [
-            state.employees.find((employee) => employee.id === value.employeeId)?.name,
-            value.reviewStatus === "superseded" && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
-              " \xB7 ",
-              t("superseded")
-            ] })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: Studio_default.filterRow, role: "group", "aria-label": t("filterTasks"), children: Object.keys(filters).map((key) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("button", { className: Studio_default.filter, "aria-pressed": filter === key, onClick: () => {
+        setFilter(key);
+      }, "data-tone": key, children: [
+        t(`filter_${key}`),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: counts[key] })
+      ] }, key)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ol", { className: Studio_default.pipeline, children: shown.map((value) => {
+        const phase = taskPhase(value, tasks);
+        const owner = employeeOf(state.employees, value.employeeId);
+        const waiting = phase === "blocked" ? waitingOn(value, tasks) : [];
+        const original = revisionOf(value, tasks);
+        return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("li", { "data-status": phase, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("button", { className: Studio_default.taskItem, "aria-current": task?.id === value.id ? "true" : void 0, onClick: () => {
+          select(value.id);
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: Studio_default.step, children: tasks.indexOf(value) + 1 }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: Studio_default.taskMain, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: value.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: Studio_default.taskOwner, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(Avatar, { id: value.employeeId, name: owner?.name, size: "sm" }),
+              owner?.name ?? t("unknownEmployee"),
+              owner?.role && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("small", { children: [
+                " \xB7 ",
+                owner.role
+              ] })
+            ] }),
+            !!waiting.length && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { className: Studio_default.reason, children: t("waitingFor", { names: waiting.map((dependency) => `#${tasks.indexOf(dependency) + 1}`).join("\u3001") }) }),
+            original && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("small", { className: Studio_default.reason, "data-kind": "revision", children: t("revisionOfShort", { step: tasks.indexOf(original) + 1 }) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: Studio_default.taskBadges, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(TaskStatus, { phase, t }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ReviewStatus, { task: value, t })
           ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: Studio_default.status, "data-status": value.status, children: t(value.status === "pending" && !value.dependsOn.every((id2) => tasks.find((dependency) => dependency.id === id2)?.status === "completed") ? "blocked" : value.status) })
-      ] }, value.id)),
-      !tasks.length && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.empty, children: t("noTasks") })
+        ] }) }, value.id);
+      }) }),
+      !tasks.length && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: Studio_default.emptyState, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: t("noTasks") }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: t("noTasksHelp") })
+      ] }),
+      !!tasks.length && !shown.length && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: Studio_default.emptyInline, children: t("noFilteredTasks") })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("section", { className: Studio_default.editor, children: draft ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("form", { onSubmit: (event) => {
-      event.preventDefault();
-      const input = {
-        projectId: project.id,
-        employeeId: draft.employeeId,
-        title: draft.title,
-        instruction: draft.instruction,
-        dependsOn: draft.dependsOn,
-        outputFiles: draft.files.split("\n").map((name) => name.trim()).filter(Boolean)
-      };
-      void command(draft.id ? "editTask" : "createTask", draft.id ? { id: draft.id, task: input } : input).then((ok) => {
-        if (ok) setDraft(null);
-      });
-    }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: t(draft.id ? "edit" : "addTask") }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: Studio_default.stackedField, children: [
-        t("employees"),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("select", { required: true, value: draft.employeeId, onChange: (event) => {
-          setDraft({ ...draft, employeeId: event.target.value });
-        }, children: state.employees.filter((employee) => employee.enabled).map((employee) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("option", { value: employee.id, children: [
-          employee.name,
-          " \xB7 ",
-          employee.role
-        ] }, employee.id)) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: Studio_default.stackedField, children: [
-        t("taskTitle"),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("input", { required: true, value: draft.title, onChange: (event) => {
-          setDraft({ ...draft, title: event.target.value });
-        } })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: Studio_default.stackedField, children: [
-        t("instruction"),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { required: true, rows: 5, value: draft.instruction, onChange: (event) => {
-          setDraft({ ...draft, instruction: event.target.value });
-        } })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("fieldset", { className: Studio_default.checklist, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("legend", { children: t("dependencies") }),
-        tasks.filter((value) => value.id !== draft.id).map((value) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: Studio_default.check, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("input", { type: "checkbox", checked: draft.dependsOn.includes(value.id), onChange: (event) => {
-            setDraft({ ...draft, dependsOn: event.target.checked ? [...draft.dependsOn, value.id] : draft.dependsOn.filter((id2) => id2 !== value.id) });
-          } }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: Studio_default.detailPane, ref: detail, children: draft ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(TaskForm, { draft, setDraft, tasks, state, project, busy, error, t, command }) : task ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(TaskDetail, { task, tasks, state, project, busy, t, command, onSelect: select, onEdit: () => {
+      edit(task);
+    } }, task.id) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: Studio_default.emptyState, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: t("selectTask") }) }) })
+  ] });
+}
+function TaskForm({ draft, setDraft, tasks, state, project, busy, error, t, command }) {
+  const { pending, run } = usePending();
+  const [failed, setFailed] = (0, import_react8.useState)(false);
+  const first = (0, import_react8.useRef)(null);
+  (0, import_react8.useEffect)(() => {
+    first.current?.focus();
+  }, [draft.id]);
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("form", { className: Studio_default.editorCard, onSubmit: (event) => {
+    event.preventDefault();
+    const input = {
+      projectId: project.id,
+      employeeId: draft.employeeId,
+      title: draft.title,
+      instruction: draft.instruction,
+      dependsOn: draft.dependsOn,
+      outputFiles: draft.files.split("\n").map((name) => name.trim()).filter(Boolean)
+    };
+    void run("save", () => command(draft.id ? "editTask" : "createTask", draft.id ? { id: draft.id, task: input } : input)).then((ok) => {
+      setFailed(!ok);
+      if (ok) setDraft(null);
+    });
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("header", { className: Studio_default.detailHead, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: t(draft.id ? "editTask" : "addTask") }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: Studio_default.field, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: t("assignee") }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("select", { ref: first, required: true, value: draft.employeeId, onChange: (event) => {
+        setDraft({ ...draft, employeeId: event.target.value });
+      }, children: state.employees.filter((employee) => employee.enabled || employee.id === draft.employeeId).map((employee) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("option", { value: employee.id, children: [
+        employee.name,
+        employee.role && ` \xB7 ${employee.role}`
+      ] }, employee.id)) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: Studio_default.field, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: t("taskTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("input", { required: true, value: draft.title, onChange: (event) => {
+        setDraft({ ...draft, title: event.target.value });
+      } })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: Studio_default.field, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: t("instruction") }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { required: true, rows: 6, value: draft.instruction, onChange: (event) => {
+        setDraft({ ...draft, instruction: event.target.value });
+      } })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("fieldset", { className: Studio_default.checkList, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("legend", { children: t("dependencies") }),
+      tasks.filter((value) => value.id !== draft.id).map((value) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("input", { type: "checkbox", checked: draft.dependsOn.includes(value.id), onChange: (event) => {
+          setDraft({ ...draft, dependsOn: event.target.checked ? [...draft.dependsOn, value.id] : draft.dependsOn.filter((id2) => id2 !== value.id) });
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("b", { children: [
+            "#",
+            tasks.indexOf(value) + 1
+          ] }),
+          " ",
           value.title
-        ] }, value.id))
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: Studio_default.stackedField, children: [
-        t("files"),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { rows: 3, value: draft.files, onChange: (event) => {
-          setDraft({ ...draft, files: event.target.value });
-        } })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.actions, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: Studio_default.primary, disabled: busy, children: t("save") }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => {
+        ] })
+      ] }, value.id)),
+      tasks.length <= (draft.id ? 1 : 0) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: Studio_default.muted, children: t("noDependencies") })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: Studio_default.field, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: t("files") }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { className: Studio_default.mono, rows: 3, value: draft.files, onChange: (event) => {
+        setDraft({ ...draft, files: event.target.value });
+      } })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("footer", { className: Studio_default.formFooter, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("button", { className: Studio_default.primary, disabled: busy, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(Busy, { on: pending === "save" }),
+          t(pending === "save" ? "saving" : "save")
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", className: Studio_default.ghost, onClick: () => {
           setDraft(null);
         }, children: t("close") })
-      ] })
-    ] }) : task ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: t("lastResult") }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h3", { children: task.title }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: Studio_default.hint, children: [
-        t("attempt"),
-        ": ",
-        task.attempt
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: Studio_default.actions, children: [
-        task.status === "pending" && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { onClick: () => {
-          edit(task);
-        }, children: t("edit") }),
-        ["failed", "cancelled", "interrupted"].includes(task.status) && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { disabled: busy, onClick: () => {
-          void command("retryTask", { id: task.id });
-        }, children: t("retry") }),
-        ["pending", "running"].includes(task.status) && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: Studio_default.danger, disabled: busy, onClick: () => {
-          void command("cancelTask", { id: task.id });
-        }, children: t("cancel") })
-      ] }),
-      task.error && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { role: "alert", className: Studio_default.error, children: task.error }),
-      task.status === "completed" && task.reviewStatus !== "superseded" && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("form", { onSubmit: (event) => {
-        event.preventDefault();
-        void command("requestChanges", { id: task.id, instruction: changes }).then((ok) => {
-          if (ok) setChanges("");
-        });
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: Studio_default.stackedField, children: [
-          t("changeInstruction"),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { required: true, rows: 3, value: changes, onChange: (event) => {
-            setChanges(event.target.value);
-          } })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { disabled: busy || project.status === "running", children: t("requestChanges") })
-      ] }),
-      task.status === "completed" && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.hint, children: t(task.reviewStatus === "superseded" ? "superseded" : task.reviewStatus === "accepted" ? "accepted" : "awaitingReview") }),
-      !!task.nativeSessions.length && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("details", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("summary", { children: t("nativeSessions") }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.hint, children: t("nativeSessionHelp") }),
-        task.nativeSessions.map((session) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("strong", { children: [
-            t(session.engine),
-            " \xB7 ",
-            t(session.continued ? "continuedSession" : "newSession")
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("pre", { className: Studio_default.report, children: session.engine === "claude" ? `claude --resume ${session.id}` : session.engine === "codex" ? `codex resume ${session.id}` : session.id }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.hint, children: session.cwd })
-        ] }, `${session.id}-${session.attempt}`))
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h3", { children: t("result") }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("pre", { className: Studio_default.report, children: task.result || t("noResult") }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h3", { children: t("artifacts") }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { className: Studio_default.fileList, children: state.artifacts.filter((file) => file.taskId === task.id).map((file) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("li", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("a", { href: `/api/studio/artifact?id=${encodeURIComponent(file.id)}`, download: true, children: file.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("small", { children: t("fileMetadata", { size: Math.ceil(file.size / 1024), hash: file.sha256.slice(0, 12) }) })
-      ] }, file.id)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("details", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("summary", { children: t("assignment") }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("pre", { className: Studio_default.report, children: task.assignment || task.instruction })
-      ] })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: Studio_default.empty, children: t("noTasks") }) })
+      failed && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: error || t("failure") })
+    ] })
   ] });
 }
 
-// src/client/StudioPanel.tsx
-var import_jsx_runtime3 = require("react/jsx-runtime");
-function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, t }) {
-  const view = useStudio((snapshot) => snapshot);
-  const state = view.state;
-  const [tab, setTab] = (0, import_react3.useState)("employees");
-  const [selectedEmployee, setSelectedEmployee] = (0, import_react3.useState)(null);
-  const [newEmployee, setNewEmployee] = (0, import_react3.useState)(null);
-  const [projectId, setProjectId] = (0, import_react3.useState)(null);
-  const [projectDraft, setProjectDraft] = (0, import_react3.useState)({ name: "", cwd: "", objective: "", employeeIds: null });
-  const [projectForm, setProjectForm] = (0, import_react3.useState)(false);
-  const [message, setMessage] = (0, import_react3.useState)("");
-  const [recipient, setRecipient] = (0, import_react3.useState)("team");
-  const [workspaceDraft, setWorkspaceDraft] = (0, import_react3.useState)({ name: "", path: "" });
-  const [workspaceError, setWorkspaceError] = (0, import_react3.useState)("");
-  const [workspaceForm, setWorkspaceForm] = (0, import_react3.useState)(false);
-  const [acceptanceCriteria, setAcceptanceCriteria] = (0, import_react3.useState)("");
-  const [sessionMode, setSessionMode] = (0, import_react3.useState)("employee-project");
-  const workspace = state?.workspaces.find((value) => value.id === state.activeWorkspaceId);
-  const projects = state?.projects.filter((value) => value.workspaceId === workspace?.id) ?? [];
-  const employee = newEmployee ?? state?.employees.find((value) => value.id === selectedEmployee) ?? state?.employees[0];
-  const project = projects.find((value) => value.id === projectId) ?? projects.at(-1);
-  const draftEmployee = () => {
+// src/client/TeamView.tsx
+var import_react10 = require("react");
+
+// ../../../deepseek-harness/packages/util/crypto/lib/index.js
+function randomUUID() {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  const hex = Array.from(bytes, (byte, index) => {
+    return (index === 6 ? byte & 15 | 64 : index === 8 ? byte & 63 | 128 : byte).toString(16).padStart(2, "0");
+  }).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// src/client/EmployeeEditor.tsx
+var import_react9 = require("react");
+var import_jsx_runtime9 = require("react/jsx-runtime");
+var efforts = {
+  claude: ["", "low", "medium", "high", "xhigh", "max"],
+  codex: ["", "low", "medium", "high", "xhigh", "max", "ultra"],
+  harness: ["", "off", "low", "high", "max"],
+  compatible: ["", "minimal", "low", "medium", "high", "xhigh"]
+};
+var engines = ["codex", "claude", "harness", "compatible"];
+function EmployeeEditor({ employee, catalog, busy, isNew, error, t, save, remove }) {
+  const [draft, setDraft] = (0, import_react9.useState)(employee);
+  const [customModel, setCustomModel] = (0, import_react9.useState)(false);
+  const [outcome, setOutcome] = (0, import_react9.useState)("idle");
+  const [confirmDelete, setConfirmDelete] = (0, import_react9.useState)(false);
+  const id2 = (0, import_react9.useId)();
+  const change = (key, value) => {
+    setOutcome("idle");
+    setDraft((previous) => ({ ...previous, [key]: value }));
+  };
+  const models = draft.engine === "compatible" ? void 0 : catalog?.[draft.engine === "claude" ? "claude" : draft.engine === "codex" ? "codex" : "harness"];
+  const selectedModel = models?.find((model2) => model2.id === draft.model);
+  const isCustomModel = customModel || draft.engine === "compatible" || !!draft.model && !selectedModel;
+  const effortOptions = selectedModel?.efforts.length ? ["", ...selectedModel.efforts] : efforts[draft.engine];
+  const dirty = isNew || JSON.stringify(draft) !== JSON.stringify(employee);
+  const text2 = (key, placeholder = "", required = false) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.field, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t(key) }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { required, value: draft[key], placeholder, onChange: (event) => {
+      change(key, event.target.value);
+    } })
+  ] });
+  const pickModel = (model2) => {
+    setOutcome("idle");
+    setDraft((previous) => ({ ...previous, model: model2, effort: "" }));
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("form", { className: Studio_default.editorCard, "aria-labelledby": `${id2}-title`, onSubmit: (event) => {
+    event.preventDefault();
+    setOutcome("saving");
+    void save(draft).then((ok) => {
+      setOutcome(ok ? "saved" : "failed");
+    });
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("header", { className: Studio_default.editorHead, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Avatar, { id: draft.id, name: draft.name, size: "lg" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { id: `${id2}-title`, children: draft.name || t("newEmployee") }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { children: [
+          draft.role || t("noRole"),
+          !draft.enabled && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+            " \xB7 ",
+            t("disabled")
+          ] })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("fieldset", { className: Studio_default.formGroup, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("legend", { children: t("profile") }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: Studio_default.fieldPair, children: [
+        text2("name", "", true),
+        text2("role")
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t("responsibilities") }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("textarea", { rows: 3, value: draft.responsibilities, onChange: (event) => {
+          change("responsibilities", event.target.value);
+        } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.switch, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "checkbox", checked: draft.enabled, onChange: (event) => {
+          change("enabled", event.target.checked);
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t("enabled") })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("fieldset", { className: Studio_default.formGroup, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("legend", { children: t("execution") }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: Studio_default.segmented, role: "radiogroup", "aria-label": t("engine"), children: engines.map((engine2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { "data-engine": engine2, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "radio", name: `${id2}-engine`, value: engine2, checked: draft.engine === engine2, onChange: () => {
+          setCustomModel(false);
+          setOutcome("idle");
+          setDraft((previous) => ({ ...previous, engine: engine2, model: engine2 === "claude" ? "sonnet" : "", effort: "", thinkingFormat: engine2 === "compatible" ? "zai" : "none" }));
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t(engine2) })
+      ] }, engine2)) }),
+      draft.engine !== "compatible" && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        ModelPicker,
+        {
+          t,
+          name: `${id2}-model`,
+          models,
+          value: draft.model,
+          custom: isCustomModel,
+          loadError: draft.engine === "claude" ? catalog?.claudeError ?? "" : "",
+          onPick: (model2) => {
+            setCustomModel(false);
+            pickModel(model2);
+          },
+          onCustom: () => {
+            setCustomModel(true);
+            setOutcome("idle");
+          }
+        }
+      ),
+      isCustomModel && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t("modelId") }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { "aria-label": t("modelId"), className: Studio_default.mono, value: draft.model, placeholder: t("modelIdPlaceholder"), onChange: (event) => {
+          pickModel(event.target.value);
+        } })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { id: `${id2}-effort`, children: [
+          t("effort"),
+          selectedModel && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("small", { children: [
+            " \xB7 ",
+            selectedModel.name
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: Studio_default.chips, role: "radiogroup", "aria-labelledby": `${id2}-effort`, children: effortOptions.map((effort) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.chip, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "radio", name: `${id2}-effort`, checked: draft.effort === effort, onChange: () => {
+            change("effort", effort);
+          } }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: effort || t("nativeDefault") })
+        ] }, effort || "default")) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: Studio_default.hint, children: t(draft.engine === "compatible" ? "providerHelp" : "nativeHelp") }),
+      draft.engine === "compatible" && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: Studio_default.fieldPair, children: [
+          text2("baseURL"),
+          text2("apiKeyEnv")
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.field, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t("thinkingFormat") }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("select", { "aria-label": t("thinkingFormat"), value: draft.thinkingFormat, onChange: (event) => {
+            change("thinkingFormat", event.target.value);
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "none", children: t("protocolNone") }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "zai", children: t("zai") }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "deepseek", children: t("deepseekProtocol") })
+          ] })
+        ] })
+      ] }),
+      (draft.engine === "compatible" || draft.engine === "harness") && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: Studio_default.fieldPair, children: ["contextWindow", "maxTokens"].map((key) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t(key) }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "number", min: key === "contextWindow" ? 1024 : 1, value: draft[key], onChange: (event) => {
+          change(key, Number(event.target.value));
+        } })
+      ] }, key)) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("fieldset", { className: Studio_default.formGroup, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("legend", { children: t("workplace") }),
+      text2("cwd", t("unassignedCwd")),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.field, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: t("permission") }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("select", { "aria-label": t("permission"), value: draft.permission, onChange: (event) => {
+          change("permission", event.target.value);
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "read-only", children: t("readOnly") }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "workspace-write", children: t("workspaceWrite") }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "full-access", children: t("fullAccess") })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("footer", { className: Studio_default.formFooter, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("button", { type: "submit", className: Studio_default.primary, disabled: busy || !dirty, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Busy, { on: outcome === "saving" }),
+          t(outcome === "saving" ? "saving" : "save")
+        ] }),
+        confirmDelete ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: Studio_default.dangerSolid, disabled: busy, onClick: () => {
+            setOutcome("deleting");
+            void remove(draft.id).then((ok) => {
+              setConfirmDelete(false);
+              setOutcome(ok ? "idle" : "failed");
+            });
+          }, children: t("confirmDelete") }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: Studio_default.ghost, onClick: () => {
+            setConfirmDelete(false);
+          }, children: t("cancelAction") })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", className: Studio_default.ghostDanger, disabled: busy, onClick: () => {
+          setConfirmDelete(true);
+        }, children: t(isNew ? "discard" : "delete") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: Studio_default.formStatus, role: "status", "data-state": outcome === "failed" ? "error" : outcome === "saved" && !dirty ? "ok" : "idle", children: outcome === "failed" ? error || t("failure") : outcome === "saved" && !dirty ? t("settingsSaved") : dirty && !isNew ? t("unsaved") : "" })
+    ] })
+  ] });
+}
+function ModelPicker({ t, name, models, value, custom, loadError, onPick, onCustom }) {
+  const [query, setQuery] = (0, import_react9.useState)("");
+  const list = models?.filter((model2) => model2.id !== "") ?? [];
+  const needle = query.trim().toLowerCase();
+  const shown = needle ? list.filter((model2) => `${model2.name} ${model2.id}`.toLowerCase().includes(needle)) : list;
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("fieldset", { className: Studio_default.modelPicker, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("legend", { children: [
+      t("model"),
+      models && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("small", { children: [
+        " \xB7 ",
+        t("modelCount", { count: list.length })
+      ] })
+    ] }),
+    loadError && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { role: "alert", className: Studio_default.inlineError, children: loadError }),
+    list.length > 5 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "search", className: Studio_default.modelSearch, "aria-label": t("searchModels"), placeholder: t("searchModels"), value: query, onChange: (event) => {
+      setQuery(event.target.value);
+    } }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: Studio_default.modelList, children: [
+      !needle && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.modelOption, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "radio", name, checked: !custom && value === "", onChange: () => {
+          onPick("");
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("strong", { children: t("nativeDefault") }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { children: t("nativeDefaultHelp") })
+        ] })
+      ] }),
+      models === void 0 && !loadError && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: Studio_default.muted, children: t("loadingModels") }),
+      shown.map((model2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.modelOption, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "radio", name, checked: !custom && value === model2.id, onChange: () => {
+          onPick(model2.id);
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("strong", { children: model2.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: Studio_default.mono, children: model2.id }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: Studio_default.modelTags, children: [
+            model2.imageInput && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("em", { children: t("imageInput") }),
+            !!model2.efforts.length && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("em", { children: t("effortCount", { count: model2.efforts.length }) })
+          ] })
+        ] })
+      ] }, model2.id)),
+      needle && !shown.length && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: Studio_default.muted, children: t("noModelMatch") }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: Studio_default.modelOption, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "radio", name, checked: custom, onChange: onCustom }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("strong", { children: t("customModel") }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { children: t("customModelHelp") })
+        ] })
+      ] })
+    ] })
+  ] });
+}
+
+// src/client/TeamView.tsx
+var import_jsx_runtime10 = require("react/jsx-runtime");
+function TeamView({ state, view, t, command, checkHealth }) {
+  const [selected, setSelected] = (0, import_react10.useState)(null);
+  const [draft, setDraft] = (0, import_react10.useState)(null);
+  const [query, setQuery] = (0, import_react10.useState)("");
+  const [checking, setChecking] = (0, import_react10.useState)(false);
+  const { pending, run } = usePending();
+  const employee = draft ?? state.employees.find((value) => value.id === selected) ?? state.employees[0];
+  const needle = query.trim().toLowerCase();
+  const shown = needle ? state.employees.filter((value) => `${value.name} ${value.role} ${value.model} ${t(value.engine)}`.toLowerCase().includes(needle)) : state.employees;
+  const enabled = state.employees.filter((value) => value.enabled).length;
+  const addEmployee = () => {
     const id2 = randomUUID();
-    setNewEmployee({
+    setDraft({
       id: id2,
       name: t("newEmployee"),
       role: "",
@@ -1453,293 +2921,347 @@ function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, 
       contextWindow: 262144,
       maxTokens: 32768
     });
-    setSelectedEmployee(id2);
+    setSelected(id2);
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("main", { className: Studio_default.studio, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("header", { className: Studio_default.header, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h1", { children: t("title") }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: t("subtitle") })
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.workArea, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: Studio_default.listPane, "aria-label": t("employees"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.paneHead, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: t("employees") }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.muted, children: t("rosterSummary", { total: state.employees.length, enabled }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { className: Studio_default.primary, onClick: addEmployee, disabled: !!draft, children: t("addEmployee") })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: Studio_default.actions, children: ["lean", "full"].map((kind) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { disabled: view.busy, onClick: () => {
-        void command("template", { kind });
-      }, children: t(kind) }, kind)) })
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.toolRow, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("input", { type: "search", "aria-label": t("searchEmployees"), placeholder: t("searchEmployees"), value: query, onChange: (event) => {
+          setQuery(event.target.value);
+        } }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("details", { className: Studio_default.menu, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("summary", { children: t("templates") }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.menuBody, children: [
+            ["lean", "full"].map((kind) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { disabled: view.busy, onClick: (event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              void run(kind, () => command("template", { kind }));
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Busy, { on: pending === kind }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: t(kind) }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: t(kind === "lean" ? "leanRoles" : "fullRoles") })
+            ] }, kind)),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.muted, children: t("templateHelp") })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.healthRow, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { className: Studio_default.ghost, disabled: checking, onClick: () => {
+          setChecking(true);
+          void checkHealth().finally(() => {
+            setChecking(false);
+          });
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Busy, { on: checking }),
+          t("health")
+        ] }),
+        view.health && ["codex", "claude", "harness"].map((engine2) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.healthChip, title: view.health?.[engine2].version, "data-available": view.health?.[engine2].available, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { "aria-hidden": "true" }),
+          t(engine2),
+          " \xB7 ",
+          t(view.health?.[engine2].available ? "available" : "unavailable")
+        ] }, engine2))
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("ul", { className: Studio_default.roster, children: [
+        draft && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("button", { className: Studio_default.rosterItem, "aria-current": "true", onClick: () => {
+          setSelected(draft.id);
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Avatar, { id: draft.id, name: draft.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.rosterText, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: draft.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: t("unsavedEmployee") })
+          ] })
+        ] }) }),
+        shown.map((value) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+          "button",
+          {
+            className: Studio_default.rosterItem,
+            "data-disabled": !value.enabled,
+            "aria-current": !draft && employee?.id === value.id ? "true" : void 0,
+            onClick: () => {
+              setDraft(null);
+              setSelected(value.id);
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Avatar, { id: value.id, name: value.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.rosterText, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("strong", { children: [
+                  value.name,
+                  !value.enabled && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("em", { className: Studio_default.offTag, children: t("disabled") })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { children: value.role || t("noRole") })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: Studio_default.rosterMeta, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(EngineTag, { engine: value.engine, t }),
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { className: Studio_default.mono, title: value.model, children: [
+                  value.model || t("nativeDefault"),
+                  value.effort && ` \xB7 ${value.effort}`
+                ] })
+              ] })
+            ]
+          }
+        ) }, value.id))
+      ] }),
+      !state.employees.length && !draft && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: Studio_default.emptyState, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: t("noEmployeesTitle") }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: t("noEmployees") })
+      ] }),
+      !!state.employees.length && !shown.length && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.emptyInline, children: t("noEmployeeMatch") }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: Studio_default.footnote, children: t("noReasoning") })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("nav", { className: Studio_default.tabs, "aria-label": t("title"), children: ["employees", "tasks", "messages"].map((name) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: tab === name ? Studio_default.activeTab : "", "aria-current": tab === name ? "page" : void 0, onClick: () => {
-      setTab(name);
-    }, children: t(name) }, name)) }),
-    view.error && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.error, role: "alert", children: [
-      view.error,
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: Studio_default.detailPane, children: employee ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      EmployeeEditor,
+      {
+        employee,
+        isNew: draft?.id === employee.id,
+        catalog: view.catalog,
+        busy: view.busy,
+        error: view.error,
+        t,
+        save: async (value) => {
+          const ok = await command("saveEmployee", value);
+          if (ok) {
+            setDraft(null);
+            setSelected(value.id);
+          }
+          return ok;
+        },
+        remove: async (id2) => {
+          if (draft?.id === id2) {
+            setDraft(null);
+            setSelected(null);
+            return true;
+          }
+          const ok = await command("deleteEmployee", { id: id2 });
+          if (ok) setSelected(null);
+          return ok;
+        }
+      },
+      employee.id
+    ) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: Studio_default.emptyState, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: t("selectEmployee") }) }) })
+  ] });
+}
+
+// src/client/StudioPanel.tsx
+var import_jsx_runtime11 = require("react/jsx-runtime");
+function StudioPanel({ useStudio, command, refresh, checkHealth, pickDirectory, t }) {
+  const view = useStudio((snapshot) => snapshot);
+  const state = view.state;
+  const [chosenTab, setTab] = (0, import_react11.useState)(null);
+  const [projectId, setProjectId] = (0, import_react11.useState)(null);
+  const [taskId, setTaskId] = (0, import_react11.useState)(null);
+  const [workspaceForm, setWorkspaceForm] = (0, import_react11.useState)(false);
+  const [projectForm, setProjectForm] = (0, import_react11.useState)(false);
+  const workspace = state?.workspaces.find((value) => value.id === state.activeWorkspaceId);
+  const projects = state?.projects.filter((value) => value.workspaceId === workspace?.id) ?? [];
+  const project = projects.find((value) => value.id === projectId) ?? projects.at(-1);
+  const tab = chosenTab ?? (projects.length ? "tasks" : "employees");
+  const projectTasks = state && project ? state.tasks.filter((task) => task.projectId === project.id) : [];
+  const stats = projectStats(projectTasks);
+  const handoffCount = state && project ? state.messages.filter((value) => value.projectId === project.id).length : 0;
+  const openMeetings = state?.meetings.filter((value) => value.workspaceId === workspace?.id && value.status !== "closed").length ?? 0;
+  const counts = { employees: String(state?.employees.length ?? 0), tasks: projectTasks.length ? `${stats.completed}/${stats.active}` : "0", meetings: String(openMeetings), messages: String(handoffCount) };
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("main", { className: Studio_default.studio, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("header", { className: Studio_default.topbar, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.brand, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h1", { children: t("title") }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("subtitle") })
+      ] }),
+      state && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+        WorkspaceSwitcher,
+        {
+          state,
+          workspace,
+          busy: view.busy,
+          t,
+          command,
+          formOpen: workspaceForm || !workspace,
+          onToggleForm: () => {
+            setWorkspaceForm((value) => !value);
+          },
+          onChanged: () => {
+            setProjectId(null);
+            setTaskId(null);
+          }
+        }
+      )
+    ] }),
+    state && (workspaceForm || !workspace) && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      WorkspaceForm,
+      {
+        t,
+        busy: view.busy,
+        error: view.error,
+        command,
+        pickDirectory,
+        first: !state.workspaces.length,
+        onDone: () => {
+          setWorkspaceForm(false);
+          setProjectId(null);
+          setTaskId(null);
+        },
+        onCancel: workspace ? () => {
+          setWorkspaceForm(false);
+        } : void 0
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("nav", { className: Studio_default.tabs, "aria-label": t("title"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: Studio_default.tabList, children: ["tasks", "meetings", "employees", "messages"].map((name) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.tab, "aria-current": tab === name ? "page" : void 0, onClick: () => {
+        setTab(name);
+      }, children: [
+        t(name === "tasks" ? "projectsTab" : name === "meetings" ? "meetingsTab" : name),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: Studio_default.count, children: counts[name] })
+      ] }, name)) }),
+      workspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.primary, "aria-label": t("newProject"), onClick: () => {
+        setProjectForm(true);
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { "aria-hidden": "true", children: "+" }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: Studio_default.wideLabel, children: t("newProject") })
+      ] })
+    ] }),
+    view.error && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.banner, role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: view.error }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.ghost, onClick: () => {
         void refresh();
       }, children: t("refresh") })
     ] }),
-    state ? /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: Studio_default.projectIntake, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.projectToolbar, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
-            t("companyWorkspace"),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("select", { "aria-label": t("companyWorkspace"), value: workspace?.id ?? "", onChange: (event) => {
-              void command("selectWorkspace", { id: event.target.value });
-              setProjectId(null);
-            }, children: [
-              !workspace && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "", children: t("workspaceFirst") }),
-              state.workspaces.map((value) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("option", { value: value.id, children: [
-                value.name,
-                " \xB7 ",
-                value.path
-              ] }, value.id))
-            ] })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { onClick: () => {
-            setWorkspaceForm((value) => !value);
-          }, children: t("addWorkspace") })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.hint, children: t("workspaceHelp") }),
-        (workspaceForm || !workspace) && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("form", { onSubmit: (event) => {
-          event.preventDefault();
-          void command("createWorkspace", workspaceDraft).then((ok) => {
-            if (ok) {
-              setWorkspaceForm(false);
-              setWorkspaceDraft({ name: "", path: "" });
-              setProjectId(null);
-            }
-          });
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.intakeFields, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
-              t("companyName"),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { required: true, value: workspaceDraft.name, onChange: (event) => {
-                setWorkspaceDraft({ ...workspaceDraft, name: event.target.value });
-              } })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
-              t("companyDirectory"),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { required: true, value: workspaceDraft.path, onChange: (event) => {
-                setWorkspaceDraft({ ...workspaceDraft, path: event.target.value });
-              } })
-            ] })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.actions, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", onClick: () => {
-              void pickDirectory().then((path) => {
-                if (path) setWorkspaceDraft((value) => ({ ...value, path }));
-                setWorkspaceError("");
-              }).catch((error) => {
-                setWorkspaceError(error instanceof Error ? error.message : t("failure"));
-              });
-            }, children: t("browseDirectory") }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.primary, disabled: view.busy, children: t("useWorkspace") })
-          ] }),
-          workspaceError && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.error, role: "alert", children: workspaceError })
-        ] })
+    !state ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: Studio_default.emptyState, children: view.error ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("connectionError") }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: Studio_default.spinner, "aria-hidden": "true" }),
+      " ",
+      t("checking")
+    ] }) }) : tab === "employees" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(TeamView, { state, view, t, command, checkHealth }) : !workspace ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.emptyState, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: t("workspaceFirst") }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("workspaceHelp") })
+    ] }) : tab === "meetings" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      MeetingRoom,
+      {
+        state,
+        workspace,
+        busy: view.busy,
+        error: view.error,
+        t,
+        command,
+        onOpenProject: (id2) => {
+          setProjectId(id2);
+          setTaskId(null);
+          setTab("tasks");
+        }
+      },
+      `meetings-${workspace.id}`
+    ) : !project ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.emptyState, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: t("noProjectsTitle") }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: t("noProjects") }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.primary, onClick: () => {
+        setProjectForm(true);
+      }, children: t("newProject") })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(ProjectBar, { state, projects, project, busy: view.busy, t, command, onSelect: (id2) => {
+        setProjectId(id2);
+        setTaskId(null);
+      } }, `bar-${project.id}`),
+      tab === "tasks" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(TaskBoard, { state, project, busy: view.busy, error: view.error, t, command, selected: taskId, onSelect: setTaskId }, `tasks-${project.id}`) : /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(HandoffTimeline, { state, project, busy: view.busy, error: view.error, t, command, onOpenTask: (id2) => {
+        setTaskId(id2);
+        setTab("tasks");
+      } }, `handoffs-${project.id}`)
+    ] }),
+    state && workspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      ProjectDialog,
+      {
+        open: projectForm,
+        state,
+        workspace,
+        busy: view.busy,
+        error: view.error,
+        t,
+        command,
+        onClose: () => {
+          setProjectForm(false);
+        },
+        onCreated: () => {
+          setProjectForm(false);
+          setProjectId(null);
+          setTaskId(null);
+          setTab("tasks");
+        }
+      }
+    )
+  ] });
+}
+function WorkspaceSwitcher({ state, workspace, busy, t, command, formOpen, onToggleForm, onChanged }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.workspace, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: Studio_default.workspacePicker, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: t("companyWorkspace") }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { "aria-label": t("companyWorkspace"), value: workspace?.id ?? "", disabled: busy || !state.workspaces.length, onChange: (event) => {
+        void command("selectWorkspace", { id: event.target.value });
+        onChanged();
+      }, children: [
+        !workspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "", children: t("workspaceFirst") }),
+        state.workspaces.map((value) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: value.id, children: value.name }, value.id))
       ] }),
-      tab === "employees" && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.split, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: Studio_default.list, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.sectionHeading, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.primary, onClick: draftEmployee, children: t("addEmployee") }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { onClick: () => {
-              void checkHealth();
-            }, children: t("health") })
-          ] }),
-          view.health && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: Studio_default.health, children: ["codex", "claude", "harness"].map((engine2) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { title: view.health?.[engine2].version, "data-available": view.health?.[engine2].available, children: [
-            t(engine2),
-            " \xB7 ",
-            t(view.health?.[engine2].available ? "available" : "unavailable")
-          ] }, engine2)) }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.tableHead, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("name") }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("role") }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("model") }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: t("edit") })
-          ] }),
-          state.employees.map((value, index) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: `${Studio_default.employeeRow} ${employee?.id === value.id ? Studio_default.selectedRow : ""}`, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.employeeName, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: Studio_default.avatar, "data-color": index % 4, children: value.name.slice(0, 1) }),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: value.name })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: value.role }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: Studio_default.engineName, children: [
-              t(value.engine),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("small", { children: value.model || t("nativeDefault") })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { onClick: () => {
-              setNewEmployee(null);
-              setSelectedEmployee(value.id);
-            }, disabled: view.busy, children: t("edit") })
-          ] }, value.id)),
-          !state.employees.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.empty, children: t("noEmployees") }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.privacy, children: t("noReasoning") })
+      workspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("small", { className: Studio_default.mono, title: workspace.path, children: workspace.path })
+    ] }),
+    !!state.workspaces.length && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { className: Studio_default.ghost, "aria-expanded": formOpen, onClick: onToggleForm, children: t("addWorkspace") })
+  ] });
+}
+function WorkspaceForm({ t, busy, error, first, command, pickDirectory, onDone, onCancel }) {
+  const [draft, setDraft] = (0, import_react11.useState)({ name: "", path: "" });
+  const [pickError, setPickError] = (0, import_react11.useState)("");
+  const [failed, setFailed] = (0, import_react11.useState)(false);
+  const { pending, run } = usePending();
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { className: Studio_default.workspaceForm, "aria-label": t("addWorkspace"), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h2", { children: t(first ? "welcomeTitle" : "addWorkspace") }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: Studio_default.muted, children: t("workspaceHelp") })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("form", { onSubmit: (event) => {
+      event.preventDefault();
+      void run("create", () => command("createWorkspace", draft)).then((ok) => {
+        setFailed(!ok);
+        if (ok) {
+          setDraft({ name: "", path: "" });
+          onDone();
+        }
+      });
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.fieldPair, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: Studio_default.field, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: t("companyName") }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { required: true, value: draft.name, onChange: (event) => {
+            setDraft({ ...draft, name: event.target.value });
+          } })
         ] }),
-        employee && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
-          EmployeeEditor,
-          {
-            employee,
-            catalog: view.catalog,
-            busy: view.busy,
-            t,
-            save: async (value) => {
-              const ok = await command("saveEmployee", value);
-              if (ok) {
-                setNewEmployee(null);
-                setSelectedEmployee(value.id);
-              }
-              return ok;
-            },
-            remove: async (id2) => {
-              if (newEmployee?.id === id2) {
-                setNewEmployee(null);
-                setSelectedEmployee(null);
-                return true;
-              }
-              return command("deleteEmployee", { id: id2 });
-            }
-          },
-          employee.id
-        )
-      ] }),
-      tab !== "employees" && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.projectToolbar, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
-            t("project"),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("select", { "aria-label": t("project"), value: project?.id ?? "", onChange: (event) => {
-              setProjectId(event.target.value);
-            }, children: [
-              !projects.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "", children: t("selectProject") }),
-              projects.map((value) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("option", { value: value.id, children: [
-                value.name,
-                " \xB7 ",
-                t(value.status)
-              ] }, value.id))
-            ] })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.actions, children: [
-            project && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_jsx_runtime3.Fragment, { children: [
-              project.status === "paused" && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.primary, disabled: view.busy, onClick: () => {
-                void command("startProject", { id: project.id });
-              }, children: t("start") }),
-              project.status === "review" && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.primary, disabled: view.busy, onClick: () => {
-                void command("acceptProject", { id: project.id });
-              }, children: t("acceptProject") }),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { disabled: view.busy, onClick: () => {
-                void command("exportProject", { id: project.id });
-              }, children: t("exportProject") }),
-              project.status === "running" && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { disabled: view.busy, onClick: () => {
-                void command("pauseProject", { id: project.id });
-              }, children: t("pause") }),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.danger, disabled: view.busy, onClick: () => {
-                void command("stopProject", { id: project.id });
-              }, children: t("stop") })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { onClick: () => {
-              setProjectForm((value) => !value);
-            }, children: t("createProject") })
-          ] })
-        ] }),
-        project ? tab === "tasks" ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(TaskBoard, { state, project, busy: view.busy, t, command }, project.id) : /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: Studio_default.messages, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: t("messages") }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.hint, children: t("noReasoning") }),
-          state.messages.filter((value) => value.projectId === project.id).map((value) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("article", { className: Studio_default.messageRow, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: value.from === "user" ? t("user") : state.employees.find((employee2) => employee2.id === value.from)?.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { children: [
-                t("handoffTo"),
-                " ",
-                value.to === "team" ? t("everyone") : state.employees.find((employee2) => employee2.id === value.to)?.name
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("time", { children: new Date(value.createdAt).toLocaleString() })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("pre", { className: Studio_default.report, children: value.message })
-          ] }, value.id)),
-          !state.messages.some((value) => value.projectId === project.id) && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.empty, children: t("noMessages") }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("form", { className: Studio_default.messageForm, onSubmit: (event) => {
-            event.preventDefault();
-            void command("message", { projectId: project.id, to: recipient, message }).then((ok) => {
-              if (ok) setMessage("");
-            });
-          }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
-              t("to"),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("select", { value: recipient, onChange: (event) => {
-                setRecipient(event.target.value);
-              }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "team", children: t("everyone") }),
-                state.employees.map((employee2) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: employee2.id, children: employee2.name }, employee2.id))
-              ] })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("textarea", { "aria-label": t("message"), placeholder: t("message"), required: true, rows: 3, value: message, onChange: (event) => {
-              setMessage(event.target.value);
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { className: Studio_default.field, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: t("companyDirectory") }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: Studio_default.inputWithButton, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { required: true, className: Studio_default.mono, value: draft.path, onChange: (event) => {
+              setDraft({ ...draft, path: event.target.value });
             } }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.primary, disabled: view.busy, children: t("send") })
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: () => {
+              setPickError("");
+              void pickDirectory().then((path) => {
+                if (path) setDraft((value) => ({ ...value, path }));
+              }).catch((caught) => {
+                setPickError(caught instanceof Error ? caught.message : t("failure"));
+              });
+            }, children: t("browseDirectory") })
           ] })
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.empty, children: t("noProjects") })
-      ] }),
-      workspace && (tab === "employees" || projectForm || !projects.length) && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: Studio_default.projectIntake, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: t("projectSettings") }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("form", { onSubmit: (event) => {
-          event.preventDefault();
-          const employeeIds = projectDraft.employeeIds ?? state.employees.filter((employee2) => employee2.enabled).map((employee2) => employee2.id);
-          void command("createProject", { ...projectDraft, workspaceId: workspace.id, acceptanceCriteria, sessionMode, employeeIds }).then((ok) => {
-            if (ok) {
-              setTab("tasks");
-              setProjectForm(false);
-              setProjectId(null);
-            }
-          });
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.intakeFields, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
-              t("projectName"),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { required: true, value: projectDraft.name, onChange: (event) => {
-                setProjectDraft({ ...projectDraft, name: event.target.value });
-              } })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
-              t("projectDirectory"),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { placeholder: workspace.path, value: projectDraft.cwd, onChange: (event) => {
-                setProjectDraft({ ...projectDraft, cwd: event.target.value });
-              } })
-            ] })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.stackedField, children: [
-            t("acceptanceCriteria"),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("textarea", { rows: 3, value: acceptanceCriteria, onChange: (event) => {
-              setAcceptanceCriteria(event.target.value);
-            } })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.stackedField, children: [
-            t("sessionMode"),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("select", { "aria-label": t("sessionMode"), value: sessionMode, onChange: (event) => {
-              setSessionMode(event.target.value);
-            }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "employee-project", children: t("employeeSession") }),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("option", { value: "new-task", children: t("freshSession") })
-            ] })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.hint, children: t("nativeSessionHelp") }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("fieldset", { className: Studio_default.teamSelection, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("legend", { children: t("selectTeam") }),
-            state.employees.filter((employee2) => employee2.enabled).map((employee2) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: Studio_default.check, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { type: "checkbox", checked: projectDraft.employeeIds === null || projectDraft.employeeIds.includes(employee2.id), onChange: (event) => {
-                const current = projectDraft.employeeIds ?? state.employees.filter((value) => value.enabled).map((value) => value.id);
-                setProjectDraft({ ...projectDraft, employeeIds: event.target.checked ? [...current, employee2.id] : current.filter((id2) => id2 !== employee2.id) });
-              } }),
-              employee2.name
-            ] }, employee2.id))
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: Studio_default.objectiveRow, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
-              t("objective"),
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("textarea", { required: true, placeholder: t("objectivePlaceholder"), rows: 2, value: projectDraft.objective, onChange: (event) => {
-                setProjectDraft({ ...projectDraft, objective: event.target.value });
-              } })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { className: Studio_default.primary, disabled: view.busy || !state.employees.some((employee2) => employee2.enabled), children: t("createProject") })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.hint, children: t("roleTask") })
         ] })
+      ] }),
+      (pickError || failed) && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: Studio_default.formStatus, "data-state": "error", role: "alert", children: pickError || error || t("failure") }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: Studio_default.actions, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { className: Studio_default.primary, disabled: busy, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(Busy, { on: pending === "create" }),
+          t("useWorkspace")
+        ] }),
+        onCancel && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", className: Studio_default.ghost, onClick: onCancel, children: t("cancelAction") })
       ] })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: Studio_default.empty, children: t(view.error ? "connectionError" : "checking") })
+    ] })
   ] });
 }
 
@@ -1877,7 +3399,159 @@ var zh = {
   templateAdded: "\u56E2\u961F\u6A21\u677F\u5DF2\u6DFB\u52A0\uFF0C\u53EF\u4EE5\u8C03\u6574\u6BCF\u540D\u5458\u5DE5\u3002",
   zai: "Z.ai",
   deepseekProtocol: "DeepSeek",
-  fileMetadata: "{size} KB \xB7 SHA256 {hash}"
+  fileMetadata: "{size} KB \xB7 SHA256 {hash}",
+  projectsTab: "\u9879\u76EE",
+  newProject: "\u65B0\u5EFA\u9879\u76EE",
+  noProjectsTitle: "\u8FD8\u6CA1\u6709\u9879\u76EE",
+  welcomeTitle: "\u5148\u5EFA\u7ACB\u516C\u53F8\u5DE5\u4F5C\u533A",
+  noRole: "\u672A\u8BBE\u7F6E\u5C97\u4F4D",
+  disabled: "\u5DF2\u505C\u7528",
+  profile: "\u57FA\u672C\u4FE1\u606F",
+  execution: "\u6267\u884C\u4E0E\u6A21\u578B",
+  workplace: "\u5DE5\u4F5C\u4F4D\u7F6E\u4E0E\u6743\u9650",
+  confirmDelete: "\u786E\u8BA4\u5220\u9664",
+  cancelAction: "\u53D6\u6D88",
+  discard: "\u653E\u5F03\u65B0\u5458\u5DE5",
+  unsaved: "\u6709\u672A\u4FDD\u5B58\u7684\u4FEE\u6539",
+  modelCount: "{count} \u4E2A\u6A21\u578B",
+  searchModels: "\u641C\u7D22\u6A21\u578B\u540D\u79F0\u6216 ID",
+  nativeDefaultHelp: "\u4F7F\u7528\u672C\u673A\u5DE5\u5177\u5F53\u524D\u7684\u9ED8\u8BA4\u6A21\u578B",
+  loadingModels: "\u6B63\u5728\u8BFB\u53D6\u672C\u673A\u6A21\u578B\u76EE\u5F55\u2026",
+  effortCount: "{count} \u6863\u601D\u8003\u7B49\u7EA7",
+  noModelMatch: "\u6CA1\u6709\u5339\u914D\u7684\u6A21\u578B\uFF0C\u53EF\u4F7F\u7528\u81EA\u5B9A\u4E49\u6A21\u578B ID\u3002",
+  customModelHelp: "\u586B\u5199\u76EE\u5F55\u4E2D\u6CA1\u6709\u7684\u5B8C\u6574\u6A21\u578B ID",
+  rosterSummary: "\u5171 {total} \u4EBA\uFF0C{enabled} \u4EBA\u542F\u7528",
+  searchEmployees: "\u641C\u7D22\u59D3\u540D\u3001\u5C97\u4F4D\u6216\u6A21\u578B",
+  templates: "\u56E2\u961F\u6A21\u677F",
+  leanRoles: "4 \u4EBA\uFF1A\u4EA7\u54C1\u3001UI \u8BBE\u8BA1\u3001\u5168\u6808\u5F00\u53D1\u3001\u6D4B\u8BD5",
+  fullRoles: "7 \u4EBA\uFF1A\u4EA7\u54C1\u3001\u6280\u672F\u8D1F\u8D23\u4EBA\u3001UI \u8BBE\u8BA1\u3001\u524D\u7AEF\u3001\u540E\u7AEF\u3001\u6D4B\u8BD5\u3001\u4EA4\u4ED8",
+  templateHelp: "\u6A21\u677F\u4F1A\u8FFD\u52A0\u5230\u73B0\u6709\u540D\u5355\uFF0C\u4E4B\u540E\u53EF\u9010\u4E2A\u8C03\u6574\u3002",
+  unsavedEmployee: "\u5C1A\u672A\u4FDD\u5B58",
+  noEmployeesTitle: "\u56E2\u961F\u8FD8\u662F\u7A7A\u7684",
+  noEmployeeMatch: "\u6CA1\u6709\u5339\u914D\u7684\u5458\u5DE5\u3002",
+  selectEmployee: "\u9009\u62E9\u4E00\u540D\u5458\u5DE5\u67E5\u770B\u8BBE\u7F6E\u3002",
+  kind_image: "\u56FE\u7247",
+  kind_document: "\u6587\u6863",
+  kind_web: "\u7F51\u9875",
+  kind_code: "\u4EE3\u7801",
+  kind_data: "\u6570\u636E",
+  kind_other: "\u6587\u4EF6",
+  preview: "\u9884\u89C8",
+  hidePreview: "\u6536\u8D77",
+  previewFailed: "\u65E0\u6CD5\u8BFB\u53D6\u6587\u4EF6\u5185\u5BB9\uFF0C\u53EF\u76F4\u63A5\u4E0B\u8F7D\u3002",
+  loading: "\u8BFB\u53D6\u4E2D\u2026",
+  noArtifacts: "\u6CA1\u6709\u8BB0\u5F55\u7ED3\u679C\u6587\u4EF6\u3002",
+  taskSummary: "{done} / {total} \u5DF2\u5B8C\u6210",
+  filterTasks: "\u6309\u72B6\u6001\u7B5B\u9009\u4EFB\u52A1",
+  filter_all: "\u5168\u90E8",
+  filter_active: "\u8FDB\u884C\u4E2D",
+  filter_waiting: "\u7B49\u5F85\u4E2D",
+  filter_done: "\u5DF2\u5B8C\u6210",
+  filter_attention: "\u9700\u5904\u7406",
+  unknownEmployee: "\u672A\u77E5\u5458\u5DE5",
+  waitingFor: "\u7B49\u5F85 {names} \u5B8C\u6210",
+  revisionOfShort: "\u8FD4\u5DE5\u81EA #{step}",
+  noTasksHelp: "\u6DFB\u52A0\u4EFB\u52A1\u5E76\u6307\u5B9A\u8D1F\u8D23\u4EBA\u540E\uFF0C\u5373\u53EF\u5F00\u59CB\u5DE5\u4F5C\u3002",
+  noFilteredTasks: "\u5F53\u524D\u7B5B\u9009\u4E0B\u6CA1\u6709\u4EFB\u52A1\u3002",
+  selectTask: "\u9009\u62E9\u4E00\u9879\u4EFB\u52A1\u67E5\u770B\u8BE6\u60C5\u3002",
+  editTask: "\u7F16\u8F91\u4EFB\u52A1",
+  assignee: "\u8D1F\u8D23\u4EBA",
+  noDependencies: "\u9879\u76EE\u4E2D\u8FD8\u6CA1\u6709\u5176\u4ED6\u4EFB\u52A1\u3002",
+  failureReason: "\u5931\u8D25\u539F\u56E0",
+  waitingTitle: "\u7B49\u5F85\u4EE5\u4E0B\u524D\u7F6E\u4EFB\u52A1\u5B8C\u6210",
+  runningNotice: "{name} \u6B63\u5728\u5904\u7406\u8FD9\u9879\u4EFB\u52A1",
+  startedAt: "\u5F00\u59CB\u4E8E {time}",
+  revisionOf: "\u8FD9\u662F\u9488\u5BF9\u4EE5\u4E0B\u6210\u679C\u7684\u8FD4\u5DE5",
+  supersededBy: "\u5DF2\u9488\u5BF9\u6B64\u6210\u679C\u5EFA\u7ACB\u8FD4\u5DE5\u4EFB\u52A1",
+  reviewResult: "\u5BA1\u9605\u6210\u679C",
+  changePlaceholder: "\u8BF4\u660E\u9700\u8981\u4FEE\u6539\u7684\u5730\u65B9\uFF0C\u5458\u5DE5\u4F1A\u5728\u8FD4\u5DE5\u4EFB\u52A1\u4E2D\u5904\u7406\u3002",
+  pauseBeforeChanges: "\u9879\u76EE\u8FD0\u884C\u4E2D\uFF0C\u8BF7\u5148\u6682\u505C\u6216\u505C\u6B62\u518D\u63D0\u51FA\u4FEE\u6539\u610F\u89C1\u3002",
+  changesHelp: "\u539F\u6210\u679C\u4F1A\u4FDD\u7559\uFF0C\u7CFB\u7EDF\u4E3A\u540C\u4E00\u5458\u5DE5\u5EFA\u7ACB\u8FD4\u5DE5\u4EFB\u52A1\uFF0C\u672A\u6267\u884C\u7684\u4E0B\u6E38\u4EFB\u52A1\u6539\u4E3A\u7B49\u5F85\u8FD4\u5DE5\u7ED3\u679C\u3002",
+  overview: "\u4EFB\u52A1\u6982\u51B5",
+  declaredFiles: "\u58F0\u660E\u7684\u4EA4\u4ED8\u6587\u4EF6",
+  timeline: "\u6267\u884C\u65F6\u95F4",
+  relatedHandoffs: "\u76F8\u5173\u4EA4\u63A5",
+  executionInfo: "\u6267\u884C\u4FE1\u606F\u4E0E\u539F\u751F\u4F1A\u8BDD",
+  sessionCount: "{count} \u4E2A\u4F1A\u8BDD",
+  attemptN: "\u7B2C {n} \u6B21\u6267\u884C",
+  noSessions: "\u8FD8\u6CA1\u6709\u8BB0\u5F55\u539F\u751F\u4F1A\u8BDD\u3002",
+  copy: "\u590D\u5236",
+  copied: "\u5DF2\u590D\u5236",
+  projectPaused: "\u672A\u5F00\u59CB / \u5DF2\u6682\u505C",
+  projectRunning: "\u8FDB\u884C\u4E2D",
+  projectCompleted: "\u5DF2\u9A8C\u6536",
+  noReadyTasks: "\u6CA1\u6709\u53EF\u5F00\u59CB\u7684\u5F85\u6267\u884C\u4EFB\u52A1",
+  exported: "\u5DF2\u5BFC\u51FA\u5230",
+  reviewReady: "\u6240\u6709\u4EFB\u52A1\u5DF2\u5B8C\u6210\uFF0C\u7B49\u5F85\u4F60\u9A8C\u6536\u9879\u76EE",
+  reviewReadyHelp: "\u67E5\u770B\u5404\u4EFB\u52A1\u6210\u679C\u3002\u9700\u8981\u4FEE\u6539\u65F6\u5728\u4EFB\u52A1\u8BE6\u60C5\u4E2D\u63D0\u51FA\u8FD4\u5DE5\uFF1B\u786E\u8BA4\u65E0\u8BEF\u540E\u70B9\u51FB\u300C\u901A\u8FC7\u9879\u76EE\u9A8C\u6536\u300D\u3002",
+  progress: "\u8FDB\u5EA6",
+  projectIn: "\u5F52\u5C5E\u516C\u53F8\u5DE5\u4F5C\u533A\uFF1A{name}",
+  criteriaPlaceholder: "\u9010\u6761\u5199\u660E\u4EA4\u4ED8\u65F6\u9700\u8981\u6EE1\u8DB3\u7684\u6761\u4EF6",
+  projectDirectoryHelp: "\u7559\u7A7A\u4F7F\u7528\u516C\u53F8\u5DE5\u4F5C\u533A\u6839\u76EE\u5F55\uFF1B\u4E5F\u53EF\u586B\u5199\u5176\u4E2D\u7684\u5B50\u76EE\u5F55\u3002",
+  employeeSessionHelp: "\u540C\u4E00\u5458\u5DE5\u7684\u540E\u7EED\u4EFB\u52A1\u7EED\u63A5\u4E4B\u524D\u7684\u4F1A\u8BDD\uFF0C\u4FDD\u7559\u5DE5\u4F5C\u8BB0\u5FC6\u3002",
+  freshSessionHelp: "\u6BCF\u9879\u4EFB\u52A1\u5F00\u542F\u72EC\u7ACB\u4F1A\u8BDD\uFF0C\u4E92\u4E0D\u5F71\u54CD\u3002",
+  selectedCount: "\u5DF2\u9009 {count} \u4EBA",
+  noEnabledEmployees: "\u6CA1\u6709\u542F\u7528\u7684\u5458\u5DE5\uFF0C\u8BF7\u5148\u5728\u300C\u5458\u5DE5\u300D\u4E2D\u6DFB\u52A0\u6216\u542F\u7528\u3002",
+  newInstruction: "\u53D1\u5E03\u5DE5\u4F5C\u8BF4\u660E",
+  filterPerson: "\u67E5\u770B",
+  userInitial: "\u4F60",
+  meetingsTab: "\u4F1A\u8BAE\u5BA4",
+  newMeeting: "\u65B0\u5EFA\u4F1A\u8BAE",
+  meetingSummary: "{open} \u573A\u8FDB\u884C\u4E2D\uFF0C\u5171 {total} \u573A",
+  meetingOpen: "\u8BA8\u8BBA\u4E2D",
+  meetingDrafting: "\u6574\u7406\u7EAA\u8981\u4E2D",
+  meetingReview: "\u5F85\u786E\u8BA4\u7EAA\u8981",
+  meetingClosed: "\u5DF2\u7ED3\u675F",
+  meetingNoMessages: "\u8FD8\u6CA1\u6709\u53D1\u8A00",
+  noMeetingsTitle: "\u8FD8\u6CA1\u6709\u4F1A\u8BAE",
+  noMeetings: "\u4EE5\u7532\u65B9\u8EAB\u4EFD\u53EC\u96C6\u5458\u5DE5\u5F00\u4F1A\uFF0C\u6C9F\u901A\u9700\u6C42\uFF0C\u518D\u628A\u4F1A\u8BAE\u7EAA\u8981\u4E00\u952E\u53D8\u6210\u9879\u76EE\u3002",
+  meetingHelp: "\u4F1A\u8BAE\u53EA\u8BA8\u8BBA\uFF0C\u4E0D\u6539\u6587\u4EF6\u3002\u5458\u5DE5\u6BCF\u6B21\u53D1\u8A00\u90FD\u4EE5\u53EA\u8BFB\u65B9\u5F0F\u8C03\u7528\u81EA\u5DF1\u914D\u7F6E\u7684\u6267\u884C\u5DE5\u5177\u548C\u6A21\u578B\u3002",
+  meetingIntro: "\u4F60\u4F5C\u4E3A\u7532\u65B9\u63D0\u51FA\u9700\u6C42\uFF0C\u4E3B\u6301\u4EBA\u8D1F\u8D23\u63D0\u95EE\u548C\u5F15\u5BFC\uFF0C@ \u67D0\u4F4D\u5458\u5DE5\u53EF\u8BF7\u5176\u53D1\u8A00\u3002\u8BA8\u8BBA\u7ED3\u675F\u540E\u7531\u4E3B\u6301\u4EBA\u6574\u7406\u7EAA\u8981\uFF0C\u786E\u8BA4\u540E\u751F\u6210\u9879\u76EE\u548C\u4EFB\u52A1\u3002",
+  meetingTitle: "\u4F1A\u8BAE\u4E3B\u9898",
+  meetingTitlePlaceholder: "\u4F8B\u5982\uFF1A\u4E60\u60EF\u6253\u5361 App \u9700\u6C42\u6C9F\u901A",
+  agenda: "\u8BAE\u9898 / \u80CC\u666F",
+  agendaPlaceholder: "\u7B80\u5355\u5199\u4E0B\u4F60\u60F3\u505A\u4EC0\u4E48\u3001\u7ED9\u8C01\u7528\u3001\u6709\u4EC0\u4E48\u9650\u5236\uFF0C\u4F1A\u8BAE\u4E2D\u53EF\u4EE5\u7EE7\u7EED\u8865\u5145\u3002",
+  host: "\u4E3B\u6301\u4EBA",
+  hostHelp: "\u4E3B\u6301\u4EBA\u56DE\u590D\u4F60\u672A @ \u4EFB\u4F55\u4EBA\u7684\u6D88\u606F\uFF0C\u5E76\u5728\u4F1A\u540E\u6574\u7406\u7EAA\u8981\u3002",
+  attendees: "\u53C2\u4F1A\u5458\u5DE5",
+  hostTag: "\u4E3B\u6301\u4EBA",
+  editAttendees: "\u7F16\u8F91\u4F1A\u8BAE",
+  saveAttendees: "\u4FDD\u5B58\u4F1A\u8BAE\u8BBE\u7F6E",
+  startMeeting: "\u5F00\u59CB\u4F1A\u8BAE",
+  client: "\u7532\u65B9\uFF08\u4F60\uFF09",
+  waitForSpeaker: "\u8BF7\u7B49\u5F85\u5F53\u524D\u53D1\u8A00\u7ED3\u675F",
+  draftMinutes: "\u6574\u7406\u4F1A\u8BAE\u7EAA\u8981",
+  stopSpeaking: "\u505C\u6B62\u53D1\u8A00",
+  endMeeting: "\u7ED3\u675F\u4F1A\u8BAE",
+  confirmEnd: "\u786E\u8BA4\u7ED3\u675F",
+  viewProject: "\u67E5\u770B\u9879\u76EE",
+  meetingEmpty: "\u4F1A\u8BAE\u5DF2\u5F00\u59CB\u3002\u5148\u8BF4\u8BF4\u4F60\u60F3\u8981\u7684\u4EA7\u54C1\uFF0C{host} \u4F1A\u63A5\u7740\u63D0\u95EE\u3002",
+  nativeSession: "\u539F\u751F\u4F1A\u8BDD",
+  speakingNow: "{name} \u6B63\u5728\u53D1\u8A00\u2026",
+  aboutToSpeak: "{name} \u51C6\u5907\u53D1\u8A00\u2026",
+  draftingNow: "{name} \u6B63\u5728\u6574\u7406\u4F1A\u8BAE\u7EAA\u8981\u2026",
+  upNext: "\u63A5\u4E0B\u6765\uFF1A{names}",
+  mention: "\u70B9\u540D",
+  composerPlaceholder: "\u4EE5\u7532\u65B9\u8EAB\u4EFD\u8BF4\u660E\u9700\u6C42\u3001\u63D0\u95EE\u6216\u8865\u5145\u2026",
+  mentionReply: "\u5C06\u7531 {names} \u4F9D\u6B21\u56DE\u590D",
+  hostReply: "\u672A\u70B9\u540D\u65F6\u7531\u4E3B\u6301\u4EBA {name} \u56DE\u590D",
+  sendShortcut: "Ctrl+Enter \u53D1\u9001",
+  sendMessage: "\u53D1\u9001",
+  minutes: "\u4F1A\u8BAE\u7EAA\u8981",
+  minutesHelp: "\u786E\u8BA4\u6216\u4FEE\u6539\u540E\u521B\u5EFA\u9879\u76EE\uFF0C\u4EFB\u52A1\u6309\u987A\u5E8F\u4F9D\u6B21\u6267\u884C\u3002",
+  summary: "\u7ED3\u8BBA\u6982\u8FF0",
+  decisions: "\u5DF2\u786E\u5B9A\u4E8B\u9879\uFF08\u6BCF\u884C\u4E00\u6761\uFF09",
+  decisionsShort: "\u5DF2\u786E\u5B9A\u4E8B\u9879",
+  minutesTasks: "\u4EFB\u52A1\u5B89\u6392\uFF08\u6309\u4EA4\u4ED8\u987A\u5E8F\uFF09",
+  moveUp: "\u4E0A\u79FB",
+  moveDown: "\u4E0B\u79FB",
+  removeTask: "\u79FB\u9664\u4EFB\u52A1",
+  noMinutesTasks: "\u8FD8\u6CA1\u6709\u4EFB\u52A1\uFF0C\u81F3\u5C11\u6DFB\u52A0\u4E00\u9879\u540E\u624D\u80FD\u521B\u5EFA\u9879\u76EE\u3002",
+  addMinutesTask: "\u6DFB\u52A0\u4EFB\u52A1",
+  createFromMinutes: "\u6309\u7EAA\u8981\u521B\u5EFA\u9879\u76EE",
+  saveMinutes: "\u4FDD\u5B58\u7EAA\u8981",
+  resumeMeeting: "\u7EE7\u7EED\u8BA8\u8BBA",
+  minutesIncomplete: "\u9700\u8981\u9879\u76EE\u540D\u79F0\u3001\u76EE\u6807\u548C\u81F3\u5C11\u4E00\u9879\u5B8C\u6574\u4EFB\u52A1\u3002"
 };
 var en = {
   companyWorkspace: "Company workspace",
@@ -2012,16 +3686,168 @@ var en = {
   templateAdded: "Team template added. You can customize every employee.",
   zai: "Z.ai",
   deepseekProtocol: "DeepSeek",
-  fileMetadata: "{size} KB \xB7 SHA256 {hash}"
+  fileMetadata: "{size} KB \xB7 SHA256 {hash}",
+  projectsTab: "Projects",
+  newProject: "New project",
+  noProjectsTitle: "No projects yet",
+  welcomeTitle: "Set up a company workspace",
+  noRole: "No role set",
+  disabled: "Disabled",
+  profile: "Profile",
+  execution: "Execution & model",
+  workplace: "Workplace & permissions",
+  confirmDelete: "Confirm delete",
+  cancelAction: "Cancel",
+  discard: "Discard new employee",
+  unsaved: "Unsaved changes",
+  modelCount: "{count} models",
+  searchModels: "Search model name or ID",
+  nativeDefaultHelp: "Use the local tool\u2019s current default model",
+  loadingModels: "Reading the local model catalog\u2026",
+  effortCount: "{count} effort levels",
+  noModelMatch: "No matching model. Use a custom model ID instead.",
+  customModelHelp: "Enter a full model ID that is not listed",
+  rosterSummary: "{total} people, {enabled} enabled",
+  searchEmployees: "Search name, role, or model",
+  templates: "Team templates",
+  leanRoles: "4 people: product, UI design, full-stack, QA",
+  fullRoles: "7 people: product, tech lead, UI design, frontend, backend, QA, delivery",
+  templateHelp: "Templates append to the current roster; adjust each employee afterwards.",
+  unsavedEmployee: "Not saved yet",
+  noEmployeesTitle: "Your team is empty",
+  noEmployeeMatch: "No matching employees.",
+  selectEmployee: "Select an employee to view settings.",
+  kind_image: "Image",
+  kind_document: "Doc",
+  kind_web: "Web",
+  kind_code: "Code",
+  kind_data: "Data",
+  kind_other: "File",
+  preview: "Preview",
+  hidePreview: "Hide",
+  previewFailed: "Could not read the file. You can still download it.",
+  loading: "Loading\u2026",
+  noArtifacts: "No result files recorded.",
+  taskSummary: "{done} / {total} done",
+  filterTasks: "Filter tasks by status",
+  filter_all: "All",
+  filter_active: "Running",
+  filter_waiting: "Waiting",
+  filter_done: "Done",
+  filter_attention: "Needs attention",
+  unknownEmployee: "Unknown employee",
+  waitingFor: "Waiting for {names}",
+  revisionOfShort: "Revision of #{step}",
+  noTasksHelp: "Add a task and choose an assignee to start work.",
+  noFilteredTasks: "No tasks match this filter.",
+  selectTask: "Select a task to see details.",
+  editTask: "Edit task",
+  assignee: "Assignee",
+  noDependencies: "There are no other tasks in this project yet.",
+  failureReason: "Failure reason",
+  waitingTitle: "Waiting for these tasks to complete",
+  runningNotice: "{name} is working on this task",
+  startedAt: "Started {time}",
+  revisionOf: "This revises the following result",
+  supersededBy: "A revision task was created for this result",
+  reviewResult: "Review result",
+  changePlaceholder: "Describe what should change. The employee handles it in a revision task.",
+  pauseBeforeChanges: "The project is running. Pause or stop it before requesting changes.",
+  changesHelp: "The original result is kept. A revision task is created for the same employee, and pending downstream tasks wait for it.",
+  overview: "Overview",
+  declaredFiles: "Declared deliverables",
+  timeline: "Run time",
+  relatedHandoffs: "Related handoffs",
+  executionInfo: "Execution & native sessions",
+  sessionCount: "{count} sessions",
+  attemptN: "attempt {n}",
+  noSessions: "No native session recorded yet.",
+  copy: "Copy",
+  copied: "Copied",
+  projectPaused: "Not started / paused",
+  projectRunning: "Running",
+  projectCompleted: "Accepted",
+  noReadyTasks: "No pending tasks to start",
+  exported: "Exported to",
+  reviewReady: "All tasks are complete and ready for your acceptance",
+  reviewReadyHelp: "Review each result. Request a revision from the task details if needed, then choose \u201CAccept project\u201D.",
+  progress: "Progress",
+  projectIn: "In company workspace: {name}",
+  criteriaPlaceholder: "List the conditions the delivery must meet",
+  projectDirectoryHelp: "Leave empty to use the workspace root, or enter a subdirectory inside it.",
+  employeeSessionHelp: "Later tasks for the same employee continue the earlier session and keep its working memory.",
+  freshSessionHelp: "Each task starts an independent session.",
+  selectedCount: "{count} selected",
+  noEnabledEmployees: "No enabled employees. Add or enable one under Employees first.",
+  newInstruction: "Post an instruction",
+  filterPerson: "Show",
+  userInitial: "Y",
+  meetingsTab: "Meetings",
+  newMeeting: "New meeting",
+  meetingSummary: "{open} active of {total}",
+  meetingOpen: "Discussing",
+  meetingDrafting: "Drafting minutes",
+  meetingReview: "Minutes to confirm",
+  meetingClosed: "Ended",
+  meetingNoMessages: "No one has spoken yet",
+  noMeetingsTitle: "No meetings yet",
+  noMeetings: "Call a meeting as the client, discuss requirements, then turn the minutes into a project.",
+  meetingHelp: "Meetings are discussion only. Each employee turn runs their configured tool and model in read-only mode.",
+  meetingIntro: "You state requirements as the client; the host asks questions and steers. Mention an employee to ask them directly. Afterwards the host drafts minutes that become a project once you confirm.",
+  meetingTitle: "Topic",
+  meetingTitlePlaceholder: "e.g. Habit tracker app requirements",
+  agenda: "Agenda / background",
+  agendaPlaceholder: "What you want to build, for whom, and any constraints. You can add more during the meeting.",
+  host: "Host",
+  hostHelp: "The host answers messages that mention no one and drafts the minutes.",
+  attendees: "Attendees",
+  hostTag: "Host",
+  editAttendees: "Edit meeting",
+  saveAttendees: "Save meeting",
+  startMeeting: "Start meeting",
+  client: "Client (you)",
+  waitForSpeaker: "Wait for the current speaker to finish",
+  draftMinutes: "Draft minutes",
+  stopSpeaking: "Stop speaker",
+  endMeeting: "End meeting",
+  confirmEnd: "Confirm end",
+  viewProject: "View project",
+  meetingEmpty: "The meeting has started. Describe the product you want; {host} will follow up.",
+  nativeSession: "native session",
+  speakingNow: "{name} is speaking\u2026",
+  aboutToSpeak: "{name} is about to speak\u2026",
+  draftingNow: "{name} is drafting the minutes\u2026",
+  upNext: "Next: {names}",
+  mention: "Ask",
+  composerPlaceholder: "As the client, state requirements, ask, or add details\u2026",
+  mentionReply: "{names} will reply in turn",
+  hostReply: "Host {name} replies when no one is mentioned",
+  sendShortcut: "Ctrl+Enter to send",
+  sendMessage: "Send",
+  minutes: "Minutes",
+  minutesHelp: "Confirm or edit, then create the project; tasks run in order.",
+  summary: "Summary",
+  decisions: "Decisions (one per line)",
+  decisionsShort: "Decisions",
+  minutesTasks: "Tasks (in delivery order)",
+  moveUp: "Move up",
+  moveDown: "Move down",
+  removeTask: "Remove task",
+  noMinutesTasks: "No tasks yet. Add at least one to create the project.",
+  addMinutesTask: "Add task",
+  createFromMinutes: "Create project from minutes",
+  saveMinutes: "Save minutes",
+  resumeMeeting: "Resume discussion",
+  minutesIncomplete: "A project name, objective, and at least one complete task are required."
 };
 
 // src/client/mount.tsx
-var import_jsx_runtime4 = require("react/jsx-runtime");
+var import_jsx_runtime12 = require("react/jsx-runtime");
 var inject = ["slots", "locale", "layout", "uiWorkspace"];
 function StudioIcon({ size }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "9", cy: "7", r: "3" }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M3 20v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2" })
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("circle", { cx: "9", cy: "7", r: "3" }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("path", { d: "M3 20v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2" })
   ] });
 }
 function apply(ctx) {

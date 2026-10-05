@@ -175,7 +175,15 @@ var stateV1Fields = {
   })).required()
 };
 var stateV1Schema = z.object(stateV1Fields);
-var stateSchema = z.object({
+var nativeSessionSchema = z.object({
+  id,
+  engine,
+  cwd: short,
+  attempt: z.natural().min(1).required(),
+  continued: z.boolean().required()
+});
+var nativeSession = nativeSessionSchema;
+var stateV2Fields = {
   ...stateV1Fields,
   version: z.const(2).required(),
   workspaces: z.array(z.object({ id, name: short, path: short, createdAt: short })).required(),
@@ -189,16 +197,43 @@ var stateSchema = z.object({
   })).required(),
   tasks: z.array(z.object({
     ...taskFields,
-    nativeSessions: z.array(z.object({
-      id,
-      engine,
-      cwd: short,
-      attempt: z.natural().min(1).required(),
-      continued: z.boolean().required()
-    })).required(),
+    nativeSessions: z.array(nativeSession).required(),
     reviewStatus: z.union(["pending", "accepted", "superseded"]).required()
   })).required()
+};
+var stateV2Schema = z.object(stateV2Fields);
+var minutesSchema = z.object({
+  summary: text,
+  decisions: z.array(text).required(),
+  projectName: short,
+  objective: text,
+  acceptanceCriteria: text,
+  tasks: z.array(z.object({ employeeId: id, title: short, instruction: text })).required()
 });
+var meeting = z.object({
+  id,
+  workspaceId: id,
+  title: short,
+  agenda: text,
+  hostId: id,
+  attendeeIds: z.array(id).required(),
+  status: z.union(["open", "drafting", "review", "closed"]).required(),
+  queue: z.array(id).required(),
+  speaking: z.union([id, z.const(null)]),
+  error: text,
+  messages: z.array(z.object({
+    id,
+    from: id,
+    message: text,
+    mentions: z.array(id).required(),
+    createdAt: short,
+    nativeSession: z.union([nativeSession, z.const(null)])
+  })).required(),
+  minutes: z.union([minutesSchema, z.const(null)]),
+  projectId: z.union([id, z.const(null)]),
+  createdAt: short
+});
+var stateSchema = z.object({ ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() });
 
 // src/validation.ts
 function parseState(input) {
@@ -248,7 +283,27 @@ function parseState(input) {
     if (tasks.get(file.taskId)?.projectId !== file.projectId || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("Stored artifact metadata is invalid");
     outputName(file.name);
   }
+  identities(state.meetings);
+  for (const meeting2 of state.meetings) {
+    const people = new Set(meeting2.attendeeIds);
+    if (!workspaces.has(meeting2.workspaceId) || !people.has(meeting2.hostId) || people.size !== meeting2.attendeeIds.length || meeting2.attendeeIds.some((id2) => !employees.has(id2)) || meeting2.queue.some((id2) => !people.has(id2)) || meeting2.speaking !== null && !people.has(meeting2.speaking) || meeting2.projectId !== null && !projects.has(meeting2.projectId)) throw new Error("Stored meeting refers to a missing participant, workspace, or project");
+    identities(meeting2.messages);
+    for (const message of meeting2.messages) {
+      if (message.from !== "user" && !employees.has(message.from) || message.mentions.some((id2) => !employees.has(id2))) throw new Error("Stored meeting message refers to a missing employee");
+      if (message.nativeSession) {
+        parseFields(nativeSessionSchema, message.nativeSession);
+        if (!isAbsolute(message.nativeSession.cwd)) throw new Error("Stored native session metadata is invalid");
+      }
+    }
+    if (meeting2.minutes) {
+      parseFields(minutesSchema, meeting2.minutes);
+      if (meeting2.minutes.tasks.some((task) => !employees.has(task.employeeId))) throw new Error("Stored meeting minutes refer to a missing employee");
+    }
+  }
   return state;
+}
+function migrateStateV2(input) {
+  return parseState({ ...parseFields(stateV2Schema, input), version: 3, meetings: [] });
 }
 function migrateStateV1(input) {
   const old = parseFields(stateV1Schema, input);
@@ -261,7 +316,7 @@ function migrateStateV1(input) {
     }
     return { ...project, workspaceId: workspace.id, acceptanceCriteria: "", sessionMode: "new-task" };
   });
-  return parseState({
+  return migrateStateV2({
     ...old,
     version: 2,
     workspaces,
@@ -446,13 +501,36 @@ var messageInput = z2.object({
   to: z2.string().required(),
   message: z2.string().min(1).max(1e5).required()
 });
+var meetingFields = {
+  title: z2.string().min(1).max(500).required(),
+  agenda: z2.string().max(1e5).required(),
+  hostId: z2.string().required(),
+  attendeeIds: z2.array(z2.string()).required()
+};
+var meetingMessageInput = z2.object({
+  id: z2.string().required(),
+  message: z2.string().min(1).max(1e5).required(),
+  mentions: z2.array(z2.string()).required()
+});
+var meetingChainLimit = 6;
+var liveCheckedActions = /* @__PURE__ */ new Set([
+  "createMeeting",
+  "updateMeeting",
+  "meetingMessage",
+  "stopMeeting",
+  "draftMinutes",
+  "saveMinutes",
+  "resumeMeeting",
+  "meetingProject",
+  "closeMeeting"
+]);
 function identity(input) {
   const schema = z2.object({ id: z2.string().min(1).required() });
   return z2.resolve(input, schema, {})[0].id;
 }
 function freshState() {
   return {
-    version: 2,
+    version: 3,
     revision: 0,
     workspaces: [],
     activeWorkspaceId: null,
@@ -460,7 +538,8 @@ function freshState() {
     projects: [],
     tasks: [],
     messages: [],
-    artifacts: []
+    artifacts: [],
+    meetings: []
   };
 }
 function within(root, path) {
@@ -477,6 +556,7 @@ var Studio = class _Studio {
   state = freshState();
   serial = Promise.resolve();
   active = /* @__PURE__ */ new Map();
+  meetingRuns = /* @__PURE__ */ new Map();
   closing = false;
   /** Open one local Studio and mark interrupted work without silently restarting it.
    * @param config - Persistence and scheduling configuration.
@@ -486,20 +566,23 @@ var Studio = class _Studio {
   static async open(config, executor) {
     const studio = new _Studio(config, executor);
     await mkdir3(config.storageRoot, { recursive: true, mode: 448 });
-    let content;
-    try {
-      content = await readFile2(join3(config.storageRoot, "studio.v2.json"), "utf8");
-    } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-    }
-    if (content !== void 0) studio.state = parseState(JSON.parse(content));
-    else {
+    const read = async (name2) => {
       try {
-        content = await readFile2(join3(config.storageRoot, "studio.v1.json"), "utf8");
+        return JSON.parse(await readFile2(join3(config.storageRoot, name2), "utf8"));
       } catch (error) {
-        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return void 0;
+        throw error;
       }
-      if (content !== void 0) studio.state = migrateStateV1(JSON.parse(content));
+    };
+    const v3 = await read("studio.v3.json");
+    if (v3 !== void 0) studio.state = parseState(v3);
+    else {
+      const v2 = await read("studio.v2.json");
+      if (v2 !== void 0) studio.state = migrateStateV2(v2);
+      else {
+        const v1 = await read("studio.v1.json");
+        if (v1 !== void 0) studio.state = migrateStateV1(v1);
+      }
     }
     for (const task of studio.state.tasks) {
       if (task.status === "running") {
@@ -509,6 +592,14 @@ var Studio = class _Studio {
       }
     }
     for (const project of studio.state.projects) if (project.status === "running") project.status = "paused";
+    for (const meeting2 of studio.state.meetings) {
+      if (meeting2.speaking !== null || meeting2.status === "drafting") {
+        meeting2.error = "Host stopped during a meeting turn. Send a message or draft the minutes again.";
+        meeting2.speaking = null;
+        if (meeting2.status === "drafting") meeting2.status = "open";
+      }
+      meeting2.queue = [];
+    }
     await studio.persist();
     return studio;
   }
@@ -525,7 +616,7 @@ var Studio = class _Studio {
     return next;
   }
   async persist() {
-    const path = join3(this.config.storageRoot, "studio.v2.json");
+    const path = join3(this.config.storageRoot, "studio.v3.json");
     await writeFileAtomic(path, `${JSON.stringify(this.state, null, 2)}
 `, { mode: 384, dirMode: 448 });
   }
@@ -542,6 +633,11 @@ var Studio = class _Studio {
     const project = this.state.projects.find((value) => value.id === id2);
     if (!project) throw new Error("Project does not exist");
     return project;
+  }
+  meeting(id2) {
+    const meeting2 = this.state.meetings.find((value) => value.id === id2);
+    if (!meeting2) throw new Error("Meeting does not exist");
+    return meeting2;
   }
   task(id2) {
     const task = this.state.tasks.find((value) => value.id === id2);
@@ -579,7 +675,7 @@ var Studio = class _Studio {
     return this.enqueue(async () => {
       if (this.closing) throw new Error("Studio is stopping");
       const command = parseFields(commandSchema, raw);
-      if (command.expectedRevision !== this.state.revision) throw new Error("Studio changed; refresh and retry your edit");
+      if (command.expectedRevision !== this.state.revision && !liveCheckedActions.has(command.action)) throw new Error("Studio changed; refresh and retry your edit");
       const before = this.snapshot();
       try {
         switch (command.action) {
@@ -616,6 +712,7 @@ var Studio = class _Studio {
               parsed.cwd = await realpath2(parsed.cwd);
             }
             if ([...this.active.values()].some((run) => run.employeeId === parsed.id)) throw new Error("Stop the employee task before changing its settings");
+            if (this.state.meetings.some((meeting2) => meeting2.speaking === parsed.id)) throw new Error("Wait until the employee finishes speaking before changing its settings");
             const index = this.state.employees.findIndex((employee) => employee.id === parsed.id);
             if (index < 0) this.state.employees.push(parsed);
             else this.state.employees[index] = parsed;
@@ -625,45 +722,146 @@ var Studio = class _Studio {
             const id2 = identity(command.input);
             this.employee(id2);
             if (this.state.tasks.some((task) => task.employeeId === id2)) throw new Error("An employee with task history can be disabled but cannot be deleted");
+            if (this.state.meetings.some((meeting2) => meeting2.attendeeIds.includes(id2) || meeting2.messages.some((message) => message.from === id2) || meeting2.minutes?.tasks.some((task) => task.employeeId === id2))) throw new Error("An employee with meeting history can be disabled but cannot be deleted");
             this.state.employees = this.state.employees.filter((employee) => employee.id !== id2);
             break;
           }
           case "createProject": {
             const input = parseFields(projectInput, command.input);
+            const employees = [...new Set(input.employeeIds)].map((id2) => this.employee(id2));
+            await this.newProject(input, employees.map((employee) => ({
+              employee,
+              title: `${employee.role} \xB7 ${input.name}`,
+              instruction: `\u5B8C\u6210\u4F60\u7684\u5C97\u4F4D\u8D1F\u8D23\u7684\u5DE5\u4F5C\uFF0C\u4F7F\u7528\u5DF2\u4EA4\u63A5\u7684\u6587\u6863\u548C\u7ED3\u679C\u3002\u76EE\u6807\uFF1A${input.objective}`
+            })));
+            break;
+          }
+          case "createMeeting": {
+            const input = parseFields(z2.object({ ...meetingFields, workspaceId: z2.string().required() }), command.input);
             const workspace = this.state.workspaces.find((value) => value.id === input.workspaceId);
             if (!workspace) throw new Error("Select a company workspace first");
-            const directory = input.cwd || workspace.path;
-            if (!isAbsolute2(directory) || !(await stat(directory)).isDirectory()) throw new Error("Project working directory must be an existing absolute directory");
-            const cwd = await realpath2(directory);
-            if (!withinDirectory(workspace.path, cwd)) throw new Error("Project directory must stay inside the company workspace");
-            const employees = [...new Set(input.employeeIds)].map((id2) => this.employee(id2));
-            if (!employees.length || employees.some((employee) => !employee.enabled)) throw new Error("Select at least one enabled employee");
-            if (employees.length > this.config.maxTasksPerProject) throw new Error("Team exceeds the project task limit");
-            const project = {
+            this.state.meetings.push({
               id: randomUUID3(),
-              name: input.name,
-              objective: input.objective,
-              cwd,
               workspaceId: workspace.id,
-              acceptanceCriteria: input.acceptanceCriteria,
-              sessionMode: input.sessionMode,
-              status: "paused",
+              title: input.title,
+              agenda: input.agenda,
+              hostId: input.hostId,
+              attendeeIds: this.attendees(input.hostId, input.attendeeIds),
+              status: "open",
+              queue: [],
+              speaking: null,
+              error: "",
+              messages: [],
+              minutes: null,
+              projectId: null,
               createdAt: (/* @__PURE__ */ new Date()).toISOString()
-            };
-            this.state.projects.push(project);
-            let previous;
-            for (const employee of employees) {
-              const task = this.appendTask(
-                project,
-                employee,
-                `${employee.role} \xB7 ${input.name}`,
-                `\u5B8C\u6210\u4F60\u7684\u5C97\u4F4D\u8D1F\u8D23\u7684\u5DE5\u4F5C\uFF0C\u4F7F\u7528\u5DF2\u4EA4\u63A5\u7684\u6587\u6863\u548C\u7ED3\u679C\u3002\u76EE\u6807\uFF1A${input.objective}`,
-                previous ? [previous.id] : [],
-                []
-              );
-              if (employee.permission !== "read-only") task.outputFiles = [`.studio-deliverables/${task.id}.md`];
-              previous = task;
-            }
+            });
+            break;
+          }
+          case "updateMeeting": {
+            const input = parseFields(z2.object({ ...meetingFields, id: z2.string().required() }), command.input);
+            const meeting2 = this.meeting(input.id);
+            if (meeting2.status === "closed") throw new Error("The meeting has ended");
+            const attendees = this.attendees(input.hostId, input.attendeeIds);
+            if (meeting2.speaking && !attendees.includes(meeting2.speaking)) throw new Error("Wait until the current speaker finishes");
+            Object.assign(meeting2, {
+              title: input.title,
+              agenda: input.agenda,
+              hostId: input.hostId,
+              attendeeIds: attendees,
+              queue: meeting2.queue.filter((id2) => attendees.includes(id2))
+            });
+            break;
+          }
+          case "meetingMessage": {
+            const input = parseFields(meetingMessageInput, command.input);
+            const meeting2 = this.meeting(input.id);
+            if (meeting2.status !== "open") throw new Error("The meeting is not open for discussion");
+            const mentions = [...new Set(input.mentions)];
+            if (mentions.some((id2) => !meeting2.attendeeIds.includes(id2))) throw new Error("Mention only meeting attendees");
+            meeting2.messages.push({
+              id: randomUUID3(),
+              from: "user",
+              message: input.message,
+              mentions,
+              createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+              nativeSession: null
+            });
+            meeting2.queue = [.../* @__PURE__ */ new Set([...meeting2.queue, ...mentions.length ? mentions : [meeting2.hostId]])];
+            meeting2.error = "";
+            break;
+          }
+          case "stopMeeting": {
+            const meeting2 = this.meeting(identity(command.input));
+            meeting2.queue = [];
+            this.meetingRuns.get(meeting2.id)?.controller.abort(new Error("Stopped by user"));
+            break;
+          }
+          case "draftMinutes": {
+            const meeting2 = this.meeting(identity(command.input));
+            if (meeting2.status !== "open" && meeting2.status !== "review") throw new Error("The meeting has ended");
+            if (this.meetingRuns.has(meeting2.id)) throw new Error("Wait for the current speaker or stop the turn first");
+            if (!meeting2.messages.length) throw new Error("Discuss something before drafting minutes");
+            meeting2.status = "drafting";
+            meeting2.queue = [];
+            meeting2.error = "";
+            break;
+          }
+          case "saveMinutes": {
+            const input = parseFields(z2.object({ id: z2.string().required(), minutes: minutesSchema.required() }), command.input);
+            const meeting2 = this.meeting(input.id);
+            if (meeting2.status !== "review") throw new Error("Minutes can be edited only while awaiting confirmation");
+            for (const task of input.minutes.tasks) this.employee(task.employeeId);
+            meeting2.minutes = input.minutes;
+            meeting2.error = "";
+            break;
+          }
+          case "resumeMeeting": {
+            const meeting2 = this.meeting(identity(command.input));
+            if (meeting2.status !== "review") throw new Error("Only meetings awaiting minutes confirmation can resume");
+            meeting2.status = "open";
+            break;
+          }
+          case "meetingProject": {
+            const input = parseFields(z2.object({
+              id: z2.string().required(),
+              minutes: minutesSchema.required(),
+              cwd: z2.string().required(),
+              sessionMode: z2.union(["employee-project", "new-task"]).required()
+            }), command.input);
+            const meeting2 = this.meeting(input.id);
+            if (meeting2.status !== "review") throw new Error("Confirm the meeting minutes first");
+            const minutes = input.minutes;
+            if (!minutes.projectName.trim() || !minutes.objective.trim()) throw new Error("Minutes need a project name and objective");
+            if (!minutes.tasks.length || minutes.tasks.some((task) => !task.title.trim() || !task.instruction.trim())) throw new Error("Minutes need at least one complete task");
+            const project = await this.newProject(
+              {
+                name: minutes.projectName,
+                objective: minutes.objective,
+                cwd: input.cwd,
+                workspaceId: meeting2.workspaceId,
+                acceptanceCriteria: minutes.acceptanceCriteria,
+                sessionMode: input.sessionMode
+              },
+              minutes.tasks.map((task) => ({ employee: this.employee(task.employeeId), title: task.title, instruction: task.instruction }))
+            );
+            this.state.messages.push({
+              id: randomUUID3(),
+              projectId: project.id,
+              taskId: null,
+              from: "user",
+              to: "team",
+              message: [`\u4F1A\u8BAE\u7EAA\u8981\uFF1A${meeting2.title}`, minutes.summary, ...minutes.decisions.map((value) => `- ${value}`)].filter(Boolean).join("\n"),
+              createdAt: (/* @__PURE__ */ new Date()).toISOString()
+            });
+            Object.assign(meeting2, { minutes, status: "closed", projectId: project.id, queue: [], error: "" });
+            break;
+          }
+          case "closeMeeting": {
+            const meeting2 = this.meeting(identity(command.input));
+            meeting2.status = "closed";
+            meeting2.queue = [];
+            this.meetingRuns.get(meeting2.id)?.controller.abort(new Error("Meeting ended"));
             break;
           }
           case "createTask": {
@@ -805,8 +1003,192 @@ var Studio = class _Studio {
         throw error;
       }
       this.schedule();
+      this.scheduleMeetings();
       return this.snapshot();
     });
+  }
+  attendees(hostId, ids) {
+    const attendees = [.../* @__PURE__ */ new Set([hostId, ...ids])].map((id2) => this.employee(id2));
+    if (attendees.some((employee) => !employee.enabled)) throw new Error("Invite only enabled employees");
+    return attendees.map((employee) => employee.id);
+  }
+  /** Validate directory and team, then append a paused project whose tasks form a sequential chain. */
+  async newProject(input, assignments) {
+    const workspace = this.state.workspaces.find((value) => value.id === input.workspaceId);
+    if (!workspace) throw new Error("Select a company workspace first");
+    const directory = input.cwd || workspace.path;
+    if (!isAbsolute2(directory) || !(await stat(directory)).isDirectory()) throw new Error("Project working directory must be an existing absolute directory");
+    const cwd = await realpath2(directory);
+    if (!withinDirectory(workspace.path, cwd)) throw new Error("Project directory must stay inside the company workspace");
+    if (!assignments.length || assignments.some((value) => !value.employee.enabled)) throw new Error("Select at least one enabled employee");
+    if (assignments.length > this.config.maxTasksPerProject) throw new Error("Team exceeds the project task limit");
+    const project = {
+      id: randomUUID3(),
+      name: input.name,
+      objective: input.objective,
+      cwd,
+      workspaceId: workspace.id,
+      acceptanceCriteria: input.acceptanceCriteria,
+      sessionMode: input.sessionMode,
+      status: "paused",
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    this.state.projects.push(project);
+    let previous;
+    for (const { employee, title, instruction } of assignments) {
+      const task = this.appendTask(project, employee, title, instruction, previous ? [previous.id] : [], []);
+      if (employee.permission !== "read-only") task.outputFiles = [`.studio-deliverables/${task.id}.md`];
+      previous = task;
+    }
+    return project;
+  }
+  meetingPrompt(meeting2, employee, drafting) {
+    const name2 = (id2) => id2 === "user" ? "\u7532\u65B9\uFF08\u7528\u6237\uFF09" : this.state.employees.find((value) => value.id === id2)?.name ?? id2;
+    const header = [
+      `\u4F60\u662F\u8F6F\u4EF6\u516C\u53F8\u7684\u5458\u5DE5 ${employee.name}\uFF0C\u5C97\u4F4D\uFF1A${employee.role}\u3002\u804C\u8D23\uFF1A${employee.responsibilities}`,
+      `\u4F60\u6B63\u5728\u53C2\u52A0\u4F1A\u8BAE\u300C${meeting2.title}\u300D\u3002${meeting2.hostId === employee.id ? "\u4F60\u662F\u672C\u6B21\u4F1A\u8BAE\u4E3B\u6301\u4EBA\uFF1A\u5F15\u5BFC\u8BA8\u8BBA\uFF0C\u6F84\u6E05\u7532\u65B9\u9700\u6C42\uFF0C\u5FC5\u8981\u65F6\u70B9\u540D\u5408\u9002\u7684\u540C\u4E8B\u53D1\u8A00\u3002" : `\u4E3B\u6301\u4EBA\u662F ${name2(meeting2.hostId)}\u3002`}`,
+      `\u4F1A\u8BAE\u8BAE\u9898\uFF1A${meeting2.agenda || "\uFF08\u672A\u586B\u5199\uFF0C\u6309\u8BA8\u8BBA\u5185\u5BB9\u63A8\u8FDB\uFF09"}`,
+      "\u7532\u65B9\uFF08\u7528\u6237\uFF09\u662F\u63D0\u51FA\u9700\u6C42\u7684\u5BA2\u6237\u3002\u4F1A\u8BAE\u53EA\u8BA8\u8BBA\uFF0C\u4E0D\u5199\u4EE3\u7801\uFF0C\u4E0D\u4FEE\u6539\u4EFB\u4F55\u6587\u4EF6\u3002",
+      `\u53C2\u4F1A\u8005\uFF1A${JSON.stringify(meeting2.attendeeIds.map((id2) => ({ employeeId: id2, name: name2(id2), role: this.employee(id2).role, host: id2 === meeting2.hostId })))}`
+    ].join("\n\n");
+    const instruction = drafting ? [
+      "\u8BA8\u8BBA\u5DF2\u7ED3\u675F\u3002\u8BF7\u4F5C\u4E3A\u4E3B\u6301\u4EBA\u6574\u7406\u4F1A\u8BAE\u7EAA\u8981\uFF0C\u4F9B\u7532\u65B9\u786E\u8BA4\u540E\u76F4\u63A5\u5EFA\u7ACB\u9879\u76EE\u3002",
+      '\u4EC5\u8FD4\u56DE JSON\uFF1A{"message":"<\u7EAA\u8981 JSON \u5B57\u7B26\u4E32>","files":[],"handoffs":[]}\u3002message \u5FC5\u987B\u662F\u4E00\u4E2A JSON \u5B57\u7B26\u4E32\uFF0C\u7ED3\u6784\u4E3A\uFF1A',
+      '{"summary":"\u4F1A\u8BAE\u7ED3\u8BBA\u6982\u8FF0","decisions":["\u5DF2\u786E\u5B9A\u7684\u9700\u6C42\u6216\u51B3\u5B9A"],"projectName":"\u9879\u76EE\u540D\u79F0","objective":"\u9879\u76EE\u76EE\u6807","acceptanceCriteria":"\u9010\u6761\u9A8C\u6536\u6807\u51C6","tasks":[{"employeeId":"\u53C2\u4F1A\u8005\u771F\u5B9E employeeId","title":"\u4EFB\u52A1\u6807\u9898","instruction":"\u5177\u4F53\u4EFB\u52A1\u5B89\u6392"}]}',
+      "tasks \u6309\u4EA4\u4ED8\u987A\u5E8F\u6392\u5217\uFF0C\u6BCF\u9879\u4EA4\u7ED9\u6700\u5408\u9002\u7684\u53C2\u4F1A\u8005\u3002\u4E0D\u5F97\u5305\u542B\u63A8\u7406\u8FC7\u7A0B\u3002"
+    ].join("\n") : [
+      "\u73B0\u5728\u8F6E\u5230\u4F60\u53D1\u8A00\u3002\u8BF7\u4EE5\u4F60\u7684\u5C97\u4F4D\u89C6\u89D2\uFF0C\u50CF\u4F1A\u8BAE\u4E2D\u90A3\u6837\u7B80\u6D01\u5730\u53E3\u5934\u53D1\u8A00\uFF1A\u56DE\u5E94\u6700\u65B0\u7684\u95EE\u9898\uFF0C\u63D0\u51FA\u9700\u8981\u7532\u65B9\u6F84\u6E05\u7684\u95EE\u9898\u3001\u98CE\u9669\u3001\u4F30\u7B97\u6216\u5EFA\u8BAE\u3002",
+      '\u4EC5\u8FD4\u56DE JSON\uFF1A{"message":"\u4F60\u7684\u53D1\u8A00","files":[],"handoffs":[{"employeeId":"\u9700\u8981\u63A5\u7740\u53D1\u8A00\u7684\u53C2\u4F1A\u540C\u4E8B employeeId","message":"\u60F3\u8BF7\u4ED6\u56DE\u7B54\u7684\u95EE\u9898"}]}\u3002\u4E0D\u9700\u8981\u522B\u4EBA\u63A5\u8BDD\u65F6 handoffs \u4E3A []\u3002\u4E0D\u5F97\u5305\u542B\u63A8\u7406\u8FC7\u7A0B\u3001\u601D\u8003\u65E5\u5FD7\u6216\u5DE5\u5177\u8C03\u7528\u8F68\u8FF9\u3002'
+    ].join("\n");
+    const budget = this.config.maxTextBytes - Buffer.byteLength(header) - Buffer.byteLength(instruction) - 1024;
+    const transcript = [];
+    let used = 0;
+    for (const message of [...meeting2.messages].reverse()) {
+      const entry = { speaker: name2(message.from), message: message.message };
+      const bytes = Buffer.byteLength(JSON.stringify(entry));
+      if (used + bytes > budget) break;
+      transcript.unshift(entry);
+      used += bytes;
+    }
+    if (!transcript.length && meeting2.messages.length) throw new Error("The latest meeting message exceeds the configured text limit");
+    const omitted = meeting2.messages.length - transcript.length;
+    return [header, `\u4F1A\u8BAE\u8BB0\u5F55\uFF08\u6309\u65F6\u95F4\u987A\u5E8F${omitted ? `\uFF0C\u7701\u7565\u6700\u65E9\u7684 ${omitted} \u6761` : ""}\uFF09\uFF1A${JSON.stringify(transcript)}`, instruction].join("\n\n");
+  }
+  scheduleMeetings() {
+    if (this.closing) return;
+    for (const meeting2 of this.state.meetings) {
+      if (this.meetingRuns.has(meeting2.id)) continue;
+      if (meeting2.status !== "drafting" && !(meeting2.status === "open" && meeting2.queue.length)) continue;
+      const controller = new AbortController();
+      const run = { controller, done: Promise.resolve() };
+      this.meetingRuns.set(meeting2.id, run);
+      run.done = this.meetingTurn(meeting2.id, controller).finally(() => {
+        this.meetingRuns.delete(meeting2.id);
+        this.scheduleMeetings();
+      });
+      void run.done.catch((error) => {
+        console.error("Studio could not persist a meeting turn:", error instanceof Error ? error.message : "unknown error");
+      });
+    }
+  }
+  /** Run one speaker, or the host's minutes, through the employee's own engine: read-only, in the company directory. */
+  async meetingTurn(id2, controller) {
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error("Meeting turn timeout reached"));
+    }, this.config.taskTimeoutMs);
+    try {
+      const prepared = await this.enqueue(async () => {
+        const meeting3 = this.meeting(id2);
+        const drafting2 = meeting3.status === "drafting";
+        const speaker = drafting2 ? meeting3.hostId : meeting3.queue[0];
+        if (!speaker || controller.signal.aborted || this.closing) return null;
+        const employee2 = this.employee(speaker);
+        const workspace = this.state.workspaces.find((value) => value.id === meeting3.workspaceId);
+        if (!workspace) throw new Error("Company workspace does not exist");
+        const cwd2 = await realpath2(workspace.path);
+        const prompt2 = this.meetingPrompt(meeting3, employee2, drafting2);
+        if (!drafting2) meeting3.queue.shift();
+        meeting3.speaking = speaker;
+        meeting3.error = "";
+        await this.commit();
+        return { meeting: structuredClone(meeting3), employee: structuredClone(employee2), cwd: cwd2, drafting: drafting2, prompt: prompt2 };
+      });
+      if (!prepared) return;
+      const { meeting: meeting2, employee, cwd, drafting, prompt } = prepared;
+      let session = null;
+      try {
+        const project = {
+          id: meeting2.id,
+          workspaceId: meeting2.workspaceId,
+          name: `\u4F1A\u8BAE \xB7 ${meeting2.title}`,
+          objective: meeting2.agenda,
+          cwd,
+          status: "running",
+          acceptanceCriteria: "",
+          sessionMode: "new-task",
+          createdAt: meeting2.createdAt
+        };
+        const task = {
+          id: randomUUID3(),
+          projectId: project.id,
+          employeeId: employee.id,
+          title: meeting2.title,
+          instruction: prompt,
+          dependsOn: [],
+          outputFiles: [],
+          status: "running",
+          attempt: 1,
+          result: "",
+          error: "",
+          startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          finishedAt: "",
+          assignment: prompt,
+          nativeSessions: [],
+          reviewStatus: "pending"
+        };
+        const result = await this.executor.run({ ...employee, permission: "read-only", cwd: "" }, project, task, controller.signal, {
+          resumeSessionId: null,
+          recordSession: (sessionId) => {
+            if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(sessionId)) return Promise.reject(new Error("Native session identity is invalid"));
+            session = { id: sessionId, engine: employee.engine, cwd, attempt: 1, continued: false };
+            return Promise.resolve();
+          }
+        });
+        controller.signal.throwIfAborted();
+        await this.enqueue(async () => {
+          const live = this.meeting(id2);
+          const createdAt = (/* @__PURE__ */ new Date()).toISOString();
+          live.speaking = null;
+          if (drafting) {
+            const { minutes, parsed } = parseMinutes(result.message, live);
+            live.minutes = minutes;
+            live.status = "review";
+            live.error = parsed ? "" : "The host did not return structured minutes. The original text is kept; add the project details and tasks before creating the project.";
+            live.messages.push({ id: randomUUID3(), from: employee.id, message: minutes.summary, mentions: [], createdAt, nativeSession: session });
+          } else {
+            const sinceUser = live.messages.length - 1 - live.messages.findLastIndex((message) => message.from === "user");
+            const mentions = [...new Set(result.handoffs.map((handoff) => handoff.employeeId))].filter((value) => value !== employee.id && live.attendeeIds.includes(value));
+            live.messages.push({ id: randomUUID3(), from: employee.id, message: result.message, mentions, createdAt, nativeSession: session });
+            if (live.status === "open" && sinceUser + 1 < meetingChainLimit) live.queue = [.../* @__PURE__ */ new Set([...live.queue, ...mentions])];
+          }
+          await this.commit();
+        });
+      } catch (error) {
+        await this.enqueue(async () => {
+          const live = this.state.meetings.find((value) => value.id === id2);
+          if (!live) return;
+          live.speaking = null;
+          live.queue = [];
+          if (live.status === "drafting") live.status = "open";
+          live.error = timedOut ? "Meeting turn timeout reached" : controller.signal.aborted ? `${employee.name} was stopped` : `${employee.name}: ${error instanceof Error ? error.message : "meeting turn failed"}`;
+          await this.commit();
+        });
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
   }
   assignment(employee, project, task) {
     const dependencies = task.dependsOn.map((id2) => this.task(id2));
@@ -1005,11 +1387,50 @@ ${task.instruction}`,
    */
   async close() {
     this.closing = true;
-    for (const run of this.active.values()) run.controller.abort(new Error("Host shutdown"));
-    await Promise.allSettled([...this.active.values()].map((run) => run.done));
+    const runs = [...this.active.values(), ...this.meetingRuns.values()];
+    for (const run of runs) run.controller.abort(new Error("Host shutdown"));
+    await Promise.allSettled(runs.map((run) => run.done));
     await this.serial;
   }
 };
+function parseMinutes(text2, meeting2) {
+  const fallback = {
+    summary: text2.slice(0, 1e5),
+    decisions: [],
+    projectName: meeting2.title.slice(0, 500),
+    objective: meeting2.agenda,
+    acceptanceCriteria: "",
+    tasks: []
+  };
+  let raw;
+  try {
+    raw = JSON.parse(text2.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+  } catch {
+    return { minutes: fallback, parsed: false };
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { minutes: fallback, parsed: false };
+  const value = raw;
+  const string = (key, max) => {
+    const field = value[key];
+    return typeof field === "string" ? field.slice(0, max) : "";
+  };
+  const tasks = Array.isArray(value.tasks) ? value.tasks.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const task = item;
+    if (typeof task.employeeId !== "string" || !meeting2.attendeeIds.includes(task.employeeId) || typeof task.title !== "string" || typeof task.instruction !== "string" || !task.title.trim()) return [];
+    return [{ employeeId: task.employeeId, title: task.title.slice(0, 500), instruction: task.instruction.slice(0, 1e5) }];
+  }) : [];
+  const summary = string("summary", 1e5);
+  if (!summary && !tasks.length) return { minutes: fallback, parsed: false };
+  return { parsed: true, minutes: {
+    summary,
+    tasks,
+    decisions: Array.isArray(value.decisions) ? value.decisions.filter((item) => typeof item === "string").map((item) => item.slice(0, 1e5)) : [],
+    projectName: string("projectName", 500) || fallback.projectName,
+    objective: string("objective", 1e5) || fallback.objective,
+    acceptanceCriteria: string("acceptanceCriteria", 1e5)
+  } };
+}
 
 // src/executor.ts
 import { mkdtemp, readFile as readFile3, writeFile as writeFile4, rm as rm2, mkdir as mkdir4, stat as stat2 } from "node:fs/promises";

@@ -2,7 +2,7 @@
 
 DeepSeek Harness W 系列工作室插件。在原有对话之外增加公司工作台：配置岗位与员工模型、选择共享工作区、建立项目与任务，通过工作报告、交接消息和文件协作，支持返工、验收与项目导出。
 
-当前版本：`0.1.0`。发布包：`dsh-w-studio-0.1.0.tgz`。已验证环境：Windows、本地 Harness `0.1.5-rc.2` Web profile。官方桌面 `desktop` profile 尚未验证；本版本的界面通信使用 Web Connection HTTP 接口。
+当前版本：`0.2.0`。发布包：`dsh-w-studio-0.2.0.tgz`（0.1.0 安装包保留在同目录）。已验证环境：Windows、本地 Harness `0.1.5-rc.2` Web profile。官方桌面 `desktop` profile 尚未验证；本版本的界面通信使用 Web Connection HTTP 接口。
 
 ## 功能
 
@@ -13,6 +13,7 @@ DeepSeek Harness W 系列工作室插件。在原有对话之外增加公司工�
 - 员工之间交接最终工作报告、消息和成果文件；员工自己的原生上下文分别保留。
 - 查看实际原生会话 ID 和继续会话命令，可选按员工/项目续接或每项任务新开会话。
 - 下载成果；向共享工作区导出项目简介、任务看板、交接记录和成果副本。
+- 会议室：用户以甲方身份召集员工群聊沟通需求。未 @ 时由主持人回复，@ 员工后依次发言，员工也可在发言中点名同事（每条甲方消息后最多 6 轮员工发言）。每次发言以只读方式、在公司目录中调用该员工自己的执行工具和模型，并记录原生会话 ID。讨论后由主持人整理纪要，甲方确认或修改后一键建项目：目标、验收标准、按顺序依赖的任务，纪要同时作为团队消息交给项目员工。
 - 中英文界面与窄屏布局。
 
 ## 安装与启动
@@ -36,7 +37,7 @@ dsh web
 
 正式安装包自动从当前安装环境解析 `@deepseek-ai/dsh` 的 CLI；`dshBin` 可以指定本地构建产物。需要完整的已构建 SDK profile，不能以源码文件替代这个执行入口。
 
-默认数据沿用 Harness home 下的 `studio/studio.v2.json`，因此原开发版工作室的数据可以继续读取。旧记录保留。不要同时启用内部 `experimental-studio` 和 `dsh-w-studio`，二者使用相同数据与 HTTP 路径。
+默认数据位于 Harness home 下的 `studio/studio.v3.json`（v3 在 v2 基础上增加会议记录）。首次启动时如果只有 `studio.v2.json` 或 `studio.v1.json`，会读取并写入新的 v3 文件，旧文件逐字节保留，旧版本插件仍可读取自己的文件；此后两个版本的数据各自独立，不会互相同步。不要同时启用内部 `experimental-studio` 和 `dsh-w-studio`，二者使用相同数据与 HTTP 路径。
 
 ## 配置
 
@@ -60,7 +61,7 @@ Codex 与 Claude Code 使用各自 CLI 的会话方式。Harness/兼容模型的
 
 ## 源码和 UI 接手
 
-Host 为 `src/index.ts`，工作室业务为 `src/studio.ts`，员工执行为 `src/executor.ts`，模型目录为 `src/catalog.ts`。前端从 `src/client/mount.tsx` 挂载，主页面在 `StudioPanel.tsx`，员工编辑在 `EmployeeEditor.tsx`，任务列表与成果在 `TaskBoard.tsx`，样式在 `Studio.module.css`，中英文字典在 `locales.ts`。
+Host 为 `src/index.ts`，工作室业务为 `src/studio.ts`，员工执行为 `src/executor.ts`，模型目录为 `src/catalog.ts`。前端从 `src/client/mount.tsx` 挂载。`StudioPanel.tsx` 是页面骨架（公司工作区切换、页签、错误提示）；`TeamView.tsx` 为员工名单、搜索、模板与连接检查，`EmployeeEditor.tsx` 为员工表单、可搜索模型列表和思考等级；`ProjectView.tsx` 为项目切换、按状态显示的项目操作和项目摘要，`ProjectDialog.tsx` 为新建项目对话框；`TaskBoard.tsx` 为任务筛选、流水线列表和任务编辑，`TaskDetail.tsx` 为任务成果、返工关系、相关交接和执行信息，`ArtifactList.tsx` 为成果文件下载、图片缩略图和文本预览；`HandoffTimeline.tsx` 为交接时间线，`MeetingRoom.tsx` 为会议室（会议列表、群聊、点名、纪要编辑与建项目）。Host 端会议逻辑在 `src/studio.ts` 的会议命令、`meetingTurn` 和 `parseMinutes`。`ui.ts` 放置从真实状态推导的显示逻辑（依赖等待、返工关系、统计、文件类型），`parts.tsx` 为头像、状态标签等小组件。样式在 `Studio.module.css`（使用 DSH 设计变量，随浅色/深色主题切换），中英文字典在 `locales.ts`。
 
 本目录是 W 系列发布源码。Harness monorepo 中的 `packages/experimental/studio` 是之前的内部开发版本；UI 后续修改应以本目录源码为准。根 `index.js`、`client.js` 是构建产物，修改源文件后重新构建，不直接改产物。
 

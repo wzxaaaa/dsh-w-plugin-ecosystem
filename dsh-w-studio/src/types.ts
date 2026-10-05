@@ -13,6 +13,8 @@ export type StudioMessageId = Branded<'StudioMessageId'>
 export type StudioArtifactId = Branded<'StudioArtifactId'>
 /** Company workspace identity owned by Studio. */
 export type StudioWorkspaceId = Branded<'StudioWorkspaceId'>
+/** Meeting identity minted by Studio. */
+export type StudioMeetingId = Branded<'StudioMeetingId'>
 /** Session identity returned by a native executor. */
 export type StudioNativeSessionId = Branded<'StudioNativeSessionId'>
 /** Executors available to employees. */
@@ -103,9 +105,50 @@ export interface Artifact {
   size: number
   sha256: string
 }
+/** One spoken turn in a meeting; employee turns carry their native session identity. */
+export interface MeetingMessage {
+  id: StudioMessageId
+  from: StudioEmployeeId | 'user'
+  message: string
+  /** Attendees asked to speak next. */
+  mentions: StudioEmployeeId[]
+  createdAt: string
+  nativeSession: StudioNativeSession | null
+}
+/** Host-drafted, user-editable meeting outcome that can become a project. */
+export interface MeetingMinutes {
+  summary: string
+  decisions: string[]
+  projectName: string
+  objective: string
+  acceptanceCriteria: string
+  /** Ordered assignments; the created project runs them as a dependency chain. */
+  tasks: { employeeId: StudioEmployeeId; title: string; instruction: string }[]
+}
+/** Group discussion between the user (as client) and invited employees.
+ * open: discussing; drafting: host writing minutes; review: minutes await the user; closed: ended.
+ */
+export interface Meeting {
+  id: StudioMeetingId
+  workspaceId: StudioWorkspaceId
+  title: string
+  agenda: string
+  hostId: StudioEmployeeId
+  attendeeIds: StudioEmployeeId[]
+  status: 'open' | 'drafting' | 'review' | 'closed'
+  /** Attendees waiting to speak, in order. */
+  queue: StudioEmployeeId[]
+  /** Attendee whose native turn is running. */
+  speaking: StudioEmployeeId | null
+  error: string
+  messages: MeetingMessage[]
+  minutes: MeetingMinutes | null
+  projectId: StudioProjectId | null
+  createdAt: string
+}
 /** Studio's versioned local document; public HTTP responses use the same records. */
 export interface StudioState {
-  version: 2
+  version: 3
   revision: number
   workspaces: StudioWorkspace[]
   activeWorkspaceId: StudioWorkspaceId | null
@@ -114,6 +157,7 @@ export interface StudioState {
   tasks: Task[]
   messages: Handoff[]
   artifacts: Artifact[]
+  meetings: Meeting[]
 }
 /** Explicit deployment limits and executable argv prefixes. */
 export interface StudioConfig {
