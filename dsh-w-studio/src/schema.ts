@@ -69,6 +69,10 @@ export const stateV1Schema = z.object(stateV1Fields)
 export const nativeSessionSchema = z.object({ id, engine, cwd: short,
   attempt: z.natural().min(1).required(), continued: z.boolean().required() })
 const nativeSession = nativeSessionSchema
+const taskV2Fields = { ...taskFields,
+  nativeSessions: z.array(nativeSession).required(),
+  reviewStatus: z.union(['pending', 'accepted', 'superseded'] as const).required(),
+}
 const stateV2Fields = {
   ...stateV1Fields,
   version: z.const(2).required(),
@@ -79,10 +83,7 @@ const stateV2Fields = {
     sessionMode: z.union(['employee-project', 'new-task'] as const).required(),
     status: z.union(['paused', 'running', 'review', 'completed'] as const).required(),
   })).required(),
-  tasks: z.array(z.object({ ...taskFields,
-    nativeSessions: z.array(nativeSession).required(),
-    reviewStatus: z.union(['pending', 'accepted', 'superseded'] as const).required(),
-  })).required(),
+  tasks: z.array(z.object(taskV2Fields)).required(),
 }
 
 /** Frozen v2 fields used only to read the predecessor journal. */
@@ -105,5 +106,11 @@ export const stateV3Schema = z.object(stateV3Fields)
 
 /** Editable team template; also the `saveTemplate` input. */
 export const templateSchema = z.object({ id, name: short, description: text, members: z.array(memberSchema).required(), createdAt: short })
-/** Current document: v3 plus editable team templates. */
-export const stateSchema = z.object({ ...stateV3Fields, version: z.const(4).required(), templates: z.array(templateSchema).required() })
+const stateV4Fields = { ...stateV3Fields, version: z.const(4).required(), templates: z.array(templateSchema).required() }
+/** Frozen v4 fields (v3 plus editable team templates) used only to read the predecessor journal. */
+export const stateV4Schema = z.object(stateV4Fields)
+/** Current document: v4 plus tasks that wait for the user and resume with the reply. */
+export const stateSchema = z.object({ ...stateV4Fields, version: z.const(5).required(),
+  tasks: z.array(z.object({ ...taskV2Fields,
+    status: z.union(['pending', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'] as const).required(),
+    question: text, reply: text })).required() })

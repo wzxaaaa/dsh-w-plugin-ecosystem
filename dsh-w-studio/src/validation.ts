@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { Employee, StudioEmployeeId, StudioState, StudioWorkspaceId, TemplateMember } from './types.ts'
 import { defaultTemplates } from './templates.ts'
 
-import { minutesSchema, nativeSessionSchema, parseFields, stateSchema, stateV1Schema, stateV2Schema, stateV3Schema } from './schema.ts'
+import { minutesSchema, nativeSessionSchema, parseFields, stateSchema, stateV1Schema, stateV2Schema, stateV3Schema, stateV4Schema } from './schema.ts'
 export { employeeSchema } from './schema.ts'
 
 /** Parse a disk document without admitting unsupported generations.
@@ -101,7 +101,16 @@ export function migrateStateV2(input: unknown): StudioState {
  * @returns Current state.
  */
 export function migrateStateV3(input: unknown): StudioState {
-  return parseState({ ...parseFields(stateV3Schema, input), version: 4, templates: defaultTemplates() })
+  return migrateStateV4({ ...parseFields(stateV3Schema, input), version: 4, templates: defaultTemplates() })
+}
+
+/** Read the frozen v4 document into the current journal; no task is waiting for the user yet.
+ * @param input - Decoded v4 JSON.
+ * @returns Current state.
+ */
+export function migrateStateV4(input: unknown): StudioState {
+  const old = parseFields(stateV4Schema, input)
+  return parseState({ ...old, version: 5, tasks: old.tasks.map(task => ({ ...task, question: '', reply: '' })) })
 }
 
 /** Read the frozen predecessor into a separate current journal without changing it.

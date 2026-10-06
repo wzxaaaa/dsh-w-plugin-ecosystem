@@ -61,7 +61,7 @@ export function projectStats(tasks: readonly Task[]) {
   const count = (...values: TaskPhase[]): number => phases.filter(phase => values.includes(phase)).length
   const active = tasks.filter(task => task.status !== 'cancelled').length
   return { total: tasks.length, active, completed: count('completed'), running: count('running'), ready: count('pending'),
-    blocked: count('blocked'), attention: count('failed', 'interrupted', 'cancelled'),
+    blocked: count('blocked'), needsYou: count('waiting'), attention: count('failed', 'interrupted', 'cancelled'),
     review: tasks.filter(task => task.status === 'completed' && task.reviewStatus === 'pending').length }
 }
 /** Stable avatar tone from an identity, so colors survive reordering.

@@ -66,7 +66,9 @@ export interface Project {
   sessionMode: 'employee-project' | 'new-task'
   createdAt: string
 }
-/** Task state survives reload; interrupted work requires an explicit retry. */
+/** Task state survives reload; interrupted work requires an explicit retry.
+ * waiting: the employee paused for something only the user can do; the reply resumes the same native session.
+ */
 export interface Task {
   id: StudioTaskId
   projectId: StudioProjectId
@@ -75,7 +77,7 @@ export interface Task {
   instruction: string
   dependsOn: StudioTaskId[]
   outputFiles: string[]
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  status: 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
   attempt: number
   result: string
   error: string
@@ -85,6 +87,10 @@ export interface Task {
   assignment: string
   nativeSessions: StudioNativeSession[]
   reviewStatus: 'pending' | 'accepted' | 'superseded'
+  /** What the employee needs the user to do while the task is waiting. */
+  question: string
+  /** User reply not yet delivered; the next attempt continues the waiting session with it. */
+  reply: string
 }
 /** A human-readable message; native reasoning and tool events are excluded. */
 export interface Handoff {
@@ -160,7 +166,7 @@ export interface TeamTemplate {
 }
 /** Studio's versioned local document; public HTTP responses use the same records. */
 export interface StudioState {
-  version: 4
+  version: 5
   revision: number
   workspaces: StudioWorkspace[]
   activeWorkspaceId: StudioWorkspaceId | null
@@ -198,12 +204,16 @@ export interface StudioConfig {
   disposeGraceMs: number
   /** Interval supplied to the browser for refreshing the public journal. */
   pollIntervalMs: number
+  /** How long a native run may linger after reporting its final answer before Studio ends it. */
+  completionGraceMs: number
 }
 /** Only the final human message and explicitly named files cross executor ownership. */
 export interface EmployeeResult {
   message: string
   files: string[]
   handoffs: { employeeId: StudioEmployeeId; message: string }[]
+  /** Non-empty when the employee stopped to ask the user for something it cannot do itself. */
+  needsUser: string
 }
 /** An executor receives a committed assignment and returns a final handoff. */
 export interface StudioExecutor {
@@ -220,6 +230,8 @@ export interface StudioExecutor {
 /** One attempt's private continuation selection and awaited metadata commit. */
 export interface StudioExecution {
   resumeSessionId: StudioNativeSessionId | null
+  /** Latest human-readable progress line from the native run; transient and never persisted. */
+  progress?(text: string): void
   /** Record only the native identity, never its stream or transcript.
    * @param id - Identity returned by the executor.
    * @returns Completion of the durable metadata update.

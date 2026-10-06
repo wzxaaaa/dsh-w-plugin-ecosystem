@@ -75,7 +75,7 @@ export function StudioPanel({ useStudio, command, refresh, checkHealth, pickDire
             : <>
               <ProjectBar key={`bar-${project.id}`} state={state} projects={projects} project={project} busy={view.busy} t={t} command={command} onSelect={(id) => { setProjectId(id); setTaskId(null) }} />
               {tab === 'tasks'
-                ? <TaskBoard key={`tasks-${project.id}`} state={state} project={project} busy={view.busy} error={view.error} t={t} command={command} selected={taskId} onSelect={setTaskId} />
+                ? <TaskBoard key={`tasks-${project.id}`} state={state} progress={view.progress} project={project} busy={view.busy} error={view.error} t={t} command={command} selected={taskId} onSelect={setTaskId} />
                 : <HandoffTimeline key={`handoffs-${project.id}`} state={state} project={project} busy={view.busy} error={view.error} t={t} command={command} onOpenTask={(id) => { setTaskId(id); setTab('tasks') }} />}
             </>}
     {state && workspace && <ProjectDialog open={projectForm} state={state} workspace={workspace} busy={view.busy} error={view.error} t={t} command={command}

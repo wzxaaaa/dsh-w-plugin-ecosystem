@@ -43,7 +43,7 @@ it('runs native employees through cordis.yml without leaking private progress in
     { name: 'connection' }, { name: 'subprocess' }, { name: 'llm' }, { name: 'directory' },
     { name: 'studio', config: { storageRoot: join(root, 'store'), dshBin: join(root, 'dsh.js'),
       claudeCommand: [process.execPath, native, 'claude'], codexCommand: [process.execPath, native, 'codex'],
-      maxRequestBytes: 4096 } },
+      maxRequestBytes: 4096, completionGraceMs: 300 } },
   ]
   const path = join(root, 'cordis.yml')
   await writeFile(path, JSON.stringify(configuration))
@@ -113,8 +113,9 @@ it('runs native employees through cordis.yml without leaking private progress in
   expect((await invocation('codex')).args).toEqual(expect.arrayContaining(['-m', 'fixture-codex', 'model_reasoning_effort="high"', '--sandbox', 'workspace-write']))
   expect((await invocation('claude')).args).toEqual(expect.arrayContaining(['--model', 'fixture-claude', '--effort', 'high', '--permission-mode', 'acceptEdits']))
   const sessions = final.tasks.map(task => task.nativeSessions[0]!.id)
+  // The Codex continuation lingers after its final answer, as a run that leaves a daemon holding its output would.
   for (const task of final.tasks) await command('createTask', { projectId: task.projectId, employeeId: task.employeeId,
-    title: 'Continue private context', instruction: 'Use your own prior session.', dependsOn: [task.id], outputFiles: [] })
+    title: 'Continue private context', instruction: `Use your own prior session. ${task.employeeId === roster.find(e => e.engine === 'codex')?.id ? 'LINGER_AFTER_FINAL' : ''}`, dependsOn: [task.id], outputFiles: [] })
   await command('startProject', { id: created.projects[0]!.id })
   await vi.waitFor(async () => { expect((await state()).tasks.every(task => task.status === 'completed')).toBe(true) }, { timeout: 15000 })
   const continued = (await state()).tasks.slice(2)

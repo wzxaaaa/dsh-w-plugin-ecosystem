@@ -6,7 +6,7 @@ import { join, resolve, relative, isAbsolute } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import type { Artifact, StudioArtifactId, Employee, StudioEmployeeId, EmployeeResult, StudioMessageId, Project, StudioProjectId, StudioConfig, StudioExecutor, StudioState, Task, StudioTaskId, StudioWorkspaceId, StudioNativeSessionId, Meeting, MeetingMinutes, StudioMeetingId, StudioNativeSession, StudioTemplateId, TeamTemplate } from './types.ts'
-import { employeeSchema, outputName, parseState, migrateStateV1, migrateStateV2, migrateStateV3, validateEmployee, validateMember, withinDirectory } from './validation.ts'
+import { employeeSchema, outputName, parseState, migrateStateV1, migrateStateV2, migrateStateV3, migrateStateV4, validateEmployee, validateMember, withinDirectory } from './validation.ts'
 import { exportProject } from './workspace.ts'
 import { minutesSchema, parseFields, templateSchema } from './schema.ts'
 import { defaultTemplates } from './templates.ts'
@@ -22,12 +22,15 @@ const projectInput = z.object({ name: z.string().min(1).max(500).required(), obj
 const taskInput = z.object({ projectId: z.string().required(), employeeId: z.string().required(),
   title: z.string().min(1).max(500).required(), instruction: z.string().min(1).max(100_000).required(),
   dependsOn: z.array(z.string()).required(), outputFiles: z.array(z.string()).required() })
+const answerInput = z.object({ id: z.string().required(), reply: z.string().min(1).max(100_000).required() })
 const messageInput = z.object({ projectId: z.string().required(), to: z.string().required(),
   message: z.string().min(1).max(100_000).required() })
 const meetingFields = { title: z.string().min(1).max(500).required(), agenda: z.string().max(100_000).required(),
   hostId: z.string().required(), attendeeIds: z.array(z.string()).required() }
 const meetingMessageInput = z.object({ id: z.string().required(), message: z.string().min(1).max(100_000).required(),
   mentions: z.array(z.string()).required() })
+/** Tells the employee when it may pause for the user instead of guessing or working around the gap. */
+const needsUserRule = '只有遇到必须由甲方本人完成、你无法自行完成或绕过的事（例如操作真机或硬件、登录或提供账号与密钥、付费、需要甲方拍板的决定）时，才停下并在 needsUser 中写清需要甲方做什么、做完后怎样回复你；此时 message 简述已完成的进展，files 和 handoffs 留空。甲方回复后你会在同一会话中继续。其他情况 needsUser 必须为 ""。'
 /** Employee turns allowed after one client message before the floor returns to the client. */
 const meetingChainLimit = 6
 /** Meeting actions validate against the live meeting (status, attendees, active turn) instead of the observed revision,
@@ -40,7 +43,7 @@ function identity(input: unknown): string {
   return (z.resolve(input, schema, {})[0] as ReturnType<typeof schema>).id
 }
 function freshState(): StudioState {
-  return { version: 4, revision: 0, workspaces: [], activeWorkspaceId: null,
+  return { version: 5, revision: 0, workspaces: [], activeWorkspaceId: null,
     employees: [], projects: [], tasks: [], messages: [], artifacts: [], meetings: [], templates: defaultTemplates() }
 }
 function within(root: string, path: string): boolean {
@@ -59,6 +62,8 @@ export class Studio {
     employeeId: StudioEmployeeId
   }>()
   private readonly meetingRuns = new Map<StudioMeetingId, { controller: AbortController; done: Promise<void> }>()
+  /** Latest progress line of each running task; transient, so it never advances the revision. */
+  private readonly live = new Map<StudioTaskId, { text: string; at: string }>()
   private closing = false
   private constructor(private readonly config: StudioConfig, private readonly executor: StudioExecutor) {}
 
@@ -78,7 +83,7 @@ export class Studio {
       }
     }
     // Predecessor journals are read once into the current file and left byte-for-byte unchanged.
-    const journals: [string, (input: unknown) => StudioState][] = [['studio.v4.json', parseState], ['studio.v3.json', migrateStateV3],
+    const journals: [string, (input: unknown) => StudioState][] = [['studio.v5.json', parseState], ['studio.v4.json', migrateStateV4], ['studio.v3.json', migrateStateV3],
       ['studio.v2.json', migrateStateV2], ['studio.v1.json', migrateStateV1]]
     for (const [name, load] of journals) {
       const content = await read(name)
@@ -111,6 +116,11 @@ export class Studio {
    */
   snapshot(): StudioState { return structuredClone(this.state) }
 
+  /** Read the latest progress line of each running task.
+   * @returns Task id to the employee's most recent interim message.
+   */
+  progress(): Record<string, { text: string; at: string }> { return Object.fromEntries(this.live) }
+
   private enqueue<T>(action: () => Promise<T>): Promise<T> {
     const next = this.serial.then(action)
     // The caller receives the rejection; later commands still need the queue.
@@ -118,7 +128,7 @@ export class Studio {
     return next
   }
   private async persist(): Promise<void> {
-    const path = join(this.config.storageRoot, 'studio.v4.json')
+    const path = join(this.config.storageRoot, 'studio.v5.json')
     await writeFileAtomic(path, `${JSON.stringify(this.state, null, 2)}\n`, { mode: 0o600, dirMode: 0o700 })
   }
   private async commit(): Promise<void> {
@@ -155,7 +165,8 @@ export class Studio {
     if (this.state.tasks.filter(task => task.projectId === project.id).length >= this.config.maxTasksPerProject) throw new Error('Project task limit reached')
     const task: Task = { id: randomUUID() as StudioTaskId, projectId: project.id, employeeId: employee.id, title, instruction,
       dependsOn, outputFiles: outputFiles.map(outputName), status: 'pending', attempt: 0,
-      result: '', error: '', assignment: '', startedAt: '', finishedAt: '', nativeSessions: [], reviewStatus: 'pending' }
+      result: '', error: '', assignment: '', startedAt: '', finishedAt: '', nativeSessions: [], reviewStatus: 'pending',
+      question: '', reply: '' }
     this.state.tasks.push(task)
     return task
   }
@@ -445,8 +456,18 @@ export class Studio {
           case 'cancelTask': {
             const task = this.task(identity(command.input))
             if (task.status === 'running') this.active.get(task.id)?.controller.abort(new Error('Stopped by user'))
-            else if (task.status === 'pending') { task.status = 'cancelled'; task.finishedAt = new Date().toISOString() }
-            else throw new Error('Task is not pending or running')
+            else if (task.status === 'pending' || task.status === 'waiting') {
+              task.status = 'cancelled'; task.reply = ''; task.finishedAt = new Date().toISOString()
+            } else throw new Error('Task is not pending, running, or waiting')
+            break
+          }
+          case 'answerTask': {
+            const input = parseFields(answerInput, command.input)
+            const task = this.task(input.id)
+            if (task.status !== 'waiting') throw new Error('The employee is not waiting for you on this task')
+            task.status = 'pending'; task.reply = input.reply; task.error = ''
+            this.state.messages.push({ id: randomUUID() as StudioMessageId, projectId: task.projectId, taskId: task.id,
+              from: 'user', to: task.employeeId, message: input.reply, createdAt: new Date().toISOString() })
             break
           }
           case 'message': {
@@ -578,7 +599,7 @@ export class Studio {
           objective: meeting.agenda, cwd, status: 'running', acceptanceCriteria: '', sessionMode: 'new-task', createdAt: meeting.createdAt }
         const task: Task = { id: randomUUID() as StudioTaskId, projectId: project.id, employeeId: employee.id, title: meeting.title,
           instruction: prompt, dependsOn: [], outputFiles: [], status: 'running', attempt: 1, result: '', error: '',
-          startedAt: new Date().toISOString(), finishedAt: '', assignment: prompt, nativeSessions: [], reviewStatus: 'pending' }
+          startedAt: new Date().toISOString(), finishedAt: '', assignment: prompt, nativeSessions: [], reviewStatus: 'pending', question: '', reply: '' }
         // Meetings are discussion only: force read-only and the company directory whatever the employee's task settings are.
         const result = await this.executor.run({ ...employee, permission: 'read-only', cwd: '' }, project, task, controller.signal, {
           resumeSessionId: null,
@@ -633,15 +654,23 @@ export class Studio {
       `你是软件公司的员工 ${employee.name}，岗位：${employee.role}。职责：${employee.responsibilities}`,
       `项目：${project.name}\n项目目标：${project.objective}\n验收标准：${project.acceptanceCriteria}\n工作目录：${employee.cwd || project.cwd}`,
       `领导安排的任务：${task.title}\n${task.instruction}`,
+      ...task.reply ? [`你上次暂停此任务，请甲方处理：${task.question}\n甲方回复：${task.reply}\n请据此继续。`] : [],
       `团队成员：${JSON.stringify(this.state.employees.filter(value => value.enabled).map(value => ({ employeeId: value.id, name: value.name, role: value.role })))}`,
       `已完成的前置任务：${JSON.stringify(dependencies.map(value => ({ title: value.title, message: value.result })))}`,
       `人类对话与交接：${JSON.stringify(messages.map(value => ({ from: value.from, message: value.message })))}`,
       `前置任务的结果文件（可读取）：${JSON.stringify(artifacts.map(file => ({ name: file.name, path: join(this.config.storageRoot, 'artifacts', file.id), sha256: file.sha256 })))}`,
       `请交付这些项目相对路径的文件：${JSON.stringify(task.outputFiles)}。必要时创建父目录。只交付与任务有关的结果，不导出任何工具的私有会话、凭据或思考过程。`,
-      '完成后仅返回 JSON：{"message":"给领导或同事的最终工作汇报，说明结果、验证和剩余问题", "files":["已完成的项目相对路径"], "handoffs":[{"employeeId":"接收者的真实员工 id", "message":"给同事的任务安排或结果说明"}]}。没有交接时 handoffs 为 []。不得包含推理过程、思考日志或工具调用轨迹。',
+      '完成后仅返回 JSON：{"message":"给领导或同事的最终工作汇报，说明结果、验证和剩余问题", "files":["已完成的项目相对路径"], "handoffs":[{"employeeId":"接收者的真实员工 id", "message":"给同事的任务安排或结果说明"}], "needsUser":""}。没有交接时 handoffs 为 []。不得包含推理过程、思考日志或工具调用轨迹。',
+      needsUserRule,
     ].join('\n\n')
     if (Buffer.byteLength(prompt) > this.config.maxTextBytes) throw new Error('Assignment exceeds the configured text limit; reduce the task or its dependencies')
     return prompt
+  }
+
+  /** Prompt that continues a waiting native session with the user's reply. */
+  private continuation(task: Task): string {
+    return [`你之前暂停任务「${task.title}」，请甲方处理：${task.question}`, `甲方回复：${task.reply}`,
+      '请在此基础上继续完成原任务。完成后仍按原来的 JSON 格式返回；如果还需要甲方处理，再次填写 needsUser。', needsUserRule].join('\n\n')
   }
 
   private schedule(): void {
@@ -673,7 +702,7 @@ export class Studio {
     let captured: Artifact[] = []
     const timeout = setTimeout(() => { timedOut = true; controller.abort(new Error('Task timeout reached')) }, this.config.taskTimeoutMs)
     try {
-      const { task, employee, project } = await this.enqueue(async () => {
+      const prepared = await this.enqueue(async () => {
         const task = this.task(id)
         const employee = this.employee(task.employeeId)
         const project = this.project(task.projectId)
@@ -682,17 +711,22 @@ export class Studio {
         if (!workspace) throw new Error('Company workspace does not exist')
         const cwd = await realpath(employee.cwd || project.cwd)
         if (!withinDirectory(await realpath(workspace.path), cwd)) throw new Error('Employee directory must stay inside the company workspace')
-        task.assignment = this.assignment(employee, project, task)
+        // A reply continues the session that asked for it; without one, the full assignment carries the reply as a message.
+        const waiting = task.reply ? task.nativeSessions.findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined
+        task.assignment = waiting ? this.continuation(task) : this.assignment(employee, project, task)
         task.status = 'running'; task.attempt += 1; task.startedAt = new Date().toISOString(); task.finishedAt = ''
+        task.question = ''; task.reply = ''
         await this.commit()
-        return structuredClone({ task, employee, project })
+        return structuredClone({ task, employee, project, waiting })
       })
-      const prior = project.sessionMode === 'employee-project' ? this.state.tasks
+      const { task, employee, project, waiting } = prepared
+      const prior = waiting ?? (project.sessionMode === 'employee-project' ? this.state.tasks
         .filter(value => value.projectId === project.id && value.employeeId === employee.id && value.status === 'completed')
         .flatMap(value => value.nativeSessions)
-        .findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined
+        .findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined)
       const result = await this.executor.run(employee, project, task, controller.signal, {
         resumeSessionId: prior?.id ?? null,
+        progress: (text: string) => { this.live.set(id, { text, at: new Date().toISOString() }) },
         recordSession: (sessionId: StudioNativeSessionId) => this.enqueue(async () => {
           if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(sessionId)) throw new Error('Native session identity is invalid')
           const live = this.task(id)
@@ -704,6 +738,15 @@ export class Studio {
         }),
       })
       controller.signal.throwIfAborted()
+      if (result.needsUser) {
+        await this.enqueue(async () => {
+          const live = this.task(id)
+          // The interim report stays visible beside the question; completion replaces it.
+          live.status = 'waiting'; live.question = result.needsUser; live.result = result.message; live.finishedAt = new Date().toISOString()
+          await this.commit()
+        })
+        return
+      }
       for (const handoff of result.handoffs) this.employee(handoff.employeeId)
       const artifacts = await this.capture(employee, project, task, result)
       captured = artifacts
@@ -733,7 +776,10 @@ export class Studio {
         task.finishedAt = new Date().toISOString()
         await this.commit()
       })
-    } finally { clearTimeout(timeout) }
+    } finally {
+      clearTimeout(timeout)
+      this.live.delete(id)
+    }
   }
 
   private async capture(employee: Employee, project: Project, task: Task, result: EmployeeResult): Promise<Artifact[]> {

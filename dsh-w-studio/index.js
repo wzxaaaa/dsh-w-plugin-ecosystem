@@ -223,6 +223,11 @@ var nativeSessionSchema = z.object({
   continued: z.boolean().required()
 });
 var nativeSession = nativeSessionSchema;
+var taskV2Fields = {
+  ...taskFields,
+  nativeSessions: z.array(nativeSession).required(),
+  reviewStatus: z.union(["pending", "accepted", "superseded"]).required()
+};
 var stateV2Fields = {
   ...stateV1Fields,
   version: z.const(2).required(),
@@ -235,11 +240,7 @@ var stateV2Fields = {
     sessionMode: z.union(["employee-project", "new-task"]).required(),
     status: z.union(["paused", "running", "review", "completed"]).required()
   })).required(),
-  tasks: z.array(z.object({
-    ...taskFields,
-    nativeSessions: z.array(nativeSession).required(),
-    reviewStatus: z.union(["pending", "accepted", "superseded"]).required()
-  })).required()
+  tasks: z.array(z.object(taskV2Fields)).required()
 };
 var stateV2Schema = z.object(stateV2Fields);
 var minutesSchema = z.object({
@@ -276,7 +277,18 @@ var meeting = z.object({
 var stateV3Fields = { ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() };
 var stateV3Schema = z.object(stateV3Fields);
 var templateSchema = z.object({ id, name: short, description: text, members: z.array(memberSchema).required(), createdAt: short });
-var stateSchema = z.object({ ...stateV3Fields, version: z.const(4).required(), templates: z.array(templateSchema).required() });
+var stateV4Fields = { ...stateV3Fields, version: z.const(4).required(), templates: z.array(templateSchema).required() };
+var stateV4Schema = z.object(stateV4Fields);
+var stateSchema = z.object({
+  ...stateV4Fields,
+  version: z.const(5).required(),
+  tasks: z.array(z.object({
+    ...taskV2Fields,
+    status: z.union(["pending", "running", "waiting", "completed", "failed", "cancelled", "interrupted"]).required(),
+    question: text,
+    reply: text
+  })).required()
+});
 
 // src/validation.ts
 function parseState(input) {
@@ -354,7 +366,11 @@ function migrateStateV2(input) {
   return migrateStateV3({ ...parseFields(stateV2Schema, input), version: 3, meetings: [] });
 }
 function migrateStateV3(input) {
-  return parseState({ ...parseFields(stateV3Schema, input), version: 4, templates: defaultTemplates() });
+  return migrateStateV4({ ...parseFields(stateV3Schema, input), version: 4, templates: defaultTemplates() });
+}
+function migrateStateV4(input) {
+  const old = parseFields(stateV4Schema, input);
+  return parseState({ ...old, version: 5, tasks: old.tasks.map((task) => ({ ...task, question: "", reply: "" })) });
 }
 function migrateStateV1(input) {
   const old = parseFields(stateV1Schema, input);
@@ -540,6 +556,7 @@ var taskInput = z2.object({
   dependsOn: z2.array(z2.string()).required(),
   outputFiles: z2.array(z2.string()).required()
 });
+var answerInput = z2.object({ id: z2.string().required(), reply: z2.string().min(1).max(1e5).required() });
 var messageInput = z2.object({
   projectId: z2.string().required(),
   to: z2.string().required(),
@@ -556,6 +573,7 @@ var meetingMessageInput = z2.object({
   message: z2.string().min(1).max(1e5).required(),
   mentions: z2.array(z2.string()).required()
 });
+var needsUserRule = '\u53EA\u6709\u9047\u5230\u5FC5\u987B\u7531\u7532\u65B9\u672C\u4EBA\u5B8C\u6210\u3001\u4F60\u65E0\u6CD5\u81EA\u884C\u5B8C\u6210\u6216\u7ED5\u8FC7\u7684\u4E8B\uFF08\u4F8B\u5982\u64CD\u4F5C\u771F\u673A\u6216\u786C\u4EF6\u3001\u767B\u5F55\u6216\u63D0\u4F9B\u8D26\u53F7\u4E0E\u5BC6\u94A5\u3001\u4ED8\u8D39\u3001\u9700\u8981\u7532\u65B9\u62CD\u677F\u7684\u51B3\u5B9A\uFF09\u65F6\uFF0C\u624D\u505C\u4E0B\u5E76\u5728 needsUser \u4E2D\u5199\u6E05\u9700\u8981\u7532\u65B9\u505A\u4EC0\u4E48\u3001\u505A\u5B8C\u540E\u600E\u6837\u56DE\u590D\u4F60\uFF1B\u6B64\u65F6 message \u7B80\u8FF0\u5DF2\u5B8C\u6210\u7684\u8FDB\u5C55\uFF0Cfiles \u548C handoffs \u7559\u7A7A\u3002\u7532\u65B9\u56DE\u590D\u540E\u4F60\u4F1A\u5728\u540C\u4E00\u4F1A\u8BDD\u4E2D\u7EE7\u7EED\u3002\u5176\u4ED6\u60C5\u51B5 needsUser \u5FC5\u987B\u4E3A ""\u3002';
 var meetingChainLimit = 6;
 var liveCheckedActions = /* @__PURE__ */ new Set([
   "createMeeting",
@@ -575,7 +593,7 @@ function identity(input) {
 }
 function freshState() {
   return {
-    version: 4,
+    version: 5,
     revision: 0,
     workspaces: [],
     activeWorkspaceId: null,
@@ -603,6 +621,8 @@ var Studio = class _Studio {
   serial = Promise.resolve();
   active = /* @__PURE__ */ new Map();
   meetingRuns = /* @__PURE__ */ new Map();
+  /** Latest progress line of each running task; transient, so it never advances the revision. */
+  live = /* @__PURE__ */ new Map();
   closing = false;
   /** Open one local Studio and mark interrupted work without silently restarting it.
    * @param config - Persistence and scheduling configuration.
@@ -621,7 +641,8 @@ var Studio = class _Studio {
       }
     };
     const journals = [
-      ["studio.v4.json", parseState],
+      ["studio.v5.json", parseState],
+      ["studio.v4.json", migrateStateV4],
       ["studio.v3.json", migrateStateV3],
       ["studio.v2.json", migrateStateV2],
       ["studio.v1.json", migrateStateV1]
@@ -657,6 +678,12 @@ var Studio = class _Studio {
   snapshot() {
     return structuredClone(this.state);
   }
+  /** Read the latest progress line of each running task.
+   * @returns Task id to the employee's most recent interim message.
+   */
+  progress() {
+    return Object.fromEntries(this.live);
+  }
   enqueue(action) {
     const next = this.serial.then(action);
     this.serial = next.catch(() => {
@@ -664,7 +691,7 @@ var Studio = class _Studio {
     return next;
   }
   async persist() {
-    const path = join3(this.config.storageRoot, "studio.v4.json");
+    const path = join3(this.config.storageRoot, "studio.v5.json");
     await writeFileAtomic(path, `${JSON.stringify(this.state, null, 2)}
 `, { mode: 384, dirMode: 448 });
   }
@@ -715,7 +742,9 @@ var Studio = class _Studio {
       startedAt: "",
       finishedAt: "",
       nativeSessions: [],
-      reviewStatus: "pending"
+      reviewStatus: "pending",
+      question: "",
+      reply: ""
     };
     this.state.tasks.push(task);
     return task;
@@ -1073,10 +1102,29 @@ var Studio = class _Studio {
           case "cancelTask": {
             const task = this.task(identity(command.input));
             if (task.status === "running") this.active.get(task.id)?.controller.abort(new Error("Stopped by user"));
-            else if (task.status === "pending") {
+            else if (task.status === "pending" || task.status === "waiting") {
               task.status = "cancelled";
+              task.reply = "";
               task.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
-            } else throw new Error("Task is not pending or running");
+            } else throw new Error("Task is not pending, running, or waiting");
+            break;
+          }
+          case "answerTask": {
+            const input = parseFields(answerInput, command.input);
+            const task = this.task(input.id);
+            if (task.status !== "waiting") throw new Error("The employee is not waiting for you on this task");
+            task.status = "pending";
+            task.reply = input.reply;
+            task.error = "";
+            this.state.messages.push({
+              id: randomUUID3(),
+              projectId: task.projectId,
+              taskId: task.id,
+              from: "user",
+              to: task.employeeId,
+              message: input.reply,
+              createdAt: (/* @__PURE__ */ new Date()).toISOString()
+            });
             break;
           }
           case "message": {
@@ -1246,7 +1294,9 @@ var Studio = class _Studio {
           finishedAt: "",
           assignment: prompt,
           nativeSessions: [],
-          reviewStatus: "pending"
+          reviewStatus: "pending",
+          question: "",
+          reply: ""
         };
         const result = await this.executor.run({ ...employee, permission: "read-only", cwd: "" }, project, task, controller.signal, {
           resumeSessionId: null,
@@ -1302,15 +1352,28 @@ var Studio = class _Studio {
 \u5DE5\u4F5C\u76EE\u5F55\uFF1A${employee.cwd || project.cwd}`,
       `\u9886\u5BFC\u5B89\u6392\u7684\u4EFB\u52A1\uFF1A${task.title}
 ${task.instruction}`,
+      ...task.reply ? [`\u4F60\u4E0A\u6B21\u6682\u505C\u6B64\u4EFB\u52A1\uFF0C\u8BF7\u7532\u65B9\u5904\u7406\uFF1A${task.question}
+\u7532\u65B9\u56DE\u590D\uFF1A${task.reply}
+\u8BF7\u636E\u6B64\u7EE7\u7EED\u3002`] : [],
       `\u56E2\u961F\u6210\u5458\uFF1A${JSON.stringify(this.state.employees.filter((value) => value.enabled).map((value) => ({ employeeId: value.id, name: value.name, role: value.role })))}`,
       `\u5DF2\u5B8C\u6210\u7684\u524D\u7F6E\u4EFB\u52A1\uFF1A${JSON.stringify(dependencies.map((value) => ({ title: value.title, message: value.result })))}`,
       `\u4EBA\u7C7B\u5BF9\u8BDD\u4E0E\u4EA4\u63A5\uFF1A${JSON.stringify(messages.map((value) => ({ from: value.from, message: value.message })))}`,
       `\u524D\u7F6E\u4EFB\u52A1\u7684\u7ED3\u679C\u6587\u4EF6\uFF08\u53EF\u8BFB\u53D6\uFF09\uFF1A${JSON.stringify(artifacts.map((file) => ({ name: file.name, path: join3(this.config.storageRoot, "artifacts", file.id), sha256: file.sha256 })))}`,
       `\u8BF7\u4EA4\u4ED8\u8FD9\u4E9B\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84\u7684\u6587\u4EF6\uFF1A${JSON.stringify(task.outputFiles)}\u3002\u5FC5\u8981\u65F6\u521B\u5EFA\u7236\u76EE\u5F55\u3002\u53EA\u4EA4\u4ED8\u4E0E\u4EFB\u52A1\u6709\u5173\u7684\u7ED3\u679C\uFF0C\u4E0D\u5BFC\u51FA\u4EFB\u4F55\u5DE5\u5177\u7684\u79C1\u6709\u4F1A\u8BDD\u3001\u51ED\u636E\u6216\u601D\u8003\u8FC7\u7A0B\u3002`,
-      '\u5B8C\u6210\u540E\u4EC5\u8FD4\u56DE JSON\uFF1A{"message":"\u7ED9\u9886\u5BFC\u6216\u540C\u4E8B\u7684\u6700\u7EC8\u5DE5\u4F5C\u6C47\u62A5\uFF0C\u8BF4\u660E\u7ED3\u679C\u3001\u9A8C\u8BC1\u548C\u5269\u4F59\u95EE\u9898", "files":["\u5DF2\u5B8C\u6210\u7684\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84"], "handoffs":[{"employeeId":"\u63A5\u6536\u8005\u7684\u771F\u5B9E\u5458\u5DE5 id", "message":"\u7ED9\u540C\u4E8B\u7684\u4EFB\u52A1\u5B89\u6392\u6216\u7ED3\u679C\u8BF4\u660E"}]}\u3002\u6CA1\u6709\u4EA4\u63A5\u65F6 handoffs \u4E3A []\u3002\u4E0D\u5F97\u5305\u542B\u63A8\u7406\u8FC7\u7A0B\u3001\u601D\u8003\u65E5\u5FD7\u6216\u5DE5\u5177\u8C03\u7528\u8F68\u8FF9\u3002'
+      '\u5B8C\u6210\u540E\u4EC5\u8FD4\u56DE JSON\uFF1A{"message":"\u7ED9\u9886\u5BFC\u6216\u540C\u4E8B\u7684\u6700\u7EC8\u5DE5\u4F5C\u6C47\u62A5\uFF0C\u8BF4\u660E\u7ED3\u679C\u3001\u9A8C\u8BC1\u548C\u5269\u4F59\u95EE\u9898", "files":["\u5DF2\u5B8C\u6210\u7684\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84"], "handoffs":[{"employeeId":"\u63A5\u6536\u8005\u7684\u771F\u5B9E\u5458\u5DE5 id", "message":"\u7ED9\u540C\u4E8B\u7684\u4EFB\u52A1\u5B89\u6392\u6216\u7ED3\u679C\u8BF4\u660E"}], "needsUser":""}\u3002\u6CA1\u6709\u4EA4\u63A5\u65F6 handoffs \u4E3A []\u3002\u4E0D\u5F97\u5305\u542B\u63A8\u7406\u8FC7\u7A0B\u3001\u601D\u8003\u65E5\u5FD7\u6216\u5DE5\u5177\u8C03\u7528\u8F68\u8FF9\u3002',
+      needsUserRule
     ].join("\n\n");
     if (Buffer.byteLength(prompt) > this.config.maxTextBytes) throw new Error("Assignment exceeds the configured text limit; reduce the task or its dependencies");
     return prompt;
+  }
+  /** Prompt that continues a waiting native session with the user's reply. */
+  continuation(task) {
+    return [
+      `\u4F60\u4E4B\u524D\u6682\u505C\u4EFB\u52A1\u300C${task.title}\u300D\uFF0C\u8BF7\u7532\u65B9\u5904\u7406\uFF1A${task.question}`,
+      `\u7532\u65B9\u56DE\u590D\uFF1A${task.reply}`,
+      "\u8BF7\u5728\u6B64\u57FA\u7840\u4E0A\u7EE7\u7EED\u5B8C\u6210\u539F\u4EFB\u52A1\u3002\u5B8C\u6210\u540E\u4ECD\u6309\u539F\u6765\u7684 JSON \u683C\u5F0F\u8FD4\u56DE\uFF1B\u5982\u679C\u8FD8\u9700\u8981\u7532\u65B9\u5904\u7406\uFF0C\u518D\u6B21\u586B\u5199 needsUser\u3002",
+      needsUserRule
+    ].join("\n\n");
   }
   schedule() {
     if (this.closing) return;
@@ -1342,7 +1405,7 @@ ${task.instruction}`,
       controller.abort(new Error("Task timeout reached"));
     }, this.config.taskTimeoutMs);
     try {
-      const { task, employee, project } = await this.enqueue(async () => {
+      const prepared = await this.enqueue(async () => {
         const task2 = this.task(id2);
         const employee2 = this.employee(task2.employeeId);
         const project2 = this.project(task2.projectId);
@@ -1351,17 +1414,24 @@ ${task.instruction}`,
         if (!workspace) throw new Error("Company workspace does not exist");
         const cwd = await realpath2(employee2.cwd || project2.cwd);
         if (!withinDirectory(await realpath2(workspace.path), cwd)) throw new Error("Employee directory must stay inside the company workspace");
-        task2.assignment = this.assignment(employee2, project2, task2);
+        const waiting2 = task2.reply ? task2.nativeSessions.findLast((value) => value.engine === employee2.engine && value.cwd === (employee2.cwd || project2.cwd)) : void 0;
+        task2.assignment = waiting2 ? this.continuation(task2) : this.assignment(employee2, project2, task2);
         task2.status = "running";
         task2.attempt += 1;
         task2.startedAt = (/* @__PURE__ */ new Date()).toISOString();
         task2.finishedAt = "";
+        task2.question = "";
+        task2.reply = "";
         await this.commit();
-        return structuredClone({ task: task2, employee: employee2, project: project2 });
+        return structuredClone({ task: task2, employee: employee2, project: project2, waiting: waiting2 });
       });
-      const prior = project.sessionMode === "employee-project" ? this.state.tasks.filter((value) => value.projectId === project.id && value.employeeId === employee.id && value.status === "completed").flatMap((value) => value.nativeSessions).findLast((value) => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : void 0;
+      const { task, employee, project, waiting } = prepared;
+      const prior = waiting ?? (project.sessionMode === "employee-project" ? this.state.tasks.filter((value) => value.projectId === project.id && value.employeeId === employee.id && value.status === "completed").flatMap((value) => value.nativeSessions).findLast((value) => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : void 0);
       const result = await this.executor.run(employee, project, task, controller.signal, {
         resumeSessionId: prior?.id ?? null,
+        progress: (text2) => {
+          this.live.set(id2, { text: text2, at: (/* @__PURE__ */ new Date()).toISOString() });
+        },
         recordSession: (sessionId) => this.enqueue(async () => {
           if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(sessionId)) throw new Error("Native session identity is invalid");
           const live = this.task(id2);
@@ -1378,6 +1448,17 @@ ${task.instruction}`,
         })
       });
       controller.signal.throwIfAborted();
+      if (result.needsUser) {
+        await this.enqueue(async () => {
+          const live = this.task(id2);
+          live.status = "waiting";
+          live.question = result.needsUser;
+          live.result = result.message;
+          live.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+          await this.commit();
+        });
+        return;
+      }
       for (const handoff of result.handoffs) this.employee(handoff.employeeId);
       const artifacts = await this.capture(employee, project, task, result);
       captured = artifacts;
@@ -1429,6 +1510,7 @@ ${task.instruction}`,
       });
     } finally {
       clearTimeout(timeout);
+      this.live.delete(id2);
     }
   }
   async capture(employee, project, task, result) {
@@ -2528,41 +2610,49 @@ var resultSchema = {
       additionalProperties: false,
       properties: { employeeId: { type: "string" }, message: { type: "string" } },
       required: ["employeeId", "message"]
-    } }
+    } },
+    needsUser: { type: "string" }
   },
-  required: ["message", "files", "handoffs"]
+  required: ["message", "files", "handoffs", "needsUser"]
 };
 function record(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-async function nativeThread(stream, maxBytes) {
+async function jsonLines(stream, maxBytes, onEvent) {
   const decoder = new StringDecoder2("utf8");
   let line = "";
   let dropping = false;
-  let id2 = null;
-  for await (const chunk of stream) {
-    const text2 = decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    for (const part of text2.split(/(?<=\n)/)) {
-      if (!dropping) line += part;
-      if (Buffer.byteLength(line) > maxBytes) {
-        line = "";
-        dropping = true;
-      }
-      if (part.endsWith("\n")) {
-        if (!dropping && !id2) {
-          let event;
-          try {
-            event = JSON.parse(line);
-          } catch {
-          }
-          if (record(event) && event.type === "thread.started" && typeof event.thread_id === "string") id2 = event.thread_id;
+  try {
+    for await (const chunk of stream) {
+      const text2 = decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      for (const part of text2.split(/(?<=\n)/)) {
+        if (!dropping) line += part;
+        if (Buffer.byteLength(line) > maxBytes) {
+          line = "";
+          dropping = true;
         }
-        line = "";
-        dropping = false;
+        if (part.endsWith("\n")) {
+          if (!dropping) {
+            let event;
+            try {
+              event = JSON.parse(line);
+            } catch {
+            }
+            if (record(event)) onEvent(event);
+          }
+          line = "";
+          dropping = false;
+        }
       }
     }
+  } catch (error) {
+    if (!stream.destroyed) throw error;
   }
-  return id2;
+}
+function progressLine(content) {
+  const text2 = typeof content === "string" ? content : Array.isArray(content) ? content.flatMap((block) => record(block) && block.type === "text" && typeof block.text === "string" ? [block.text] : []).join("") : "";
+  const value = text2.trim();
+  return value.startsWith("{") || value.startsWith("```") ? "" : value.slice(0, 500);
 }
 function finalHandoff(text2, maxBytes) {
   if (Buffer.byteLength(text2) > maxBytes) throw new Error("Final handoff exceeds the configured text limit");
@@ -2570,11 +2660,12 @@ function finalHandoff(text2, maxBytes) {
   try {
     parsed = JSON.parse(text2.replace(/^```(?:json)?\s*|\s*```$/g, ""));
   } catch {
-    return { message: text2, files: [], handoffs: [] };
+    return { message: text2, files: [], handoffs: [], needsUser: "" };
   }
   if (!record(parsed) || typeof parsed.message !== "string" || !Array.isArray(parsed.files) || !Array.isArray(parsed.handoffs)) {
     throw new Error("Final handoff must contain message, files, and handoffs");
   }
+  if (parsed.needsUser !== void 0 && typeof parsed.needsUser !== "string") throw new Error("Final needsUser must be a string");
   const files = parsed.files.map((value) => {
     if (typeof value !== "string") throw new Error("Final file names must be strings");
     return outputName(value);
@@ -2583,7 +2674,7 @@ function finalHandoff(text2, maxBytes) {
     if (!record(value) || typeof value.employeeId !== "string" || typeof value.message !== "string") throw new Error("Final handoff recipients and messages must be strings");
     return { employeeId: value.employeeId, message: value.message };
   });
-  return { message: parsed.message, files, handoffs };
+  return { message: parsed.message, files, handoffs, needsUser: parsed.needsUser?.trim() ?? "" };
 }
 function createExecutor(ctx, config) {
   const nativeEnvironment = async (employee) => {
@@ -2705,7 +2796,12 @@ function createExecutor(ctx, config) {
         try {
           signal.throwIfAborted();
           const sessionId = execution.resumeSessionId ?? randomUUID6();
-          const result = await harness.run(task.assignment, { sessionId });
+          const result = await harness.run(task.assignment, { sessionId, onNotification: (notification) => {
+            const event = notification.method === "session.event" ? notification.params.event : void 0;
+            if (!record(event) || event.type !== "assistant/message" || !record(event.data) || !record(event.data.message)) return;
+            const text2 = progressLine(event.data.message.content);
+            if (text2) execution.progress?.(text2);
+          } });
           await execution.recordSession(result.sessionId);
           const reason = result.events.findLast((event) => event.type === "turn/end");
           if (reason?.type !== "turn/end" || reason.data.reason.kind !== "completed") throw new Error(`Harness task ended: ${reason?.type === "turn/end" ? reason.data.reason.kind : "missing completion"}`);
@@ -2727,7 +2823,8 @@ function createExecutor(ctx, config) {
           ...command,
           "--print",
           "--output-format",
-          "json",
+          "stream-json",
+          "--verbose",
           "--json-schema",
           JSON.stringify(resultSchema),
           "--permission-mode",
@@ -2758,31 +2855,52 @@ function createExecutor(ctx, config) {
           env,
           signal,
           graceMs: config.disposeGraceMs,
-          stdio: {
-            stdin: { data: task.assignment },
-            stdout: employee.engine === "codex" ? "pipe" : { maxBytes: config.maxTextBytes * 2 },
-            stderr: { maxBytes: config.maxTextBytes }
-          }
+          stdio: { stdin: { data: task.assignment }, stdout: "pipe", stderr: { maxBytes: config.maxTextBytes } }
         });
-        const thread = employee.engine === "codex" && child.stdout ? nativeThread(child.stdout, config.maxTextBytes) : Promise.resolve(null);
-        void thread.catch(() => {
+        let finished = false;
+        let lingering;
+        const finish = () => {
+          finished = true;
+          lingering ??= setTimeout(() => {
+            child.terminate();
+          }, config.completionGraceMs);
+        };
+        let codexSession = null;
+        let claudeResult = null;
+        const stream = child.stdout ? jsonLines(child.stdout, config.maxTextBytes * 4, (event) => {
+          if (employee.engine === "codex") {
+            if (event.type === "thread.started" && typeof event.thread_id === "string") codexSession ??= event.thread_id;
+            else if (event.type === "item.completed" && record(event.item) && event.item.type === "agent_message" && typeof event.item.text === "string") {
+              const text2 = progressLine(event.item.text);
+              if (text2) execution.progress?.(text2);
+            } else if (event.type === "turn.completed") finish();
+          } else if (event.type === "assistant" && record(event.message)) {
+            const text2 = progressLine(event.message.content);
+            if (text2) execution.progress?.(text2);
+          } else if (event.type === "result") {
+            claudeResult = event;
+            finish();
+          }
+        }) : Promise.resolve();
+        void stream.catch(() => {
         });
         const outcome = await (async () => {
           try {
             return await child.done;
           } finally {
+            clearTimeout(lingering);
             child.terminate();
             if (!await child.waitForExit(AbortSignal.timeout(config.disposeGraceMs * 4))) throw new Error(`${employee.engine} process cleanup did not complete`);
-            await thread;
+            if (finished) child.stdout?.destroy();
+            await stream;
           }
         })();
-        const codexSession = await thread;
         if (codexSession) await execution.recordSession(codexSession);
         signal.throwIfAborted();
-        if (outcome.exitCode !== 0) throw new Error(`${employee.engine} exited with code ${String(outcome.exitCode)}. Check native login, model, effort, and permissions.`);
+        if (outcome.exitCode !== 0 && !finished) throw new Error(`${employee.engine} exited with code ${String(outcome.exitCode)}. Check native login, model, effort, and permissions.`);
         if (employee.engine === "codex") return finalHandoff(await readFile3(resultPath, "utf8"), config.maxTextBytes);
-        const raw = JSON.parse(child.collected.stdout?.readFrom(0).text ?? "");
-        if (!record(raw) || raw.is_error === true) throw new Error("Claude Code did not complete the task. Check native login and permissions.");
+        const raw = claudeResult;
+        if (!raw || raw.is_error === true) throw new Error("Claude Code did not complete the task. Check native login and permissions.");
         if (typeof raw.session_id !== "string" || raw.session_id !== claudeSession) throw new Error("Claude Code returned an unexpected session identity");
         await execution.recordSession(raw.session_id);
         const final = raw.structured_output !== void 0 ? JSON.stringify(raw.structured_output) : raw.result;
@@ -2877,7 +2995,8 @@ var Config = z3.object({
   maxRequestBytes: z3.natural().min(1024).default(262144),
   taskTimeoutMs: z3.natural().min(1e3).max(2147483647).default(36e5),
   disposeGraceMs: z3.natural().min(100).max(6e4).default(3e3),
-  pollIntervalMs: z3.natural().min(250).max(6e4).default(1500)
+  pollIntervalMs: z3.natural().min(250).max(6e4).default(1500),
+  completionGraceMs: z3.natural().min(100).max(6e5).default(3e4)
 });
 async function apply(ctx, config) {
   const resolved = { ...config, storageRoot: resolve5(config.storageRoot), dshBin: resolve5(config.dshBin || installedDshBin()) };
@@ -2889,7 +3008,7 @@ async function apply(ctx, config) {
     path: "/api/studio/state",
     methods: ["GET"],
     requestBody: "buffered",
-    fetch: () => Promise.resolve(reply({ state: studio.snapshot(), pollIntervalMs: config.pollIntervalMs }))
+    fetch: () => Promise.resolve(reply({ state: studio.snapshot(), progress: studio.progress(), pollIntervalMs: config.pollIntervalMs }))
   });
   ctx.connection.fetch.register({
     path: "/api/studio/health",

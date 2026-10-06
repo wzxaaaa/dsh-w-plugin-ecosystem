@@ -19,35 +19,47 @@ const resultSchema = {
     message: { type: 'string' }, files: { type: 'array', items: { type: 'string' } },
     handoffs: { type: 'array', items: { type: 'object', additionalProperties: false,
       properties: { employeeId: { type: 'string' }, message: { type: 'string' } }, required: ['employeeId', 'message'] } },
-  }, required: ['message', 'files', 'handoffs'],
+    needsUser: { type: 'string' },
+  }, required: ['message', 'files', 'handoffs', 'needsUser'],
 }
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-async function nativeThread(stream: Readable, maxBytes: number): Promise<StudioNativeSessionId | null> {
+/** Decode a native JSON-lines stream as it arrives; oversized lines are skipped and non-JSON lines carry nothing.
+ * Ends quietly when Studio destroys the stream after the final answer, because a lingering child may still hold the pipe.
+ */
+async function jsonLines(stream: Readable, maxBytes: number, onEvent: (event: Record<string, unknown>) => void): Promise<void> {
   const decoder = new StringDecoder('utf8')
   let line = ''
   let dropping = false
-  let id: StudioNativeSessionId | null = null
-  for await (const chunk of stream) {
-    const text = decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string))
-    for (const part of text.split(/(?<=\n)/)) {
-      if (!dropping) line += part
-      if (Buffer.byteLength(line) > maxBytes) { line = ''; dropping = true }
-      if (part.endsWith('\n')) {
-        if (!dropping && !id) {
-          let event: unknown
-          try { event = JSON.parse(line) }
-          catch { /* Native progress lines without JSON carry no session identity. */ }
-          if (record(event) && event.type === 'thread.started' && typeof event.thread_id === 'string') id = event.thread_id as StudioNativeSessionId
+  try {
+    for await (const chunk of stream) {
+      const text = decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string))
+      for (const part of text.split(/(?<=\n)/)) {
+        if (!dropping) line += part
+        if (Buffer.byteLength(line) > maxBytes) { line = ''; dropping = true }
+        if (part.endsWith('\n')) {
+          if (!dropping) {
+            let event: unknown
+            try { event = JSON.parse(line) }
+            catch { /* Native progress lines without JSON carry nothing Studio reads. */ }
+            if (record(event)) onEvent(event)
+          }
+          line = ''; dropping = false
         }
-        line = ''; dropping = false
       }
     }
-  }
-  return id
+  } catch (error) { if (!stream.destroyed) throw error }
+}
+
+/** Reduce an interim native message's content blocks to one progress line; the structured final answer is not progress. */
+function progressLine(content: unknown): string {
+  const text = typeof content === 'string' ? content : Array.isArray(content)
+    ? content.flatMap((block: unknown) => record(block) && block.type === 'text' && typeof block.text === 'string' ? [block.text] : []).join('') : ''
+  const value = text.trim()
+  return value.startsWith('{') || value.startsWith('```') ? '' : value.slice(0, 500)
 }
 
 /** Admit final structured fields without copying reasoning or protocol metadata.
@@ -59,10 +71,11 @@ export function finalHandoff(text: string, maxBytes: number): EmployeeResult {
   if (Buffer.byteLength(text) > maxBytes) throw new Error('Final handoff exceeds the configured text limit')
   let parsed: unknown
   try { parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')) }
-  catch { return { message: text, files: [], handoffs: [] } }
+  catch { return { message: text, files: [], handoffs: [], needsUser: '' } }
   if (!record(parsed) || typeof parsed.message !== 'string' || !Array.isArray(parsed.files) || !Array.isArray(parsed.handoffs)) {
     throw new Error('Final handoff must contain message, files, and handoffs')
   }
+  if (parsed.needsUser !== undefined && typeof parsed.needsUser !== 'string') throw new Error('Final needsUser must be a string')
   const files = parsed.files.map((value) => {
     if (typeof value !== 'string') throw new Error('Final file names must be strings')
     return outputName(value)
@@ -71,7 +84,7 @@ export function finalHandoff(text: string, maxBytes: number): EmployeeResult {
     if (!record(value) || typeof value.employeeId !== 'string' || typeof value.message !== 'string') throw new Error('Final handoff recipients and messages must be strings')
     return { employeeId: value.employeeId as StudioEmployeeId, message: value.message }
   })
-  return { message: parsed.message, files, handoffs }
+  return { message: parsed.message, files, handoffs, needsUser: parsed.needsUser?.trim() ?? '' }
 }
 
 /** One owner of native subprocesses and SDK children.
@@ -167,7 +180,12 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
         try {
           signal.throwIfAborted()
           const sessionId = execution.resumeSessionId ?? randomUUID()
-          const result = await harness.run(task.assignment, { sessionId })
+          const result = await harness.run(task.assignment, { sessionId, onNotification: (notification) => {
+            const event = notification.method === 'session.event' ? notification.params.event : undefined
+            if (!record(event) || event.type !== 'assistant/message' || !record(event.data) || !record(event.data.message)) return
+            const text = progressLine(event.data.message.content)
+            if (text) execution.progress?.(text)
+          } })
           await execution.recordSession(result.sessionId as StudioNativeSessionId)
           const reason = result.events.findLast(event => event.type === 'turn/end')
           if (reason?.type !== 'turn/end' || reason.data.reason.kind !== 'completed') throw new Error(`Harness task ended: ${reason?.type === 'turn/end' ? reason.data.reason.kind : 'missing completion'}`)
@@ -186,7 +204,7 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
         const resultPath = join(dir, 'final.json')
         await writeFile(schemaPath, JSON.stringify(resultSchema), { flag: 'wx', mode: 0o600 })
         const argv = employee.engine === 'claude' ? [
-          ...command, '--print', '--output-format', 'json', '--json-schema', JSON.stringify(resultSchema),
+          ...command, '--print', '--output-format', 'stream-json', '--verbose', '--json-schema', JSON.stringify(resultSchema),
           '--permission-mode', employee.permission === 'read-only' ? 'plan' : employee.permission === 'full-access' ? 'bypassPermissions' : 'acceptEdits',
         ] : [
           ...command, 'exec', '--sandbox', employee.permission === 'full-access' ? 'danger-full-access' : employee.permission,
@@ -200,26 +218,48 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
           ? ['--effort', employee.effort] : ['-c', `model_reasoning_effort="${employee.effort}"`]))
         if (employee.engine === 'codex') argv.push('-')
         const child = ctx.subprocess.spawn({ argv, cwd, env, signal, graceMs: config.disposeGraceMs,
-          stdio: { stdin: { data: task.assignment }, stdout: employee.engine === 'codex' ? 'pipe' : { maxBytes: config.maxTextBytes * 2 },
-            stderr: { maxBytes: config.maxTextBytes } } })
-        const thread = employee.engine === 'codex' && child.stdout ? nativeThread(child.stdout, config.maxTextBytes) : Promise.resolve(null)
+          stdio: { stdin: { data: task.assignment }, stdout: 'pipe', stderr: { maxBytes: config.maxTextBytes } } })
+        // A native run can report its final answer while a process it started (a dev server, a Gradle daemon)
+        // keeps it or its stdout alive. After the grace period Studio ends the managed range instead of waiting for the task timeout.
+        let finished = false
+        let lingering: ReturnType<typeof setTimeout> | undefined
+        const finish = (): void => {
+          finished = true
+          lingering ??= setTimeout(() => { child.terminate() }, config.completionGraceMs)
+        }
+        let codexSession: StudioNativeSessionId | null = null
+        let claudeResult: Record<string, unknown> | null = null
+        const stream = child.stdout ? jsonLines(child.stdout, config.maxTextBytes * 4, (event) => {
+          if (employee.engine === 'codex') {
+            if (event.type === 'thread.started' && typeof event.thread_id === 'string') codexSession ??= event.thread_id as StudioNativeSessionId
+            else if (event.type === 'item.completed' && record(event.item) && event.item.type === 'agent_message' && typeof event.item.text === 'string') {
+              const text = progressLine(event.item.text)
+              if (text) execution.progress?.(text)
+            } else if (event.type === 'turn.completed') finish()
+          } else if (event.type === 'assistant' && record(event.message)) {
+            const text = progressLine(event.message.content)
+            if (text) execution.progress?.(text)
+          } else if (event.type === 'result') { claudeResult = event; finish() }
+        }) : Promise.resolve()
         // Joining the stream below owns rejection; attach immediately while the process exits.
-        void thread.catch(() => {})
+        void stream.catch(() => {})
         const outcome = await (async () => {
           try { return await child.done }
           finally {
+            clearTimeout(lingering)
             child.terminate()
             if (!await child.waitForExit(AbortSignal.timeout(config.disposeGraceMs * 4))) throw new Error(`${employee.engine} process cleanup did not complete`)
-            await thread
+            // A child that escaped the managed range may still hold stdout; the final answer is already decoded.
+            if (finished) child.stdout?.destroy()
+            await stream
           }
         })()
-        const codexSession = await thread
         if (codexSession) await execution.recordSession(codexSession)
         signal.throwIfAborted()
-        if (outcome.exitCode !== 0) throw new Error(`${employee.engine} exited with code ${String(outcome.exitCode)}. Check native login, model, effort, and permissions.`)
+        if (outcome.exitCode !== 0 && !finished) throw new Error(`${employee.engine} exited with code ${String(outcome.exitCode)}. Check native login, model, effort, and permissions.`)
         if (employee.engine === 'codex') return finalHandoff(await readFile(resultPath, 'utf8'), config.maxTextBytes)
-        const raw: unknown = JSON.parse(child.collected.stdout?.readFrom(0).text ?? '')
-        if (!record(raw) || raw.is_error === true) throw new Error('Claude Code did not complete the task. Check native login and permissions.')
+        const raw = claudeResult as Record<string, unknown> | null
+        if (!raw || raw.is_error === true) throw new Error('Claude Code did not complete the task. Check native login and permissions.')
         if (typeof raw.session_id !== 'string' || raw.session_id !== claudeSession) throw new Error('Claude Code returned an unexpected session identity')
         await execution.recordSession(raw.session_id as StudioNativeSessionId)
         const final = raw.structured_output !== undefined ? JSON.stringify(raw.structured_output) : raw.result

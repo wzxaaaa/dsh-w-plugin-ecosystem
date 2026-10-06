@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { Project, StudioState, Task } from '../types.ts'
 import { ArtifactList } from './ArtifactList.tsx'
 import { Avatar, Busy, ReviewStatus, Section, TaskStatus } from './parts.tsx'
+import type { StudioProgress } from './controller.ts'
 import { changeRequest, employeeOf, formatTime, resumeCommand, revisionOf, revisionsFor, taskPhase, usePending, waitingOn, type Command, type T } from './ui.ts'
 import css from './Studio.module.css'
 
@@ -11,6 +12,8 @@ export interface TaskDetailProps {
   task: Task
   tasks: Task[]
   state: StudioState
+  /** Latest interim message while the task runs. */
+  progress: StudioProgress[string] | undefined
   project: Project
   busy: boolean
   t: T
@@ -20,8 +23,9 @@ export interface TaskDetailProps {
 }
 
 /** Detail pane ordered by what a reviewer needs: outcome, revision chain, collaboration, execution. */
-export function TaskDetail({ task, tasks, state, project, busy, t, command, onSelect, onEdit }: TaskDetailProps) {
+export function TaskDetail({ task, tasks, state, progress, project, busy, t, command, onSelect, onEdit }: TaskDetailProps) {
   const [changes, setChanges] = useState('')
+  const [reply, setReply] = useState('')
   const { pending, run } = usePending()
   const phase = taskPhase(task, tasks)
   const owner = employeeOf(state.employees, task.employeeId)
@@ -50,13 +54,29 @@ export function TaskDetail({ task, tasks, state, project, busy, t, command, onSe
       <div className={css.actions}>
         {task.status === 'pending' && <button className={css.ghost} onClick={onEdit}>{t('edit')}</button>}
         {['failed', 'cancelled', 'interrupted'].includes(task.status) && <button className={css.primary} disabled={busy} onClick={() => { void run('retry', () => command('retryTask', { id: task.id })) }}><Busy on={pending === 'retry'} />{t('retry')}</button>}
-        {['pending', 'running'].includes(task.status) && <button className={css.ghostDanger} disabled={busy} onClick={() => { void run('cancel', () => command('cancelTask', { id: task.id })) }}><Busy on={pending === 'cancel'} />{t('cancel')}</button>}
+        {['pending', 'running', 'waiting'].includes(task.status) && <button className={css.ghostDanger} disabled={busy} onClick={() => { void run('cancel', () => command('cancelTask', { id: task.id })) }}><Busy on={pending === 'cancel'} />{t('cancel')}</button>}
       </div>
     </header>
 
     {task.error && <div className={css.alert} role="alert"><strong>{t('failureReason')}</strong><p>{task.error}</p></div>}
     {!!waiting.length && <div className={css.notice}><strong>{t('waitingTitle')}</strong><div className={css.linkList}>{waiting.map(link)}</div></div>}
-    {task.status === 'running' && <div className={css.notice} data-tone="running"><strong>{t('runningNotice', { name: owner?.name ?? '' })}</strong>{task.startedAt && <p>{t('startedAt', { time: formatTime(task.startedAt) })}</p>}</div>}
+    {task.status === 'running' && <div className={css.notice} data-tone="running">
+      <strong>{t('runningNotice', { name: owner?.name ?? '' })}</strong>
+      {task.startedAt && <p>{t('startedAt', { time: formatTime(task.startedAt) })}</p>}
+      <p className={css.progressLine}>{progress ? <><small>{t('latestProgress', { time: formatTime(progress.at) })}</small>{progress.text}</> : t('noProgressYet')}</p>
+    </div>}
+    {task.status === 'waiting' && <form className={css.notice} data-tone="needsYou" onSubmit={(event) => {
+      event.preventDefault()
+      void run('reply', () => command('answerTask', { id: task.id, reply })).then((ok) => { if (ok) setReply('') })
+    }}>
+      <strong>{t('needsYouTitle', { name: owner?.name ?? '' })}</strong>
+      <pre className={css.report}>{task.question}</pre>
+      <label className={css.field}><span>{t('yourReply')}</span><textarea required rows={3} placeholder={t('replyPlaceholder')} value={reply} onChange={(event) => { setReply(event.target.value) }} /></label>
+      <div className={css.actions}>
+        <button className={css.primary} disabled={busy}><Busy on={pending === 'reply'} />{t('replyContinue')}</button>
+        <span className={css.muted}>{t(project.status === 'running' ? 'replyHelp' : 'replyPausedHelp')}</span>
+      </div>
+    </form>}
 
     {original && <div className={css.revisionCard}>
       <strong>{t('revisionOf')}</strong>

@@ -34,6 +34,7 @@ export const Config: z<Config> = z.object({
   taskTimeoutMs: z.natural().min(1000).max(2_147_483_647).default(3_600_000),
   disposeGraceMs: z.natural().min(100).max(60_000).default(3000),
   pollIntervalMs: z.natural().min(250).max(60_000).default(1500),
+  completionGraceMs: z.natural().min(100).max(600_000).default(30_000),
 })
 
 /** Register the Web consumer and its fully owned native execution provider.
@@ -47,7 +48,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   ctx.effect(() => () => studio.close(), 'studio: employee operations')
   const reply = (value: unknown, status = 200): Response => Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
   ctx.connection.fetch.register({ path: '/api/studio/state', methods: ['GET'], requestBody: 'buffered',
-    fetch: () => Promise.resolve(reply({ state: studio.snapshot(), pollIntervalMs: config.pollIntervalMs })) })
+    fetch: () => Promise.resolve(reply({ state: studio.snapshot(), progress: studio.progress(), pollIntervalMs: config.pollIntervalMs })) })
   ctx.connection.fetch.register({ path: '/api/studio/health', methods: ['GET'], requestBody: 'buffered',
     fetch: async () => reply(await executor.health()) })
   ctx.connection.fetch.register({ path: '/api/studio/catalog', methods: ['GET'], requestBody: 'buffered',

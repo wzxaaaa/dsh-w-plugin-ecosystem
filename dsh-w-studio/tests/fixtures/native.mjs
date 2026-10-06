@@ -1,6 +1,7 @@
 /** External CLI fixture: real argv/stdin/files plus private progress noise. */
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { spawn } from 'node:child_process'
 const [engine, ...args] = process.argv.slice(2)
 if (args.includes('--version')) {
   console.log(`${engine} fixture 1`)
@@ -28,12 +29,32 @@ for (const file of files) {
   await writeFile(file, 'Product document and verified result.\n')
 }
 await writeFile(join(process.cwd(), `${engine}-invocation.json`), JSON.stringify({ args, assignment })+'\n')
-const result = { message: `${engine} finished. Please use the product document.`, files, handoffs: [] }
+// ASK_USER pauses for the user until a reply arrives; SLOW_PROGRESS reports progress and keeps working for a while.
+const asking = assignment.includes('ASK_USER') && !assignment.includes('甲方回复：')
+const result = asking ? { message: 'APK installed on the phone.', files: [], handoffs: [], needsUser: 'Allow microphone access on the phone, then reply "done".' }
+  : { message: `${engine} finished. Please use the product document.`, files, handoffs: [], needsUser: '' }
+if (assignment.includes('SLOW_PROGRESS')) {
+  console.log(JSON.stringify(engine === 'claude' ? { type: 'assistant', message: { content: [{ type: 'text', text: 'Running the device test suite.' }] } }
+    : { type: 'item.completed', item: { type: 'agent_message', text: 'Running the device test suite.' } }))
+  await new Promise(resolve => setTimeout(resolve, 8000))
+}
 console.error('PRIVATE_REASONING_SENTINEL in native progress')
-if (engine === 'claude') console.log(JSON.stringify({ session_id: args[args.indexOf(args.includes('--resume') ? '--resume' : '--session-id')+1], structured_output: result, result: '', thinking: 'PRIVATE_REASONING_SENTINEL' }))
-else {
+if (engine === 'claude') {
+  const sessionId = args[args.indexOf(args.includes('--resume') ? '--resume' : '--session-id')+1]
+  console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: sessionId, private: 'PRIVATE_REASONING_SENTINEL' }))
+  console.log(JSON.stringify({ type: 'assistant', session_id: sessionId, message: { content: [{ type: 'thinking', thinking: 'PRIVATE_REASONING_SENTINEL' }, { type: 'text', text: 'Drafting the document.' }] } }))
+  console.log(JSON.stringify({ type: 'result', session_id: sessionId, structured_output: result, result: '', thinking: 'PRIVATE_REASONING_SENTINEL' }))
+} else {
   console.log(JSON.stringify({ type: 'thread.started', thread_id: args.includes('resume') ? args[args.indexOf('resume')+1] : 'fixture-codex-session' }))
   console.log(JSON.stringify({ type: 'item.completed', private: 'PRIVATE_REASONING_SENTINEL'.repeat(8000) }))
+  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'Checking the build output.' } }))
   console.log('PRIVATE_REASONING_SENTINEL in Codex event stream')
   await writeFile(args[args.indexOf('--output-last-message')+1], JSON.stringify(result))
+  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify(result) } }))
+  console.log(JSON.stringify({ type: 'turn.completed', usage: {} }))
+  // Like a dev server or Gradle daemon started during the task: the final answer is out, but the run never exits by itself.
+  if (assignment.includes('LINGER_AFTER_FINAL')) {
+    spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)'], { stdio: 'inherit' })
+    setTimeout(() => {}, 120000)
+  }
 }

@@ -49,6 +49,7 @@ export function ProjectBar({ state, projects, project, busy, t, command, onSelec
       </div>
     </div>
     {exported && <div className={css.success} role="status"><strong>{t('exported')}</strong><code>{exported}</code><button className={css.ghost} onClick={() => { setExported('') }}>{t('close')}</button></div>}
+    {!!stats.needsYou && <div className={css.notice} data-tone="needsYou"><strong>{t('projectNeedsYou', { count: stats.needsYou })}</strong><p>{t('projectNeedsYouHelp')}</p></div>}
     {project.status === 'review' && <div className={css.notice} data-tone="review"><strong>{t('reviewReady')}</strong><p>{t('reviewReadyHelp')}</p></div>}
     <div className={css.summaryGrid}>
       <div className={css.summaryMain}>

@@ -7,12 +7,16 @@ const engineHealth = z.object({ available: z.boolean().required(), version: z.st
 const healthSchema = z.object({ codex: engineHealth.required(), claude: engineHealth.required(), harness: engineHealth.required() })
 const model = z.object({ id: z.string().required(), name: z.string().required(),
   efforts: z.array(z.string()).required(), imageInput: z.union([z.boolean(), z.const(null)]) })
+const progressSchema = z.dict(z.object({ text: z.string().required(), at: z.string().required() }))
 const catalogSchema = z.object({ codex: z.array(model).required(), claude: z.array(model).required(),
   claudeError: z.string().required(), harness: z.array(model).required() })
 
+/** Latest interim message of a running task, keyed by task id; never part of the journal. */
+export type StudioProgress = Record<string, { text: string; at: string }>
 /** Stable snapshot read by the renderer's injected hook. */
 export interface StudioView {
   state: StudioState | null
+  progress: StudioProgress
   health: StudioHealth | null
   catalog: StudioCatalog | null
   error: string
@@ -20,7 +24,7 @@ export interface StudioView {
 }
 /** One browser-generation owner of polling and edits. */
 export class StudioController {
-  private view: StudioView = { state: null, health: null, catalog: null, error: '', busy: false }
+  private view: StudioView = { state: null, progress: {}, health: null, catalog: null, error: '', busy: false }
   private readonly listeners = new Set<() => void>()
   private readonly controller = new AbortController()
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -67,6 +71,7 @@ export class StudioController {
       try {
         const reply = await this.request('state')
         this.adopt(reply.state)
+        this.publish({ progress: parseFields(progressSchema, reply.progress ?? {}) as StudioProgress })
         if (typeof reply.pollIntervalMs === 'number') this.interval = reply.pollIntervalMs
       } catch (error) { this.publish({ error: error instanceof Error ? error.message : 'Studio connection failed' }) }
       finally { this.refreshPromise = undefined }

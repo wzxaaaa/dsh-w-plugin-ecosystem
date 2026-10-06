@@ -1,6 +1,7 @@
 /** Dependency board, task editing, and immutable deliverable downloads. */
 import { useEffect, useRef, useState } from 'react'
 import type { StudioEmployeeId, Project, StudioState, Task } from '../types.ts'
+import type { StudioProgress } from './controller.ts'
 import { TaskDetail } from './TaskDetail.tsx'
 import { Avatar, Busy, ReviewStatus, TaskStatus } from './parts.tsx'
 import { employeeOf, projectStats, revisionOf, taskPhase, usePending, waitingOn, type Command, type T, type TaskPhase } from './ui.ts'
@@ -9,6 +10,8 @@ import css from './Studio.module.css'
 /** Data and callbacks supplied by the Studio panel. */
 export interface TaskBoardProps {
   state: StudioState
+  /** Latest interim message of each running task. */
+  progress: StudioProgress
   project: Project
   busy: boolean
   error: string
@@ -18,9 +21,9 @@ export interface TaskBoardProps {
   selected: string | null
   onSelect: (id: string) => void
 }
-type Filter = 'all' | 'active' | 'waiting' | 'done' | 'attention'
+type Filter = 'all' | 'needsYou' | 'active' | 'waiting' | 'done' | 'attention'
 const filters: Record<Filter, readonly TaskPhase[]> = {
-  all: [], active: ['running'], waiting: ['pending', 'blocked'], done: ['completed'], attention: ['failed', 'interrupted', 'cancelled'],
+  all: [], needsYou: ['waiting'], active: ['running'], waiting: ['pending', 'blocked'], done: ['completed'], attention: ['failed', 'interrupted', 'cancelled'],
 }
 /** Draft for creating or editing a pending task. */
 interface TaskDraft {
@@ -33,14 +36,14 @@ interface TaskDraft {
 }
 
 /** Show explicit task status alongside dependency readiness and final output. */
-export function TaskBoard({ state, project, busy, error, t, command, selected, onSelect }: TaskBoardProps) {
+export function TaskBoard({ state, progress, project, busy, error, t, command, selected, onSelect }: TaskBoardProps) {
   const tasks = state.tasks.filter(task => task.projectId === project.id)
   const [filter, setFilter] = useState<Filter>('all')
   const [draft, setDraft] = useState<TaskDraft | null>(null)
   const detail = useRef<HTMLDivElement>(null)
   const task = tasks.find(value => value.id === selected) ?? tasks[0]
   const stats = projectStats(tasks)
-  const counts: Record<Filter, number> = { all: stats.total, active: stats.running, waiting: stats.ready + stats.blocked, done: stats.completed, attention: stats.attention }
+  const counts: Record<Filter, number> = { all: stats.total, needsYou: stats.needsYou, active: stats.running, waiting: stats.ready + stats.blocked, done: stats.completed, attention: stats.attention }
   const shown = filter === 'all' ? tasks : tasks.filter(value => filters[filter].includes(taskPhase(value, tasks)))
   const edit = (value?: Task): void => {
     setDraft({ id: value?.id ?? null, employeeId: value?.employeeId ?? state.employees.find(employee => employee.enabled)?.id ?? '',
@@ -60,7 +63,7 @@ export function TaskBoard({ state, project, busy, error, t, command, selected, o
         <button className={css.primary} disabled={busy} onClick={() => { edit() }}>{t('addTask')}</button>
       </div>
       <div className={css.filterRow} role="group" aria-label={t('filterTasks')}>
-        {(Object.keys(filters) as Filter[]).map(key => <button key={key} className={css.filter} aria-pressed={filter === key} onClick={() => { setFilter(key) }} data-tone={key}>
+        {(Object.keys(filters) as Filter[]).filter(key => key !== 'needsYou' || counts.needsYou).map(key => <button key={key} className={css.filter} aria-pressed={filter === key} onClick={() => { setFilter(key) }} data-tone={key}>
           {t(`filter_${key}` as const)}<span>{counts[key]}</span>
         </button>)}
       </div>
@@ -77,6 +80,8 @@ export function TaskBoard({ state, project, busy, error, t, command, selected, o
                 <strong>{value.title}</strong>
                 <span className={css.taskOwner}><Avatar id={value.employeeId} name={owner?.name} size="sm" />{owner?.name ?? t('unknownEmployee')}{owner?.role && <small> · {owner.role}</small>}</span>
                 {!!waiting.length && <small className={css.reason}>{t('waitingFor', { names: waiting.map(dependency => `#${tasks.indexOf(dependency) + 1}`).join('、') })}</small>}
+                {phase === 'running' && progress[value.id] && <small className={css.reason} data-kind="progress">{progress[value.id]?.text}</small>}
+                {phase === 'waiting' && <small className={css.reason} data-kind="needsYou">{value.question}</small>}
                 {original && <small className={css.reason} data-kind="revision">{t('revisionOfShort', { step: tasks.indexOf(original) + 1 })}</small>}
               </span>
               <span className={css.taskBadges}><TaskStatus phase={phase} t={t} /><ReviewStatus task={value} t={t} /></span>
@@ -89,7 +94,7 @@ export function TaskBoard({ state, project, busy, error, t, command, selected, o
     </section>
     <div className={css.detailPane} ref={detail}>
       {draft ? <TaskForm draft={draft} setDraft={setDraft} tasks={tasks} state={state} project={project} busy={busy} error={error} t={t} command={command} />
-        : task ? <TaskDetail key={task.id} task={task} tasks={tasks} state={state} project={project} busy={busy} t={t} command={command} onSelect={select} onEdit={() => { edit(task) }} />
+        : task ? <TaskDetail key={task.id} task={task} tasks={tasks} state={state} progress={progress[task.id]} project={project} busy={busy} t={t} command={command} onSelect={select} onEdit={() => { edit(task) }} />
           : <div className={css.emptyState}><p>{t('selectTask')}</p></div>}
     </div>
   </div>

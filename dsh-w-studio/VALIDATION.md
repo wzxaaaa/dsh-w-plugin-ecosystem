@@ -1,3 +1,15 @@
+# 0.4.0 验证记录
+
+验证日期：2026-10-06。起因：真机联调任务中 Codex 17:22 已交出最终结果，Studio 仍等到 1 小时超时判为失败；用户在等待期间看不到员工在做什么，员工也没有办法请用户操作手机。
+
+- 完成后不退出：Codex 输出 `turn.completed`、Claude Code 输出 `result` 后，若原生进程在 `completionGraceMs` 内未退出，Studio 结束受管进程范围并按完成处理。回归测试用会在最终结果后常驻、并让子进程占用输出管道的假 Codex 复现：关闭该机制时测试超时失败，开启后通过。
+- 实时进展：Codex `item.completed/agent_message`、Claude Code `stream-json` 的 `assistant` 文本、Harness `assistant/message` 通知作为最近进展，经 `/api/studio/state` 的 `progress` 字段返回，不进入日志、不推进 revision。Claude Code 改用 `--output-format stream-json --verbose`。
+- 等你处理：结果结构新增 `needsUser`；非空时任务进入 `waiting`，不收取结果文件；新增 `answerTask` 命令，回复后续接该任务最近的原生会话（找不到时用完整任务指令并附上问题和回复）；`waiting` 任务可停止。
+- 日志升级为 `studio.v5.json`（任务新增 `question`、`reply`），v1–v4 均可迁移；用用户真实 v4 日志的副本验证迁移通过。
+- Harness 员工非完全访问时审批策略为 `ask`：查证 `dsh-user-approval` 在没有应答方时返回 `unavailable` 并拒绝，不会挂起。
+- 3 个文件、41 项源码测试与 2 项打包测试通过；Host、Client 类型检查无新增错误。真实 Claude Code（haiku）与 Codex 各跑一次最小任务，确认事件名、`needsUser` 结构化输出均符合预期。
+- 隔离开发服务与测试 CLI 中，通过界面完成：开始工作 → 列表与详情显示实时进展 → 任务暂停为「等你处理」并显示问题、项目摘要提示 → 填写回复并继续 → 同一会话续接直至完成 → 进展清空，12 项检查通过，无控制台错误。
+
 # 0.3.2 验证记录
 
 验证日期：2026-10-05。修复：点了「结束会议」后不能再整理纪要、无法从会议建项目。

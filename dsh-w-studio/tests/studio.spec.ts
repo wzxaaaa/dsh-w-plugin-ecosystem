@@ -36,7 +36,7 @@ async function setup(executor: StudioExecutor, overrides: Partial<StudioConfig> 
   const project = created.projects[0]!
   return { studio, config, root, cwd, command, roster, project, tasks: created.tasks }
 }
-const summary: EmployeeResult = { message: 'Ready for the next employee.', files: [], handoffs: [] }
+const summary: EmployeeResult = { message: 'Ready for the next employee.', files: [], handoffs: [], needsUser: '' }
 function taskFields(task: Task) {
   return { projectId: task.projectId, employeeId: task.employeeId, title: task.title, instruction: task.instruction,
     dependsOn: task.dependsOn, outputFiles: task.outputFiles }
@@ -122,7 +122,7 @@ describe('public employee handoffs', () => {
     expect(run).not.toHaveBeenCalled()
     await symlink(fixture.config.storageRoot, join(fixture.cwd, '.studio'), process.platform === 'win32' ? 'junction' : 'dir')
     await expect(fixture.command('exportProject', { id: fixture.project.id })).rejects.toThrow('inside the company')
-    expect(await readdir(fixture.config.storageRoot)).toEqual(['studio.v4.json'])
+    expect(await readdir(fixture.config.storageRoot)).toEqual(['studio.v5.json'])
   })
 
   it('migrates the v1 journal into a successor while preserving the predecessor bytes', async () => {
@@ -132,10 +132,10 @@ describe('public employee handoffs', () => {
     const old = { version: 1, revision: current.revision, employees: current.employees,
       projects: current.projects.map(({ workspaceId: _workspace, acceptanceCriteria: _criteria,
         sessionMode: _mode, ...project }) => project),
-      tasks: current.tasks.map(({ nativeSessions: _sessions, reviewStatus: _review, ...task }) => task),
+      tasks: current.tasks.map(({ nativeSessions: _sessions, reviewStatus: _review, question: _question, reply: _reply, ...task }) => task),
       messages: current.messages, artifacts: current.artifacts }
     const bytes = JSON.stringify(old)+'\n'
-    await rm(join(fixture.config.storageRoot, 'studio.v4.json'))
+    await rm(join(fixture.config.storageRoot, 'studio.v5.json'))
     await writeFile(join(fixture.config.storageRoot, 'studio.v1.json'), bytes)
     const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-migration-')) })
@@ -144,7 +144,7 @@ describe('public employee handoffs', () => {
     expect(reopened.snapshot().projects[0]!.sessionMode).toBe('new-task')
     expect(reopened.snapshot().workspaces[0]!.path).toBe(fixture.cwd)
     expect(await readFile(join(fixture.config.storageRoot, 'studio.v1.json'), 'utf8')).toBe(bytes)
-    expect(parseState(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v4.json'), 'utf8'))).version).toBe(4)
+    expect(parseState(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v5.json'), 'utf8'))).version).toBe(5)
   })
   it('publishes image bytes unchanged and gives a dependent employee the immutable image path', async () => {
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jOZkAAAAASUVORK5CYII=', 'base64')
@@ -219,7 +219,7 @@ describe('public employee handoffs', () => {
     await expect(fixture.command('editTask', { id: task.id, task: { ...taskFields(task), dependsOn: [fixture.tasks[1]!.id] } })).rejects.toThrow('cycle')
     await expect(fixture.studio.command({ action: 'applyTemplate', input: { id: 'stale' }, expectedRevision: 0 })).rejects.toThrow('refresh')
     expect(fixture.studio.snapshot()).toEqual(before)
-    expect(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v4.json'), 'utf8'))).toEqual(before)
+    expect(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v5.json'), 'utf8'))).toEqual(before)
     await expect(fixture.command('saveEmployee', { ...fixture.roster[0], id: '../bad' })).rejects.toThrow()
   })
 
@@ -229,15 +229,15 @@ describe('public employee handoffs', () => {
     const state = fixture.studio.snapshot()
     state.tasks[0]!.status = 'running'
     state.projects[0]!.status = 'running'
-    await writeFile(join(fixture.config.storageRoot, 'studio.v4.json'), JSON.stringify(state))
+    await writeFile(join(fixture.config.storageRoot, 'studio.v5.json'), JSON.stringify(state))
     const run = vi.fn(async () => summary)
     const reopened = await Studio.open(fixture.config, { run })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-reopen-')) })
     expect(reopened.snapshot().tasks[0]!.status).toBe('interrupted')
     expect(reopened.snapshot().projects[0]!.status).toBe('paused')
     expect(run).not.toHaveBeenCalled()
-    expect(parseState(reopened.snapshot()).version).toBe(4)
-    expect(() => parseState({ ...state, version: 5 })).toThrow()
+    expect(parseState(reopened.snapshot()).version).toBe(5)
+    expect(() => parseState({ ...state, version: 6 })).toThrow()
   })
 
   it('refuses malformed durable relationships and extra private protocol fields', async () => {
@@ -363,6 +363,65 @@ describe('public employee handoffs', () => {
   })
 })
 
+describe('waiting for the user', () => {
+  it('pauses on needsUser, then continues the same native session with the reply', async () => {
+    const calls: { resume: string | null; assignment: string }[] = []
+    let first = ''
+    let release = (): void => {}
+    const fixture = await setup({ async run(_employee, project, task, _signal, execution) {
+      first ||= task.id
+      calls.push({ resume: execution.resumeSessionId, assignment: task.assignment })
+      await execution.recordSession(`session-${task.id}` as StudioNativeSessionId)
+      if (task.id === first && task.attempt === 1) return { ...summary, message: 'Installed the APK.', needsUser: 'Allow microphone access on the phone, then reply.' }
+      if (task.id === first) {
+        execution.progress?.('Verifying playback.')
+        await new Promise<void>((resolve) => { release = resolve })
+      }
+      await report(project.cwd, task)
+      return summary
+    } })
+    await fixture.command('startProject', { id: fixture.project.id })
+    await vi.waitFor(() => { expect(fixture.studio.snapshot().tasks[0]!.status).toBe('waiting') })
+    const waiting = fixture.studio.snapshot().tasks[0]!
+    expect(waiting).toMatchObject({ question: 'Allow microphone access on the phone, then reply.', result: 'Installed the APK.', reply: '' })
+    expect(fixture.studio.snapshot().artifacts).toEqual([])
+    expect(fixture.studio.snapshot().tasks[1]!.status).toBe('pending')
+    expect(calls).toHaveLength(1)
+    await expect(fixture.command('answerTask', { id: fixture.studio.snapshot().tasks[1]!.id, reply: 'Done' })).rejects.toThrow('not waiting')
+
+    await fixture.command('answerTask', { id: waiting.id, reply: 'Microphone allowed.' })
+    await vi.waitFor(() => { expect(fixture.studio.progress()[waiting.id]?.text).toBe('Verifying playback.') })
+    expect(calls[1]!.resume).toBe(`session-${waiting.id}`)
+    expect(calls[1]!.assignment).toContain('Allow microphone access on the phone')
+    expect(calls[1]!.assignment).toContain('Microphone allowed.')
+    const running = fixture.studio.snapshot().tasks[0]!
+    expect(running).toMatchObject({ status: 'running', attempt: 2, question: '', reply: '' })
+    expect(fixture.studio.snapshot().messages).toContainEqual(expect.objectContaining({ taskId: waiting.id, from: 'user', to: waiting.employeeId, message: 'Microphone allowed.' }))
+    release()
+    await completed(fixture.studio, 2)
+    expect(fixture.studio.progress()).toEqual({})
+    expect(fixture.studio.snapshot().tasks[0]!.nativeSessions.map(session => session.continued)).toEqual([false, true])
+  })
+  it('falls back to the full assignment when no session can continue, and lets the user stop a waiting task', async () => {
+    const assignments: string[] = []
+    const fixture = await setup({ async run(_employee, _project, task) {
+      assignments.push(task.assignment)
+      return { ...summary, needsUser: 'Sign in to the cloud console.' }
+    } })
+    await fixture.command('startProject', { id: fixture.project.id })
+    await vi.waitFor(() => { expect(fixture.studio.snapshot().tasks[0]!.status).toBe('waiting') })
+    const id = fixture.studio.snapshot().tasks[0]!.id
+    await fixture.command('answerTask', { id, reply: 'Signed in.' })
+    await vi.waitFor(() => { expect(assignments).toHaveLength(2) })
+    expect(assignments[1]).toContain('领导安排的任务')
+    expect(assignments[1]).toContain('Sign in to the cloud console.')
+    expect(assignments[1]).toContain('Signed in.')
+    await vi.waitFor(() => { expect(fixture.studio.snapshot().tasks[0]!.status).toBe('waiting') })
+    const stopped = await fixture.command('cancelTask', { id })
+    expect(stopped.tasks[0]!.status).toBe('cancelled')
+  })
+})
+
 describe('meeting room', () => {
   async function meeting(fixture: Awaited<ReturnType<typeof setup>>) {
     const [host, guest] = fixture.roster
@@ -380,15 +439,15 @@ describe('meeting room', () => {
     const fixture = await setup({ async run() { return summary } })
     await fixture.studio.close()
     const { meetings: _meetings, templates: _templates, ...current } = fixture.studio.snapshot()
-    const bytes = JSON.stringify({ ...current, version: 2 })+'\n'
-    await rm(join(fixture.config.storageRoot, 'studio.v4.json'))
+    const bytes = JSON.stringify({ ...current, version: 2, tasks: current.tasks.map(({ question: _question, reply: _reply, ...task }) => task) })+'\n'
+    await rm(join(fixture.config.storageRoot, 'studio.v5.json'))
     await writeFile(join(fixture.config.storageRoot, 'studio.v2.json'), bytes)
     const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-v2-')) })
     expect(reopened.snapshot().meetings).toEqual([])
     expect(reopened.snapshot().tasks).toEqual(current.tasks)
     expect(await readFile(join(fixture.config.storageRoot, 'studio.v2.json'), 'utf8')).toBe(bytes)
-    expect((await readdir(fixture.config.storageRoot)).sort()).toEqual(['studio.v2.json', 'studio.v4.json'])
+    expect((await readdir(fixture.config.storageRoot)).sort()).toEqual(['studio.v2.json', 'studio.v5.json'])
   })
 
   it('lets the host answer by default, follows mentions and handoffs, and runs every turn read-only in the company directory', async () => {
@@ -530,7 +589,7 @@ describe('meeting room', () => {
     crashed.meetings[0]!.speaking = fixture.roster[0]!.id
     crashed.meetings[0]!.queue = [fixture.roster[1]!.id]
     await fixture.studio.close()
-    await writeFile(join(fixture.config.storageRoot, 'studio.v4.json'), JSON.stringify(crashed))
+    await writeFile(join(fixture.config.storageRoot, 'studio.v5.json'), JSON.stringify(crashed))
     const run = vi.fn(async () => summary)
     const reopened = await Studio.open(fixture.config, { run })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-meeting-')) })
@@ -606,8 +665,8 @@ describe('team templates', () => {
 
     await fixture.studio.close()
     const { templates: _templates, ...current } = fixture.studio.snapshot()
-    const bytes = JSON.stringify({ ...current, version: 3 })+'\n'
-    await rm(join(fixture.config.storageRoot, 'studio.v4.json'))
+    const bytes = JSON.stringify({ ...current, version: 3, tasks: current.tasks.map(({ question: _question, reply: _reply, ...task }) => task) })+'\n'
+    await rm(join(fixture.config.storageRoot, 'studio.v5.json'))
     await writeFile(join(fixture.config.storageRoot, 'studio.v3.json'), bytes)
     const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-v3-')) })
