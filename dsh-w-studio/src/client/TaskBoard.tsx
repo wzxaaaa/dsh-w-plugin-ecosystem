@@ -23,7 +23,7 @@ export interface TaskBoardProps {
 }
 type Filter = 'all' | 'needsYou' | 'active' | 'waiting' | 'done' | 'attention'
 const filters: Record<Filter, readonly TaskPhase[]> = {
-  all: [], needsYou: ['waiting'], active: ['running'], waiting: ['pending', 'blocked'], done: ['completed'], attention: ['failed', 'interrupted', 'cancelled'],
+  all: [], needsYou: ['waiting'], active: ['running'], waiting: ['pending', 'blocked'], done: ['completed'], attention: ['failed', 'interrupted'],
 }
 /** Draft for creating or editing a pending task. */
 interface TaskDraft {

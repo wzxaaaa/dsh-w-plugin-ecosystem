@@ -290,7 +290,7 @@
 .filterRow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .studio .filter { min-height: 28px; padding: 2px 10px; border-radius: 14px; border-color: var(--s-line); font-size: 12px; color: var(--s-muted); gap: 5px; }
 .filter span { color: var(--s-faint); font-weight: 600; }
-.studio .filter[aria-pressed="true"] { background: var(--s-ink); border-color: var(--s-ink); color: var(--s-bg); }
+.studio .filter[aria-pressed="true"], .studio .filter[aria-pressed="true"]:hover:not(:disabled) { background: var(--s-ink); border-color: var(--s-ink); color: var(--s-bg); }
 .studio .filter[aria-pressed="true"] span { color: inherit; opacity: .7; }
 .pipeline { display: grid; gap: 4px; position: relative; }
 .pipeline li { position: relative; }
@@ -492,6 +492,10 @@ li[data-status="waiting"] .step { border-color: var(--s-warn); color: var(--s-wa
 .planRow[data-kind="applyRemove"] dt { color: var(--s-bad); }
 .planRow[data-kind="applyDisable"] dt { color: var(--s-warn); }
 
+/* Side by side, the list stays under the tabs and scrolls on its own while the detail scrolls the page. */
+@media (min-width: 1101px) {
+  .listPane { position: sticky; top: 45px; align-self: start; height: calc(var(--s-view-h, 100vh) - 45px); overflow-y: auto; overscroll-behavior: contain; }
+}
 /* Responsive */
 @media (max-width: 1100px) {
   .workArea { grid-template-columns: minmax(0, 1fr); }

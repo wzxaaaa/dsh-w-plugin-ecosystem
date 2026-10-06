@@ -1,5 +1,5 @@
 /** Studio workspace: company switcher, team roster, project work, and public handoffs. */
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { StudioState, StudioWorkspace } from '../types.ts'
 import type { StudioController } from './controller.ts'
@@ -43,7 +43,16 @@ export function StudioPanel({ useStudio, command, refresh, checkHealth, pickDire
   const handoffCount = state && project ? state.messages.filter(value => value.projectId === project.id).length : 0
   const openMeetings = state?.meetings.filter(value => value.workspaceId === workspace?.id && value.status !== 'closed').length ?? 0
   const counts: Record<Tab, string> = { employees: String(state?.employees.length ?? 0), tasks: projectTasks.length ? `${stats.completed}/${stats.active}` : '0', meetings: String(openMeetings), messages: String(handoffCount) }
-  return <main className={css.studio}>
+  // Panes that stay beside a long detail size themselves to the visible height of this scroller.
+  const root = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const node = root.current
+    if (!node) return
+    const observer = new ResizeObserver(() => { node.style.setProperty('--s-view-h', `${node.clientHeight}px`) })
+    observer.observe(node)
+    return () => { observer.disconnect() }
+  }, [])
+  return <main className={css.studio} ref={root}>
     <header className={css.topbar}>
       <div className={css.brand}>
         <h1>{t('title')}</h1>
