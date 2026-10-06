@@ -29,6 +29,12 @@ for (const file of files) {
   await writeFile(file, 'Product document and verified result.\n')
 }
 await writeFile(join(process.cwd(), `${engine}-invocation.json`), JSON.stringify({ args, assignment })+'\n')
+// FAIL_ONCE ends the first attempt like an exhausted Codex plan; the recovery prompt of a retry succeeds.
+if (engine === 'codex' && assignment.includes('FAIL_ONCE') && !assignment.includes('中断了')) {
+  console.log(JSON.stringify({ type: 'thread.started', thread_id: args.includes('resume') ? args[args.indexOf('resume')+1] : 'fixture-codex-session' }))
+  console.log(JSON.stringify({ type: 'turn.failed', error: { message: "You've hit your usage limit. Try again at 9:39 PM." } }))
+  process.exit(1)
+}
 // ASK_USER pauses for the user until a reply arrives; SLOW_PROGRESS reports progress and keeps working for a while.
 const asking = assignment.includes('ASK_USER') && !assignment.includes('甲方回复：')
 const result = asking ? { message: 'APK installed on the phone.', files: [], handoffs: [], needsUser: 'Allow microphone access on the phone, then reply "done".' }

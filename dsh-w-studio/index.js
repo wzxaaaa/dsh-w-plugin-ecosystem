@@ -1018,6 +1018,7 @@ var Studio = class _Studio {
               return this.task(id2).dependsOn.some((next) => reaches(next, visited));
             };
             if (dependencies.some((dependency) => dependency.projectId !== task.projectId || reaches(dependency.id))) throw new Error("Task dependencies must be in this project and cannot form a cycle");
+            if (input.task.employeeId !== task.employeeId) task.error = "";
             Object.assign(task, {
               employeeId: input.task.employeeId,
               title: input.task.title,
@@ -1094,7 +1095,6 @@ var Studio = class _Studio {
             const task = this.task(identity(command.input));
             if (!["failed", "cancelled", "interrupted"].includes(task.status)) throw new Error("Only failed, cancelled, or interrupted tasks can be retried");
             task.status = "pending";
-            task.error = "";
             task.result = "";
             if (this.project(task.projectId).status === "completed") this.project(task.projectId).status = "paused";
             break;
@@ -1375,6 +1375,14 @@ ${task.instruction}`,
       needsUserRule
     ].join("\n\n");
   }
+  /** Prompt that continues a failed or interrupted native session; the working tree keeps everything already done. */
+  recovery(task) {
+    return [
+      `\u4F60\u4E0A\u6B21\u6267\u884C\u4EFB\u52A1\u300C${task.title}\u300D\u65F6\u4E2D\u65AD\u4E86\uFF0C\u539F\u56E0\uFF1A${task.error}`,
+      "\u5DE5\u4F5C\u76EE\u5F55\u4E2D\u5DF2\u5B8C\u6210\u7684\u6539\u52A8\u90FD\u8FD8\u5728\u3002\u8BF7\u5148\u68C0\u67E5\u5F53\u524D\u8FDB\u5EA6\uFF0C\u4E0D\u8981\u91CD\u505A\u5DF2\u7ECF\u5B8C\u6210\u7684\u5DE5\u4F5C\uFF0C\u7EE7\u7EED\u5B8C\u6210\u539F\u4EFB\u52A1\u3002\u5B8C\u6210\u540E\u6309\u539F\u6765\u7684 JSON \u683C\u5F0F\u8FD4\u56DE\u6700\u7EC8\u7ED3\u679C\u3002",
+      needsUserRule
+    ].join("\n\n");
+  }
   schedule() {
     if (this.closing) return;
     for (const task of this.state.tasks) {
@@ -1414,19 +1422,20 @@ ${task.instruction}`,
         if (!workspace) throw new Error("Company workspace does not exist");
         const cwd = await realpath2(employee2.cwd || project2.cwd);
         if (!withinDirectory(await realpath2(workspace.path), cwd)) throw new Error("Employee directory must stay inside the company workspace");
-        const waiting2 = task2.reply ? task2.nativeSessions.findLast((value) => value.engine === employee2.engine && value.cwd === (employee2.cwd || project2.cwd)) : void 0;
-        task2.assignment = waiting2 ? this.continuation(task2) : this.assignment(employee2, project2, task2);
+        const resumed2 = task2.reply || task2.error ? task2.nativeSessions.findLast((value) => value.engine === employee2.engine && value.cwd === (employee2.cwd || project2.cwd)) : void 0;
+        task2.assignment = resumed2 ? task2.reply ? this.continuation(task2) : this.recovery(task2) : this.assignment(employee2, project2, task2);
         task2.status = "running";
         task2.attempt += 1;
         task2.startedAt = (/* @__PURE__ */ new Date()).toISOString();
         task2.finishedAt = "";
         task2.question = "";
         task2.reply = "";
+        task2.error = "";
         await this.commit();
-        return structuredClone({ task: task2, employee: employee2, project: project2, waiting: waiting2 });
+        return structuredClone({ task: task2, employee: employee2, project: project2, resumed: resumed2 });
       });
-      const { task, employee, project, waiting } = prepared;
-      const prior = waiting ?? (project.sessionMode === "employee-project" ? this.state.tasks.filter((value) => value.projectId === project.id && value.employeeId === employee.id && value.status === "completed").flatMap((value) => value.nativeSessions).findLast((value) => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : void 0);
+      const { task, employee, project, resumed } = prepared;
+      const prior = resumed ?? (project.sessionMode === "employee-project" ? this.state.tasks.filter((value) => value.projectId === project.id && value.employeeId === employee.id && value.status === "completed").flatMap((value) => value.nativeSessions).findLast((value) => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : void 0);
       const result = await this.executor.run(employee, project, task, controller.signal, {
         resumeSessionId: prior?.id ?? null,
         progress: (text2) => {
@@ -2867,6 +2876,7 @@ function createExecutor(ctx, config) {
         };
         let codexSession = null;
         let claudeResult = null;
+        let failure = "";
         const stream = child.stdout ? jsonLines(child.stdout, config.maxTextBytes * 4, (event) => {
           if (employee.engine === "codex") {
             if (event.type === "thread.started" && typeof event.thread_id === "string") codexSession ??= event.thread_id;
@@ -2874,6 +2884,8 @@ function createExecutor(ctx, config) {
               const text2 = progressLine(event.item.text);
               if (text2) execution.progress?.(text2);
             } else if (event.type === "turn.completed") finish();
+            else if (event.type === "turn.failed" && record(event.error) && typeof event.error.message === "string") failure = event.error.message;
+            else if (event.type === "error" && typeof event.message === "string") failure ||= event.message;
           } else if (event.type === "assistant" && record(event.message)) {
             const text2 = progressLine(event.message.content);
             if (text2) execution.progress?.(text2);
@@ -2897,10 +2909,15 @@ function createExecutor(ctx, config) {
         })();
         if (codexSession) await execution.recordSession(codexSession);
         signal.throwIfAborted();
-        if (outcome.exitCode !== 0 && !finished) throw new Error(`${employee.engine} exited with code ${String(outcome.exitCode)}. Check native login, model, effort, and permissions.`);
+        if (outcome.exitCode !== 0 && !finished) {
+          throw new Error(`${employee.engine} exited with code ${String(outcome.exitCode)}. ${failure ? `${employee.engine} reported: ${failure.slice(0, 1e3)}` : "Check native login, model, effort, and permissions."}`);
+        }
         if (employee.engine === "codex") return finalHandoff(await readFile3(resultPath, "utf8"), config.maxTextBytes);
         const raw = claudeResult;
-        if (!raw || raw.is_error === true) throw new Error("Claude Code did not complete the task. Check native login and permissions.");
+        if (!raw || raw.is_error === true) {
+          const reported = raw && typeof raw.result === "string" && raw.result ? `Claude Code reported: ${raw.result.slice(0, 1e3)}` : "Check native login and permissions.";
+          throw new Error(`Claude Code did not complete the task. ${reported}`);
+        }
         if (typeof raw.session_id !== "string" || raw.session_id !== claudeSession) throw new Error("Claude Code returned an unexpected session identity");
         await execution.recordSession(raw.session_id);
         const final = raw.structured_output !== void 0 ? JSON.stringify(raw.structured_output) : raw.result;

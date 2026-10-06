@@ -124,6 +124,21 @@ it('runs native employees through cordis.yml without leaking private progress in
   expect((await invocation('codex')).args).toEqual(expect.arrayContaining(['resume', sessions[0], '--sandbox', 'workspace-write']))
   expect((await invocation('claude')).args).toEqual(expect.arrayContaining(['--resume', sessions[1]]))
   expect(JSON.stringify(await state())).not.toContain('PRIVATE_REASONING_SENTINEL')
+  // A plan limit shows the native reason, and the retry continues the failed session instead of starting over.
+  const codexTask = final.tasks.find(task => task.employeeId === roster.find(e => e.engine === 'codex')?.id)!
+  const failing = (await command('createTask', { projectId: codexTask.projectId, employeeId: codexTask.employeeId,
+    title: 'Hit the plan limit', instruction: 'FAIL_ONCE', dependsOn: [], outputFiles: [] })).tasks.at(-1)!
+  await command('startProject', { id: created.projects[0]!.id })
+  await vi.waitFor(async () => { expect((await state()).tasks.find(task => task.id === failing.id)!.status).toBe('failed') }, { timeout: 15000 })
+  expect((await state()).tasks.find(task => task.id === failing.id)!.error).toContain("You've hit your usage limit")
+  // A failure leaves the project running, so the retried task starts at once.
+  await command('retryTask', { id: failing.id })
+  await vi.waitFor(async () => { expect((await state()).tasks.find(task => task.id === failing.id)!.status).toBe('completed') }, { timeout: 15000 })
+  const recovered = (await state()).tasks.find(task => task.id === failing.id)!
+  expect(recovered.assignment).toContain('中断了')
+  expect(recovered.nativeSessions).toHaveLength(2)
+  expect(recovered.nativeSessions[1]).toMatchObject({ id: recovered.nativeSessions[0]!.id, continued: true })
+  expect((await invocation('codex')).args).toEqual(expect.arrayContaining(['resume', recovered.nativeSessions[0]!.id]))
   const artifact = final.artifacts.find(file => file.name !== 'handoff.md')!
   expect(await (await request(`artifact?id=${artifact.id}`)).text()).toContain('Product document')
   expect(await (await request('health')).json()).toMatchObject({ codex: { available: true }, claude: { available: true } })

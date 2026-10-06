@@ -195,6 +195,40 @@ describe('public employee handoffs', () => {
     await expect(fixture.studio.artifact('../studio.v1.json')).rejects.toThrow('does not exist')
   })
 
+  it('retries in the failed native session, but starts fresh for a different employee', async () => {
+    const calls: { employee: string; resume: string | null; assignment: string }[] = []
+    let fail = true
+    const fixture = await setup({ async run(employee, project, task, _signal, execution) {
+      calls.push({ employee: employee.id, resume: execution.resumeSessionId, assignment: task.assignment })
+      await execution.recordSession(`session-${employee.id}` as StudioNativeSessionId)
+      if (fail) throw new Error('codex exited with code 1. codex reported: usage limit')
+      await report(project.cwd, task)
+      return summary
+    } })
+    await fixture.command('startProject', { id: fixture.project.id })
+    await vi.waitFor(() => { expect(fixture.studio.snapshot().tasks[0]!.status).toBe('failed') })
+    fail = false
+    const pending = await fixture.command('retryTask', { id: fixture.tasks[0]!.id })
+    expect(pending.tasks[0]!.error).toContain('usage limit')
+    await completed(fixture.studio, 2)
+    expect(calls[1]!.resume).toBe(`session-${fixture.tasks[0]!.employeeId}`)
+    expect(calls[1]!.assignment).toContain('中断了')
+    expect(calls[1]!.assignment).toContain('usage limit')
+    expect(calls[1]!.assignment).not.toContain('领导安排的任务')
+    expect(fixture.studio.snapshot().tasks[0]!.error).toBe('')
+
+    fail = true
+    const extra = (await fixture.command('createTask', { ...taskFields(fixture.tasks[1]!), title: 'Second pass', dependsOn: [] })).tasks.at(-1)!
+    await fixture.command('startProject', { id: fixture.project.id })
+    await vi.waitFor(() => { expect(fixture.studio.snapshot().tasks.at(-1)!.status).toBe('failed') })
+    fail = false
+    await fixture.command('pauseProject', { id: fixture.project.id })
+    await fixture.command('retryTask', { id: extra.id })
+    await fixture.command('editTask', { id: extra.id, task: { ...taskFields(extra), employeeId: fixture.tasks[0]!.employeeId } })
+    await fixture.command('startProject', { id: fixture.project.id })
+    await completed(fixture.studio, 3)
+    expect(calls.at(-1)!.assignment).toContain('领导安排的任务')
+  })
   it('does not launch the next dependency after failure and requires an explicit retry', async () => {
     let fail = true
     const fixture = await setup({ async run(_employee, project, task) {

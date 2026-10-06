@@ -229,6 +229,8 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
         }
         let codexSession: StudioNativeSessionId | null = null
         let claudeResult: Record<string, unknown> | null = null
+        // The native tool's own failure text (usage limit, login, model); stderr is never copied because it carries private progress.
+        let failure = ''
         const stream = child.stdout ? jsonLines(child.stdout, config.maxTextBytes * 4, (event) => {
           if (employee.engine === 'codex') {
             if (event.type === 'thread.started' && typeof event.thread_id === 'string') codexSession ??= event.thread_id as StudioNativeSessionId
@@ -236,6 +238,8 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
               const text = progressLine(event.item.text)
               if (text) execution.progress?.(text)
             } else if (event.type === 'turn.completed') finish()
+            else if (event.type === 'turn.failed' && record(event.error) && typeof event.error.message === 'string') failure = event.error.message
+            else if (event.type === 'error' && typeof event.message === 'string') failure ||= event.message
           } else if (event.type === 'assistant' && record(event.message)) {
             const text = progressLine(event.message.content)
             if (text) execution.progress?.(text)
@@ -256,10 +260,15 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
         })()
         if (codexSession) await execution.recordSession(codexSession)
         signal.throwIfAborted()
-        if (outcome.exitCode !== 0 && !finished) throw new Error(`${employee.engine} exited with code ${String(outcome.exitCode)}. Check native login, model, effort, and permissions.`)
+        if (outcome.exitCode !== 0 && !finished) {
+          throw new Error(`${employee.engine} exited with code ${String(outcome.exitCode)}. ${failure ? `${employee.engine} reported: ${failure.slice(0, 1000)}` : 'Check native login, model, effort, and permissions.'}`)
+        }
         if (employee.engine === 'codex') return finalHandoff(await readFile(resultPath, 'utf8'), config.maxTextBytes)
         const raw = claudeResult as Record<string, unknown> | null
-        if (!raw || raw.is_error === true) throw new Error('Claude Code did not complete the task. Check native login and permissions.')
+        if (!raw || raw.is_error === true) {
+          const reported = raw && typeof raw.result === 'string' && raw.result ? `Claude Code reported: ${raw.result.slice(0, 1000)}` : 'Check native login and permissions.'
+          throw new Error(`Claude Code did not complete the task. ${reported}`)
+        }
         if (typeof raw.session_id !== 'string' || raw.session_id !== claudeSession) throw new Error('Claude Code returned an unexpected session identity')
         await execution.recordSession(raw.session_id as StudioNativeSessionId)
         const final = raw.structured_output !== undefined ? JSON.stringify(raw.structured_output) : raw.result

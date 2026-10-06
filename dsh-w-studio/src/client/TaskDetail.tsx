@@ -58,7 +58,7 @@ export function TaskDetail({ task, tasks, state, progress, project, busy, t, com
       </div>
     </header>
 
-    {task.error && <div className={css.alert} role="alert"><strong>{t('failureReason')}</strong><p>{task.error}</p></div>}
+    {task.error && ['failed', 'cancelled', 'interrupted'].includes(task.status) && <div className={css.alert} role="alert"><strong>{t('failureReason')}</strong><p>{task.error}</p></div>}
     {!!waiting.length && <div className={css.notice}><strong>{t('waitingTitle')}</strong><div className={css.linkList}>{waiting.map(link)}</div></div>}
     {task.status === 'running' && <div className={css.notice} data-tone="running">
       <strong>{t('runningNotice', { name: owner?.name ?? '' })}</strong>

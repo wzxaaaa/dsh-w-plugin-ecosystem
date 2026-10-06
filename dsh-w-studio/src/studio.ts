@@ -396,6 +396,8 @@ export class Studio {
               return this.task(id).dependsOn.some(next => reaches(next, visited))
             }
             if (dependencies.some(dependency => dependency.projectId !== task.projectId || reaches(dependency.id))) throw new Error('Task dependencies must be in this project and cannot form a cycle')
+            // Another employee starts fresh instead of continuing a previous employee's failed session.
+            if (input.task.employeeId !== task.employeeId) task.error = ''
             Object.assign(task, { employeeId: input.task.employeeId, title: input.task.title, instruction: input.task.instruction,
               dependsOn: dependencies.map(dependency => dependency.id), outputFiles: input.task.outputFiles.map(outputName) })
             break
@@ -449,7 +451,8 @@ export class Studio {
           case 'retryTask': {
             const task = this.task(identity(command.input))
             if (!['failed', 'cancelled', 'interrupted'].includes(task.status)) throw new Error('Only failed, cancelled, or interrupted tasks can be retried')
-            task.status = 'pending'; task.error = ''; task.result = ''
+            // The failure reason stays until the next attempt starts: that attempt continues the failed session with it.
+            task.status = 'pending'; task.result = ''
             if (this.project(task.projectId).status === 'completed') this.project(task.projectId).status = 'paused'
             break
           }
@@ -673,6 +676,12 @@ export class Studio {
       '请在此基础上继续完成原任务。完成后仍按原来的 JSON 格式返回；如果还需要甲方处理，再次填写 needsUser。', needsUserRule].join('\n\n')
   }
 
+  /** Prompt that continues a failed or interrupted native session; the working tree keeps everything already done. */
+  private recovery(task: Task): string {
+    return [`你上次执行任务「${task.title}」时中断了，原因：${task.error}`,
+      '工作目录中已完成的改动都还在。请先检查当前进度，不要重做已经完成的工作，继续完成原任务。完成后按原来的 JSON 格式返回最终结果。', needsUserRule].join('\n\n')
+  }
+
   private schedule(): void {
     if (this.closing) return
     for (const task of this.state.tasks) {
@@ -711,16 +720,17 @@ export class Studio {
         if (!workspace) throw new Error('Company workspace does not exist')
         const cwd = await realpath(employee.cwd || project.cwd)
         if (!withinDirectory(await realpath(workspace.path), cwd)) throw new Error('Employee directory must stay inside the company workspace')
-        // A reply continues the session that asked for it; without one, the full assignment carries the reply as a message.
-        const waiting = task.reply ? task.nativeSessions.findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined
-        task.assignment = waiting ? this.continuation(task) : this.assignment(employee, project, task)
+        // A reply continues the session that asked for it, and a retry continues the session that failed, so finished work is not redone.
+        // Without a continuable session, the full assignment carries the reply as a message.
+        const resumed = task.reply || task.error ? task.nativeSessions.findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined
+        task.assignment = resumed ? task.reply ? this.continuation(task) : this.recovery(task) : this.assignment(employee, project, task)
         task.status = 'running'; task.attempt += 1; task.startedAt = new Date().toISOString(); task.finishedAt = ''
-        task.question = ''; task.reply = ''
+        task.question = ''; task.reply = ''; task.error = ''
         await this.commit()
-        return structuredClone({ task, employee, project, waiting })
+        return structuredClone({ task, employee, project, resumed })
       })
-      const { task, employee, project, waiting } = prepared
-      const prior = waiting ?? (project.sessionMode === 'employee-project' ? this.state.tasks
+      const { task, employee, project, resumed } = prepared
+      const prior = resumed ?? (project.sessionMode === 'employee-project' ? this.state.tasks
         .filter(value => value.projectId === project.id && value.employeeId === employee.id && value.status === 'completed')
         .flatMap(value => value.nativeSessions)
         .findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined)
