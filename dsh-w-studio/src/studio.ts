@@ -351,19 +351,43 @@ export class Studio {
             break
           }
           case 'meetingProject': {
+            // projectId names an existing project of this company to extend; empty creates a new project.
+            // replacePending stops that project's never-started tasks so the minutes' concrete tasks take their place.
             const input = parseFields(z.object({ id: z.string().required(), minutes: minutesSchema.required(), cwd: z.string().required(),
-              sessionMode: z.union(['employee-project', 'new-task'] as const).required() }), command.input)
+              sessionMode: z.union(['employee-project', 'new-task'] as const).required(), projectId: z.string().required(),
+              replacePending: z.boolean().required() }), command.input)
             const meeting = this.meeting(input.id)
             if (meeting.status !== 'review') throw new Error('Confirm the meeting minutes first')
             const minutes = input.minutes as MeetingMinutes
-            if (!minutes.projectName.trim() || !minutes.objective.trim()) throw new Error('Minutes need a project name and objective')
             if (!minutes.tasks.length || minutes.tasks.some(task => !task.title.trim() || !task.instruction.trim())) throw new Error('Minutes need at least one complete task')
-            const project = await this.newProject({ name: minutes.projectName, objective: minutes.objective, cwd: input.cwd,
-              workspaceId: meeting.workspaceId, acceptanceCriteria: minutes.acceptanceCriteria, sessionMode: input.sessionMode },
-            minutes.tasks.map(task => ({ employee: this.employee(task.employeeId), title: task.title, instruction: task.instruction })))
-            // The minutes reach every project employee through the existing team-message channel.
+            const assignments = minutes.tasks.map(task => ({ employee: this.employee(task.employeeId), title: task.title, instruction: task.instruction }))
+            let project: Project
+            if (input.projectId) {
+              project = this.project(input.projectId)
+              if (project.workspaceId !== meeting.workspaceId) throw new Error('Add the minutes to a project of this company workspace')
+              if (assignments.some(value => !value.employee.enabled)) throw new Error('Select at least one enabled employee')
+              if (input.replacePending) {
+                const replaced = new Set(this.state.tasks.filter(task => task.projectId === project.id && task.status === 'pending' && task.attempt === 0).map(task => task.id))
+                const finishedAt = new Date().toISOString()
+                for (const task of this.state.tasks) {
+                  if (replaced.has(task.id)) Object.assign(task, { status: 'cancelled', finishedAt, error: `由会议「${meeting.title}」的纪要任务替换` })
+                  else if (task.status === 'pending') task.dependsOn = task.dependsOn.filter(id => !replaced.has(id))
+                }
+              }
+              this.chainTasks(project, assignments)
+              // Accepted or reviewed work is reopened for the new tasks; the user starts it explicitly.
+              if (project.status === 'completed' || project.status === 'review') project.status = 'paused'
+            } else {
+              if (!minutes.projectName.trim() || !minutes.objective.trim()) throw new Error('Minutes need a project name and objective')
+              project = await this.newProject({ name: minutes.projectName, objective: minutes.objective, cwd: input.cwd,
+                workspaceId: meeting.workspaceId, acceptanceCriteria: minutes.acceptanceCriteria, sessionMode: input.sessionMode }, assignments)
+            }
+            // The minutes reach every project employee through the existing team-message channel; an extended project
+            // keeps its own objective, so this round's goal and acceptance criteria travel with the minutes.
             this.state.messages.push({ id: randomUUID() as StudioMessageId, projectId: project.id, taskId: null, from: 'user', to: 'team',
-              message: [`会议纪要：${meeting.title}`, minutes.summary, ...minutes.decisions.map(value => `- ${value}`)].filter(Boolean).join('\n'),
+              message: [`会议纪要：${meeting.title}`, minutes.summary, ...minutes.decisions.map(value => `- ${value}`),
+                ...input.projectId && minutes.objective.trim() ? [`本轮目标：${minutes.objective}`] : [],
+                ...input.projectId && minutes.acceptanceCriteria.trim() ? [`本轮验收标准：${minutes.acceptanceCriteria}`] : []].filter(Boolean).join('\n'),
               createdAt: new Date().toISOString() })
             Object.assign(meeting, { minutes, status: 'closed', projectId: project.id, queue: [], error: '' })
             break
@@ -515,13 +539,19 @@ export class Studio {
       cwd, workspaceId: workspace.id, acceptanceCriteria: input.acceptanceCriteria, sessionMode: input.sessionMode,
       status: 'paused', createdAt: new Date().toISOString() }
     this.state.projects.push(project)
+    this.chainTasks(project, assignments)
+    return project
+  }
+
+  /** Append assignments to a project as a sequential chain; writers get a report file to deliver. */
+  private chainTasks(project: Project, assignments: { employee: Employee; title: string; instruction: string }[]): void {
+    if (this.state.tasks.filter(task => task.projectId === project.id).length + assignments.length > this.config.maxTasksPerProject) throw new Error('Project task limit reached')
     let previous: Task | undefined
     for (const { employee, title, instruction } of assignments) {
       const task = this.appendTask(project, employee, title, instruction, previous ? [previous.id] : [], [])
       if (employee.permission !== 'read-only') task.outputFiles = [`.studio-deliverables/${task.id}.md`]
       previous = task
     }
-    return project
   }
 
   private meetingPrompt(meeting: Meeting, employee: Employee, drafting: boolean): string {
@@ -532,7 +562,8 @@ export class Studio {
       `会议议题：${meeting.agenda || '（未填写，按讨论内容推进）'}`,
       '甲方（用户）是提出需求的客户。会议只讨论，不写代码，不修改任何文件。',
       `参会者：${JSON.stringify(meeting.attendeeIds.map(id => ({ employeeId: id, name: name(id), role: this.employee(id).role, host: id === meeting.hostId })))}`,
-    ].join('\n\n')
+      this.companyBrief(meeting.workspaceId, Math.floor(this.config.maxTextBytes / 4)),
+    ].filter(Boolean).join('\n\n')
     const instruction = drafting ? [
       '讨论已结束。请作为主持人整理会议纪要，供甲方确认后直接建立项目。',
       '仅返回 JSON：{"message":"<纪要 JSON 字符串>","files":[],"handoffs":[]}。message 必须是一个 JSON 字符串，结构为：',
@@ -650,6 +681,54 @@ export class Studio {
     } finally { clearTimeout(timeout) }
   }
 
+  /** Company work so meetings and tasks start from what exists instead of asking the user where it is.
+   * The focused project comes first, then the newest others; lines are cut short and the brief stops at the byte budget.
+   * @param workspaceId - Company whose projects are summarized.
+   * @param budget - Maximum UTF-8 bytes of the returned section.
+   * @param focus - Project of the current task, and its tasks already described in full by the caller.
+   * @returns The brief, or an empty string when there is nothing to report or no room.
+   */
+  private companyBrief(workspaceId: StudioWorkspaceId, budget: number, focus?: { projectId: StudioProjectId; skip: ReadonlySet<string> }): string {
+    const clip = (text: string, max: number): string => {
+      const value = text.replace(/\s+/g, ' ').trim()
+      return value.length > max ? `${value.slice(0, max)}…` : value
+    }
+    const projectStatus: Record<Project['status'], string> = { paused: '已暂停', running: '进行中', review: '待验收', completed: '已验收' }
+    const taskStatus: Record<Task['status'], string> = { pending: '未开始', running: '进行中', waiting: '等甲方处理', completed: '已完成',
+      failed: '失败', cancelled: '已停止', interrupted: '中断' }
+    const role = (task: Task): string => this.state.employees.find(value => value.id === task.employeeId)?.role ?? ''
+    const head = '公司已有项目（需要细节时到对应目录查阅文件，不必再问甲方在哪里）：'
+    const lines: string[] = []
+    let used = Buffer.byteLength(head)
+    const add = (line: string): boolean => {
+      const bytes = Buffer.byteLength(line) + 1
+      if (used + bytes > budget) return false
+      lines.push(line); used += bytes
+      return true
+    }
+    const others = this.state.projects.filter(value => value.workspaceId === workspaceId && value.id !== focus?.projectId).reverse()
+    const ordered = [...this.state.projects.filter(value => value.id === focus?.projectId), ...others]
+    let omitted = false
+    for (const project of ordered) {
+      const current = project.id === focus?.projectId
+      const tasks = this.state.tasks.filter(task => task.projectId === project.id && !focus?.skip.has(task.id))
+      const done = tasks.filter(task => task.status === 'completed' && task.reviewStatus !== 'superseded')
+      const open = tasks.filter(task => task.status !== 'completed' && task.status !== 'cancelled')
+      if (current && !done.length && !open.length) continue
+      const label = current ? `- 本项目「${project.name}」的其他任务：` : `- 项目「${project.name}」（${projectStatus[project.status]}；目录 ${project.cwd}）目标：${clip(project.objective, 200)}`
+      if (!add(label)) { omitted = true; break }
+      for (const task of [...done].reverse()) {
+        const files = task.outputFiles.length ? `；交付文件：${task.outputFiles.join('、')}` : ''
+        if (!add(`  - 已完成：${task.title}（${role(task)}）：${clip(task.result, 160)}${files}`)) { omitted = true; break }
+      }
+      if (omitted) break
+      if (open.length && !add(`  - 未完成：${clip(open.map(task => `${task.title}（${role(task)}·${taskStatus[task.status]}）`).join('；'), 400)}`)) { omitted = true; break }
+    }
+    if (!lines.length) return ''
+    const tail = '  （更早的内容已省略）'
+    return [head, ...lines, ...omitted && Buffer.byteLength(tail) + used <= budget ? [tail] : []].join('\n')
+  }
+
   private assignment(employee: Employee, project: Project, task: Task): string {
     const dependencies = task.dependsOn.map(id => this.task(id))
     const messages = this.state.messages.filter(message => message.projectId === project.id
@@ -670,7 +749,9 @@ export class Studio {
       needsUserRule,
     ].join('\n\n')
     if (Buffer.byteLength(prompt) > this.config.maxTextBytes) throw new Error('Assignment exceeds the configured text limit; reduce the task or its dependencies')
-    return prompt
+    const room = Math.min(Math.floor(this.config.maxTextBytes / 4), this.config.maxTextBytes - Buffer.byteLength(prompt) - 2)
+    const brief = this.companyBrief(project.workspaceId, room, { projectId: project.id, skip: new Set([task.id, ...task.dependsOn]) })
+    return brief ? `${prompt}\n\n${brief}` : prompt
   }
 
   /** Prompt that continues a waiting native session with the user's reply. */

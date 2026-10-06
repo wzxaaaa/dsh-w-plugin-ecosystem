@@ -1,6 +1,6 @@
 {
   "plugin": "dsh-w-studio",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "harnessVersion": "0.1.5-rc.2",
   "harnessCommit": "c291e7961a515f6d7af9304e7fd1d257929aef26"
 }

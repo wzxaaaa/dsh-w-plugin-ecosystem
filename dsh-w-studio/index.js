@@ -2279,31 +2279,54 @@ var Studio = class _Studio {
               id: z2.string().required(),
               minutes: minutesSchema.required(),
               cwd: z2.string().required(),
-              sessionMode: z2.union(["employee-project", "new-task"]).required()
+              sessionMode: z2.union(["employee-project", "new-task"]).required(),
+              projectId: z2.string().required(),
+              replacePending: z2.boolean().required()
             }), command.input);
             const meeting2 = this.meeting(input.id);
             if (meeting2.status !== "review") throw new Error("Confirm the meeting minutes first");
             const minutes = input.minutes;
-            if (!minutes.projectName.trim() || !minutes.objective.trim()) throw new Error("Minutes need a project name and objective");
             if (!minutes.tasks.length || minutes.tasks.some((task) => !task.title.trim() || !task.instruction.trim())) throw new Error("Minutes need at least one complete task");
-            const project = await this.newProject(
-              {
+            const assignments = minutes.tasks.map((task) => ({ employee: this.employee(task.employeeId), title: task.title, instruction: task.instruction }));
+            let project;
+            if (input.projectId) {
+              project = this.project(input.projectId);
+              if (project.workspaceId !== meeting2.workspaceId) throw new Error("Add the minutes to a project of this company workspace");
+              if (assignments.some((value) => !value.employee.enabled)) throw new Error("Select at least one enabled employee");
+              if (input.replacePending) {
+                const replaced = new Set(this.state.tasks.filter((task) => task.projectId === project.id && task.status === "pending" && task.attempt === 0).map((task) => task.id));
+                const finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+                for (const task of this.state.tasks) {
+                  if (replaced.has(task.id)) Object.assign(task, { status: "cancelled", finishedAt, error: `\u7531\u4F1A\u8BAE\u300C${meeting2.title}\u300D\u7684\u7EAA\u8981\u4EFB\u52A1\u66FF\u6362` });
+                  else if (task.status === "pending") task.dependsOn = task.dependsOn.filter((id2) => !replaced.has(id2));
+                }
+              }
+              this.chainTasks(project, assignments);
+              if (project.status === "completed" || project.status === "review") project.status = "paused";
+            } else {
+              if (!minutes.projectName.trim() || !minutes.objective.trim()) throw new Error("Minutes need a project name and objective");
+              project = await this.newProject({
                 name: minutes.projectName,
                 objective: minutes.objective,
                 cwd: input.cwd,
                 workspaceId: meeting2.workspaceId,
                 acceptanceCriteria: minutes.acceptanceCriteria,
                 sessionMode: input.sessionMode
-              },
-              minutes.tasks.map((task) => ({ employee: this.employee(task.employeeId), title: task.title, instruction: task.instruction }))
-            );
+              }, assignments);
+            }
             this.state.messages.push({
               id: randomUUID6(),
               projectId: project.id,
               taskId: null,
               from: "user",
               to: "team",
-              message: [`\u4F1A\u8BAE\u7EAA\u8981\uFF1A${meeting2.title}`, minutes.summary, ...minutes.decisions.map((value) => `- ${value}`)].filter(Boolean).join("\n"),
+              message: [
+                `\u4F1A\u8BAE\u7EAA\u8981\uFF1A${meeting2.title}`,
+                minutes.summary,
+                ...minutes.decisions.map((value) => `- ${value}`),
+                ...input.projectId && minutes.objective.trim() ? [`\u672C\u8F6E\u76EE\u6807\uFF1A${minutes.objective}`] : [],
+                ...input.projectId && minutes.acceptanceCriteria.trim() ? [`\u672C\u8F6E\u9A8C\u6536\u6807\u51C6\uFF1A${minutes.acceptanceCriteria}`] : []
+              ].filter(Boolean).join("\n"),
               createdAt: (/* @__PURE__ */ new Date()).toISOString()
             });
             Object.assign(meeting2, { minutes, status: "closed", projectId: project.id, queue: [], error: "" });
@@ -2505,13 +2528,18 @@ var Studio = class _Studio {
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
     };
     this.state.projects.push(project);
+    this.chainTasks(project, assignments);
+    return project;
+  }
+  /** Append assignments to a project as a sequential chain; writers get a report file to deliver. */
+  chainTasks(project, assignments) {
+    if (this.state.tasks.filter((task) => task.projectId === project.id).length + assignments.length > this.config.maxTasksPerProject) throw new Error("Project task limit reached");
     let previous;
     for (const { employee, title, instruction } of assignments) {
       const task = this.appendTask(project, employee, title, instruction, previous ? [previous.id] : [], []);
       if (employee.permission !== "read-only") task.outputFiles = [`.studio-deliverables/${task.id}.md`];
       previous = task;
     }
-    return project;
   }
   meetingPrompt(meeting2, employee, drafting) {
     const name2 = (id2) => id2 === "user" ? "\u7532\u65B9\uFF08\u7528\u6237\uFF09" : this.state.employees.find((value) => value.id === id2)?.name ?? id2;
@@ -2520,8 +2548,9 @@ var Studio = class _Studio {
       `\u4F60\u6B63\u5728\u53C2\u52A0\u4F1A\u8BAE\u300C${meeting2.title}\u300D\u3002${meeting2.hostId === employee.id ? "\u4F60\u662F\u672C\u6B21\u4F1A\u8BAE\u4E3B\u6301\u4EBA\uFF1A\u5F15\u5BFC\u8BA8\u8BBA\uFF0C\u6F84\u6E05\u7532\u65B9\u9700\u6C42\uFF0C\u5FC5\u8981\u65F6\u70B9\u540D\u5408\u9002\u7684\u540C\u4E8B\u53D1\u8A00\u3002" : `\u4E3B\u6301\u4EBA\u662F ${name2(meeting2.hostId)}\u3002`}`,
       `\u4F1A\u8BAE\u8BAE\u9898\uFF1A${meeting2.agenda || "\uFF08\u672A\u586B\u5199\uFF0C\u6309\u8BA8\u8BBA\u5185\u5BB9\u63A8\u8FDB\uFF09"}`,
       "\u7532\u65B9\uFF08\u7528\u6237\uFF09\u662F\u63D0\u51FA\u9700\u6C42\u7684\u5BA2\u6237\u3002\u4F1A\u8BAE\u53EA\u8BA8\u8BBA\uFF0C\u4E0D\u5199\u4EE3\u7801\uFF0C\u4E0D\u4FEE\u6539\u4EFB\u4F55\u6587\u4EF6\u3002",
-      `\u53C2\u4F1A\u8005\uFF1A${JSON.stringify(meeting2.attendeeIds.map((id2) => ({ employeeId: id2, name: name2(id2), role: this.employee(id2).role, host: id2 === meeting2.hostId })))}`
-    ].join("\n\n");
+      `\u53C2\u4F1A\u8005\uFF1A${JSON.stringify(meeting2.attendeeIds.map((id2) => ({ employeeId: id2, name: name2(id2), role: this.employee(id2).role, host: id2 === meeting2.hostId })))}`,
+      this.companyBrief(meeting2.workspaceId, Math.floor(this.config.maxTextBytes / 4))
+    ].filter(Boolean).join("\n\n");
     const instruction = drafting ? [
       "\u8BA8\u8BBA\u5DF2\u7ED3\u675F\u3002\u8BF7\u4F5C\u4E3A\u4E3B\u6301\u4EBA\u6574\u7406\u4F1A\u8BAE\u7EAA\u8981\uFF0C\u4F9B\u7532\u65B9\u786E\u8BA4\u540E\u76F4\u63A5\u5EFA\u7ACB\u9879\u76EE\u3002",
       '\u4EC5\u8FD4\u56DE JSON\uFF1A{"message":"<\u7EAA\u8981 JSON \u5B57\u7B26\u4E32>","files":[],"handoffs":[]}\u3002message \u5FC5\u987B\u662F\u4E00\u4E2A JSON \u5B57\u7B26\u4E32\uFF0C\u7ED3\u6784\u4E3A\uFF1A',
@@ -2663,6 +2692,70 @@ var Studio = class _Studio {
       clearTimeout(timeout);
     }
   }
+  /** Company work so meetings and tasks start from what exists instead of asking the user where it is.
+   * The focused project comes first, then the newest others; lines are cut short and the brief stops at the byte budget.
+   * @param workspaceId - Company whose projects are summarized.
+   * @param budget - Maximum UTF-8 bytes of the returned section.
+   * @param focus - Project of the current task, and its tasks already described in full by the caller.
+   * @returns The brief, or an empty string when there is nothing to report or no room.
+   */
+  companyBrief(workspaceId, budget, focus) {
+    const clip = (text2, max) => {
+      const value = text2.replace(/\s+/g, " ").trim();
+      return value.length > max ? `${value.slice(0, max)}\u2026` : value;
+    };
+    const projectStatus = { paused: "\u5DF2\u6682\u505C", running: "\u8FDB\u884C\u4E2D", review: "\u5F85\u9A8C\u6536", completed: "\u5DF2\u9A8C\u6536" };
+    const taskStatus = {
+      pending: "\u672A\u5F00\u59CB",
+      running: "\u8FDB\u884C\u4E2D",
+      waiting: "\u7B49\u7532\u65B9\u5904\u7406",
+      completed: "\u5DF2\u5B8C\u6210",
+      failed: "\u5931\u8D25",
+      cancelled: "\u5DF2\u505C\u6B62",
+      interrupted: "\u4E2D\u65AD"
+    };
+    const role = (task) => this.state.employees.find((value) => value.id === task.employeeId)?.role ?? "";
+    const head = "\u516C\u53F8\u5DF2\u6709\u9879\u76EE\uFF08\u9700\u8981\u7EC6\u8282\u65F6\u5230\u5BF9\u5E94\u76EE\u5F55\u67E5\u9605\u6587\u4EF6\uFF0C\u4E0D\u5FC5\u518D\u95EE\u7532\u65B9\u5728\u54EA\u91CC\uFF09\uFF1A";
+    const lines = [];
+    let used = Buffer.byteLength(head);
+    const add = (line) => {
+      const bytes = Buffer.byteLength(line) + 1;
+      if (used + bytes > budget) return false;
+      lines.push(line);
+      used += bytes;
+      return true;
+    };
+    const others = this.state.projects.filter((value) => value.workspaceId === workspaceId && value.id !== focus?.projectId).reverse();
+    const ordered = [...this.state.projects.filter((value) => value.id === focus?.projectId), ...others];
+    let omitted = false;
+    for (const project of ordered) {
+      const current = project.id === focus?.projectId;
+      const tasks = this.state.tasks.filter((task) => task.projectId === project.id && !focus?.skip.has(task.id));
+      const done = tasks.filter((task) => task.status === "completed" && task.reviewStatus !== "superseded");
+      const open = tasks.filter((task) => task.status !== "completed" && task.status !== "cancelled");
+      if (current && !done.length && !open.length) continue;
+      const label = current ? `- \u672C\u9879\u76EE\u300C${project.name}\u300D\u7684\u5176\u4ED6\u4EFB\u52A1\uFF1A` : `- \u9879\u76EE\u300C${project.name}\u300D\uFF08${projectStatus[project.status]}\uFF1B\u76EE\u5F55 ${project.cwd}\uFF09\u76EE\u6807\uFF1A${clip(project.objective, 200)}`;
+      if (!add(label)) {
+        omitted = true;
+        break;
+      }
+      for (const task of [...done].reverse()) {
+        const files = task.outputFiles.length ? `\uFF1B\u4EA4\u4ED8\u6587\u4EF6\uFF1A${task.outputFiles.join("\u3001")}` : "";
+        if (!add(`  - \u5DF2\u5B8C\u6210\uFF1A${task.title}\uFF08${role(task)}\uFF09\uFF1A${clip(task.result, 160)}${files}`)) {
+          omitted = true;
+          break;
+        }
+      }
+      if (omitted) break;
+      if (open.length && !add(`  - \u672A\u5B8C\u6210\uFF1A${clip(open.map((task) => `${task.title}\uFF08${role(task)}\xB7${taskStatus[task.status]}\uFF09`).join("\uFF1B"), 400)}`)) {
+        omitted = true;
+        break;
+      }
+    }
+    if (!lines.length) return "";
+    const tail = "  \uFF08\u66F4\u65E9\u7684\u5185\u5BB9\u5DF2\u7701\u7565\uFF09";
+    return [head, ...lines, ...omitted && Buffer.byteLength(tail) + used <= budget ? [tail] : []].join("\n");
+  }
   assignment(employee, project, task) {
     const dependencies = task.dependsOn.map((id2) => this.task(id2));
     const messages = this.state.messages.filter((message) => message.projectId === project.id && (message.to === employee.id || message.to === "team") && (message.taskId === null || message.to === employee.id));
@@ -2687,7 +2780,11 @@ ${task.instruction}`,
       needsUserRule
     ].join("\n\n");
     if (Buffer.byteLength(prompt) > this.config.maxTextBytes) throw new Error("Assignment exceeds the configured text limit; reduce the task or its dependencies");
-    return prompt;
+    const room = Math.min(Math.floor(this.config.maxTextBytes / 4), this.config.maxTextBytes - Buffer.byteLength(prompt) - 2);
+    const brief = this.companyBrief(project.workspaceId, room, { projectId: project.id, skip: /* @__PURE__ */ new Set([task.id, ...task.dependsOn]) });
+    return brief ? `${prompt}
+
+${brief}` : prompt;
   }
   /** Prompt that continues a waiting native session with the user's reply. */
   continuation(task) {

@@ -262,11 +262,16 @@ interface MinutesEditorProps {
   t: T
   command: Command
 }
-/** Editable host minutes; confirming creates a project whose tasks run in the listed order. */
+/** Editable host minutes; confirming creates a project, or extends an existing one, with tasks that run in the listed order. */
 function MinutesEditor({ meeting, minutes, state, busy, error, t, command }: MinutesEditorProps) {
   const [draft, setDraft] = useState({ ...minutes, decisionsText: minutes.decisions.join('\n') })
   const [cwd, setCwd] = useState('')
   const [sessionMode, setSessionMode] = useState<'employee-project' | 'new-task'>('employee-project')
+  const projects = state.projects.filter(value => value.workspaceId === meeting.workspaceId)
+  // The newest project of this company is the usual target; an empty id creates a new project.
+  const [target, setTarget] = useState(projects.at(-1)?.id ?? '')
+  const replaceable = state.tasks.filter(task => task.projectId === target && task.status === 'pending' && task.attempt === 0).length
+  const [replacePending, setReplacePending] = useState(false)
   const [failed, setFailed] = useState(false)
   const [saved, setSaved] = useState(false)
   const { pending, run } = usePending()
@@ -288,17 +293,40 @@ function MinutesEditor({ meeting, minutes, state, busy, error, t, command }: Min
   const field = (key: 'summary' | 'objective' | 'acceptanceCriteria' | 'decisionsText', label: Parameters<T>[0], rows: number) => <label className={css.field}>
     <span>{t(label)}</span><textarea rows={rows} value={draft[key]} onChange={(event) => { setSaved(false); setDraft({ ...draft, [key]: event.target.value }) }} />
   </label>
-  const complete = !!draft.projectName.trim() && !!draft.objective.trim() && draft.tasks.length > 0 && draft.tasks.every(task => task.title.trim() && task.instruction.trim())
+  const complete = (!!target || !!draft.projectName.trim() && !!draft.objective.trim()) && draft.tasks.length > 0 && draft.tasks.every(task => task.title.trim() && task.instruction.trim())
   return <section className={css.minutes} aria-labelledby={`${id}-title`}>
     <header className={css.blockHead}><h2 id={`${id}-title`}>{t('minutes')}</h2><span className={css.muted}>{t('minutesHelp')}</span></header>
     {field('summary', 'summary', 4)}
     {field('decisionsText', 'decisions', 3)}
-    <div className={css.fieldPair}>
-      <label className={css.field}><span>{t('projectName')}</span><input required value={draft.projectName} onChange={(event) => { setSaved(false); setDraft({ ...draft, projectName: event.target.value }) }} /></label>
-      <label className={css.field}><span>{t('projectDirectory')}</span><input className={css.mono} placeholder={workspace?.path} value={cwd} onChange={(event) => { setCwd(event.target.value) }} /></label>
-    </div>
-    {field('objective', 'objective', 2)}
-    {field('acceptanceCriteria', 'acceptanceCriteria', 3)}
+    <fieldset className={css.optionCards}>
+      <legend>{t('minutesTarget')}</legend>
+      {!!projects.length && <label>
+        <input type="radio" name={`${id}-target`} checked={!!target} onChange={() => { setTarget(projects.at(-1)?.id ?? '') }} />
+        <span><strong>{t('targetExisting')}</strong><small>{t('targetExistingHelp')}</small></span>
+      </label>}
+      <label>
+        <input type="radio" name={`${id}-target`} checked={!target} onChange={() => { setTarget('') }} />
+        <span><strong>{t('targetNew')}</strong><small>{t('targetNewHelp')}</small></span>
+      </label>
+    </fieldset>
+    {target ? <>
+      <label className={css.field}><span>{t('project')}</span><select value={target} onChange={(event) => { setTarget(event.target.value); setReplacePending(false) }}>
+        {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+      </select></label>
+      {!!replaceable && <label className={css.checkLine}>
+        <input type="checkbox" checked={replacePending} onChange={(event) => { setReplacePending(event.target.checked) }} />
+        <span>{t('replacePending', { count: replaceable })}<small className={css.muted}> · {t('replacePendingHelp')}</small></span>
+      </label>}
+      {field('objective', 'roundObjective', 2)}
+      {field('acceptanceCriteria', 'roundCriteria', 3)}
+    </> : <>
+      <div className={css.fieldPair}>
+        <label className={css.field}><span>{t('projectName')}</span><input required value={draft.projectName} onChange={(event) => { setSaved(false); setDraft({ ...draft, projectName: event.target.value }) }} /></label>
+        <label className={css.field}><span>{t('projectDirectory')}</span><input className={css.mono} placeholder={workspace?.path} value={cwd} onChange={(event) => { setCwd(event.target.value) }} /></label>
+      </div>
+      {field('objective', 'objective', 2)}
+      {field('acceptanceCriteria', 'acceptanceCriteria', 3)}
+    </>}
     <fieldset className={css.minutesTasks}>
       <legend>{t('minutesTasks')}</legend>
       {draft.tasks.map((task, index) => <div key={index} className={css.minutesTask}>
@@ -324,25 +352,25 @@ function MinutesEditor({ meeting, minutes, state, busy, error, t, command }: Min
         if (first) setDraft({ ...draft, tasks: [...draft.tasks, { employeeId: first.id, title: '', instruction: '' }] })
       }}>+ {t('addMinutesTask')}</button>
     </fieldset>
-    <fieldset className={css.optionCards}>
+    {!target && <fieldset className={css.optionCards}>
       <legend>{t('sessionMode')}</legend>
       {(['employee-project', 'new-task'] as const).map(mode => <label key={mode}>
         <input type="radio" name={`${id}-session`} checked={sessionMode === mode} onChange={() => { setSessionMode(mode) }} />
         <span><strong>{t(mode === 'employee-project' ? 'employeeSession' : 'freshSession')}</strong><small>{t(mode === 'employee-project' ? 'employeeSessionHelp' : 'freshSessionHelp')}</small></span>
       </label>)}
-    </fieldset>
+    </fieldset>}
     <footer className={css.formFooter}>
       <div className={css.actions}>
         <button className={css.primary} disabled={busy || !complete} onClick={() => {
-          void run('project', () => command('meetingProject', { id: meeting.id, minutes: value(), cwd, sessionMode })).then((ok) => { setFailed(!ok) })
-        }}><Busy on={pending === 'project'} />{t('createFromMinutes')}</button>
+          void run('project', () => command('meetingProject', { id: meeting.id, minutes: value(), cwd, sessionMode, projectId: target, replacePending: !!target && replacePending })).then((ok) => { setFailed(!ok) })
+        }}><Busy on={pending === 'project'} />{t(target ? 'addFromMinutes' : 'createFromMinutes')}</button>
         <button className={css.ghost} disabled={busy} onClick={() => {
           void run('save', () => command('saveMinutes', { id: meeting.id, minutes: value() })).then((ok) => { setFailed(!ok); setSaved(ok) })
         }}><Busy on={pending === 'save'} />{t('saveMinutes')}</button>
         <button className={css.ghost} disabled={busy} onClick={() => { void run('resume', () => command('resumeMeeting', { id: meeting.id })).then((ok) => { setFailed(!ok) }) }}>{t('resumeMeeting')}</button>
       </div>
       <p className={css.formStatus} role="status" data-state={failed ? 'error' : saved ? 'ok' : 'idle'}>
-        {failed ? error || t('failure') : saved ? t('settingsSaved') : complete ? '' : t('minutesIncomplete')}
+        {failed ? error || t('failure') : saved ? t('settingsSaved') : complete ? '' : t(target ? 'minutesTasksIncomplete' : 'minutesIncomplete')}
       </p>
     </footer>
   </section>

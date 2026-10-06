@@ -239,6 +239,8 @@
 .checkList label { display: flex; align-items: flex-start; gap: 8px; padding: 5px 4px; font-size: 13px; cursor: pointer; overflow-wrap: anywhere; }
 .checkList b { color: var(--s-muted); font-weight: 500; }
 .checkList input { margin-top: 3px !important; }
+.checkLine { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; overflow-wrap: anywhere; }
+.checkLine input { margin-top: 3px !important; }
 
 /* Project summary */
 .projectBar { padding: 18px var(--s-gutter) 18px; border-bottom: 1px solid var(--s-line); display: grid; gap: 14px; }

@@ -573,7 +573,7 @@ describe('meeting room', () => {
     const minutes = fixture.studio.snapshot().meetings[0]!.minutes!
     expect(minutes.tasks.map(task => task.title)).toEqual(['Write PRD', 'Design UI'])
     await expect(fixture.command('meetingMessage', { id, message: 'late', mentions: [] })).rejects.toThrow('not open')
-    const state = await fixture.command('meetingProject', { id, minutes: { ...minutes, projectName: 'Habit MVP v1' }, cwd: '', sessionMode: 'employee-project' })
+    const state = await fixture.command('meetingProject', { id, minutes: { ...minutes, projectName: 'Habit MVP v1' }, cwd: '', sessionMode: 'employee-project', projectId: '', replacePending: false })
     const project = state.projects.find(value => value.name === 'Habit MVP v1')!
     const tasks = state.tasks.filter(task => task.projectId === project.id)
     expect(tasks.map(task => task.title)).toEqual(['Write PRD', 'Design UI'])
@@ -606,12 +606,66 @@ describe('meeting room', () => {
     await fixture.command('closeMeeting', { id })
     await fixture.command('reviewMinutes', { id })
     const minutes = fixture.studio.snapshot().meetings[0]!.minutes!
-    const state = await fixture.command('meetingProject', { id, minutes, cwd: '', sessionMode: 'new-task' })
+    const state = await fixture.command('meetingProject', { id, minutes, cwd: '', sessionMode: 'new-task', projectId: '', replacePending: false })
     expect(state.projects.some(project => project.name === 'After meeting')).toBe(true)
     // Once a project exists the meeting is final.
     await expect(fixture.command('draftMinutes', { id })).rejects.toThrow('already created a project')
     await expect(fixture.command('resumeMeeting', { id })).rejects.toThrow()
     await expect(fixture.command('reviewMinutes', { id })).rejects.toThrow()
+  })
+
+  it('briefs meetings on company work, and adds minutes to an existing project, replacing its never-started tasks', async () => {
+    const prompts: string[] = []
+    const fixture = await setup({ async run(employee, project, task) {
+      prompts.push(task.assignment)
+      if (!project.name.startsWith('会议')) {
+        await report(project.cwd, task)
+        return { ...summary, message: `${task.title} result` }
+      }
+      if (!task.assignment.includes('整理会议纪要')) return { ...summary, message: `${employee.name} speaks` }
+      return { ...summary, message: JSON.stringify({ summary: 'Make the follow-up concrete.', decisions: ['Use the existing app'], projectName: '',
+        objective: 'Round two goal', acceptanceCriteria: 'Round two criteria', tasks: [
+          { employeeId: fixture.roster[0]!.id, title: 'Concrete step one', instruction: 'Do step one' },
+          { employeeId: fixture.roster[1]!.id, title: 'Concrete step two', instruction: 'Do step two' }] }) }
+    } })
+    await fixture.command('startProject', { id: fixture.project.id })
+    await completed(fixture.studio, 2)
+    const vague = (await fixture.command('createTask', { ...taskFields(fixture.tasks[0]!), title: 'Vague follow-up', dependsOn: [] })).tasks.at(-1)!
+
+    const { id } = await meeting(fixture)
+    await fixture.command('meetingMessage', { id, message: 'Plan round two.', mentions: [] })
+    await spoken(fixture.studio, 1)
+    const turn = prompts.at(-1)!
+    expect(turn).toContain('公司已有项目')
+    expect(turn).toContain('项目「Delivery」')
+    expect(turn).toContain(`${fixture.tasks[0]!.title} result`)
+    expect(turn).toContain(fixture.tasks[0]!.outputFiles[0]!)
+    expect(turn).toContain('未完成：Vague follow-up')
+
+    await fixture.command('draftMinutes', { id })
+    await vi.waitFor(() => { expect(fixture.studio.snapshot().meetings[0]!.status).toBe('review') })
+    const minutes = fixture.studio.snapshot().meetings[0]!.minutes!
+    // An existing project needs no name; the round's goal travels with the minutes message.
+    const state = await fixture.command('meetingProject', { id, minutes, cwd: '', sessionMode: 'new-task', projectId: fixture.project.id, replacePending: true })
+    expect(state.projects).toHaveLength(1)
+    expect(state.meetings[0]).toMatchObject({ status: 'closed', projectId: fixture.project.id })
+    const tasks = state.tasks.filter(task => task.projectId === fixture.project.id)
+    expect(tasks.find(task => task.id === vague.id)).toMatchObject({ status: 'cancelled', error: expect.stringContaining('Kickoff') })
+    const [one, two] = tasks.slice(-2)
+    expect([one!.title, two!.title]).toEqual(['Concrete step one', 'Concrete step two'])
+    expect(one!.dependsOn).toEqual([])
+    expect(two!.dependsOn).toEqual([one!.id])
+    expect(state.projects[0]!.status).toBe('paused')
+    expect(state.messages.at(-1)!.message).toContain('本轮目标：Round two goal')
+
+    await fixture.command('startProject', { id: fixture.project.id })
+    await completed(fixture.studio, 4)
+    const stepTwo = prompts.at(-1)!
+    expect(stepTwo).toContain('本项目「Delivery」的其他任务')
+    expect(stepTwo).toContain(`${fixture.tasks[1]!.title} result`)
+    expect(stepTwo).not.toContain('Vague follow-up')
+    // The dependency is already described in full, so the brief does not repeat it.
+    expect(stepTwo.split('Concrete step one result')).toHaveLength(2)
   })
 
   it('keeps unstructured minutes as text, and stops or restarts a speaker without leaving a stale turn', async () => {
@@ -633,7 +687,7 @@ describe('meeting room', () => {
     const record = fixture.studio.snapshot().meetings[0]!
     expect(record.minutes).toMatchObject({ summary: 'Plain prose minutes.', projectName: 'Kickoff', tasks: [] })
     expect(record.error).toContain('structured')
-    await expect(fixture.command('meetingProject', { id, minutes: record.minutes, cwd: '', sessionMode: 'new-task' })).rejects.toThrow('task')
+    await expect(fixture.command('meetingProject', { id, minutes: record.minutes, cwd: '', sessionMode: 'new-task', projectId: '', replacePending: false })).rejects.toThrow('task')
     await fixture.command('resumeMeeting', { id })
     block = true
     await fixture.command('meetingMessage', { id, message: 'One more thing.', mentions: [] })
