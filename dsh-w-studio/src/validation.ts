@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { Employee, StudioEmployeeId, StudioState, StudioWorkspaceId, TemplateMember } from './types.ts'
 import { defaultTemplates } from './templates.ts'
 
-import { minutesSchema, nativeSessionSchema, parseFields, stateSchema, stateV1Schema, stateV2Schema, stateV3Schema, stateV4Schema } from './schema.ts'
+import { minutesSchema, nativeSessionSchema, parseFields, stateSchema, stateV1Schema, stateV2Schema, stateV3Schema, stateV4Schema, stateV5Schema } from './schema.ts'
 export { employeeSchema } from './schema.ts'
 
 /** Parse a disk document without admitting unsupported generations.
@@ -66,7 +66,8 @@ export function parseState(input: unknown): StudioState {
     if (!workspaces.has(meeting.workspaceId) || !people.has(meeting.hostId) || people.size !== meeting.attendeeIds.length
       || meeting.attendeeIds.some(id => !employees.has(id)) || meeting.queue.some(id => !people.has(id))
       || meeting.speaking !== null && !people.has(meeting.speaking)
-      || meeting.projectId !== null && !projects.has(meeting.projectId)) throw new Error('Stored meeting refers to a missing participant, workspace, or project')
+      || meeting.projectId !== null && !projects.has(meeting.projectId)
+      || meeting.topicProjectId !== null && projects.get(meeting.topicProjectId)?.workspaceId !== meeting.workspaceId) throw new Error('Stored meeting refers to a missing participant, workspace, or project')
     identities(meeting.messages)
     for (const message of meeting.messages) {
       if (message.from !== 'user' && !employees.has(message.from) || message.mentions.some(id => !employees.has(id))) throw new Error('Stored meeting message refers to a missing employee')
@@ -110,7 +111,16 @@ export function migrateStateV3(input: unknown): StudioState {
  */
 export function migrateStateV4(input: unknown): StudioState {
   const old = parseFields(stateV4Schema, input)
-  return parseState({ ...old, version: 5, tasks: old.tasks.map(task => ({ ...task, question: '', reply: '' })) })
+  return migrateStateV5({ ...old, version: 5, tasks: old.tasks.map(task => ({ ...task, question: '', reply: '' })) })
+}
+
+/** Read the frozen v5 document into the current journal; earlier meetings are not tied to a project.
+ * @param input - Decoded v5 JSON.
+ * @returns Current state.
+ */
+export function migrateStateV5(input: unknown): StudioState {
+  const old = parseFields(stateV5Schema, input)
+  return parseState({ ...old, version: 6, meetings: old.meetings.map(meeting => ({ ...meeting, topicProjectId: null })) })
 }
 
 /** Read the frozen predecessor into a separate current journal without changing it.

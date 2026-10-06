@@ -6,7 +6,7 @@ import { join, resolve, relative, isAbsolute } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import type { Artifact, StudioArtifactId, Employee, StudioEmployeeId, EmployeeResult, StudioMessageId, Project, StudioProjectId, StudioConfig, StudioExecutor, StudioState, Task, StudioTaskId, StudioWorkspaceId, StudioNativeSessionId, Meeting, MeetingMinutes, StudioMeetingId, StudioNativeSession, StudioTemplateId, TeamTemplate } from './types.ts'
-import { employeeSchema, outputName, parseState, migrateStateV1, migrateStateV2, migrateStateV3, migrateStateV4, validateEmployee, validateMember, withinDirectory } from './validation.ts'
+import { employeeSchema, outputName, parseState, migrateStateV1, migrateStateV2, migrateStateV3, migrateStateV4, migrateStateV5, validateEmployee, validateMember, withinDirectory } from './validation.ts'
 import { exportProject } from './workspace.ts'
 import { ResumeUnsupportedError } from './executor.ts'
 import { minutesSchema, parseFields, templateSchema } from './schema.ts'
@@ -26,7 +26,8 @@ const taskInput = z.object({ projectId: z.string().required(), employeeId: z.str
 const answerInput = z.object({ id: z.string().required(), reply: z.string().min(1).max(100_000).required() })
 const messageInput = z.object({ projectId: z.string().required(), to: z.string().required(),
   message: z.string().min(1).max(100_000).required() })
-const meetingFields = { title: z.string().min(1).max(500).required(), agenda: z.string().max(100_000).required(),
+// topicProjectId is the project the meeting is about; empty means a new product or unrelated discussion.
+const meetingFields = { title: z.string().min(1).max(500).required(), agenda: z.string().max(100_000).required(), topicProjectId: z.string().required(),
   hostId: z.string().required(), attendeeIds: z.array(z.string()).required() }
 const meetingMessageInput = z.object({ id: z.string().required(), message: z.string().min(1).max(100_000).required(),
   mentions: z.array(z.string()).required() })
@@ -44,7 +45,7 @@ function identity(input: unknown): string {
   return (z.resolve(input, schema, {})[0] as ReturnType<typeof schema>).id
 }
 function freshState(): StudioState {
-  return { version: 5, revision: 0, workspaces: [], activeWorkspaceId: null,
+  return { version: 6, revision: 0, workspaces: [], activeWorkspaceId: null,
     employees: [], projects: [], tasks: [], messages: [], artifacts: [], meetings: [], templates: defaultTemplates() }
 }
 function within(root: string, path: string): boolean {
@@ -86,7 +87,7 @@ export class Studio {
       }
     }
     // Predecessor journals are read once into the current file and left byte-for-byte unchanged.
-    const journals: [string, (input: unknown) => StudioState][] = [['studio.v5.json', parseState], ['studio.v4.json', migrateStateV4], ['studio.v3.json', migrateStateV3],
+    const journals: [string, (input: unknown) => StudioState][] = [['studio.v6.json', parseState], ['studio.v5.json', migrateStateV5], ['studio.v4.json', migrateStateV4], ['studio.v3.json', migrateStateV3],
       ['studio.v2.json', migrateStateV2], ['studio.v1.json', migrateStateV1]]
     for (const [name, load] of journals) {
       const content = await read(name)
@@ -131,7 +132,7 @@ export class Studio {
     return next
   }
   private async persist(): Promise<void> {
-    const path = join(this.config.storageRoot, 'studio.v5.json')
+    const path = join(this.config.storageRoot, 'studio.v6.json')
     await writeFileAtomic(path, `${JSON.stringify(this.state, null, 2)}\n`, { mode: 0o600, dirMode: 0o700 })
   }
   private async commit(): Promise<void> {
@@ -284,7 +285,8 @@ export class Studio {
             if (!workspace) throw new Error('Select a company workspace first')
             this.state.meetings.push({ id: randomUUID() as StudioMeetingId, workspaceId: workspace.id, title: input.title, agenda: input.agenda,
               hostId: input.hostId as StudioEmployeeId, attendeeIds: this.attendees(input.hostId, input.attendeeIds), status: 'open',
-              queue: [], speaking: null, error: '', messages: [], minutes: null, projectId: null, createdAt: new Date().toISOString() })
+              queue: [], speaking: null, error: '', messages: [], minutes: null, projectId: null,
+              topicProjectId: this.topic(workspace.id, input.topicProjectId), createdAt: new Date().toISOString() })
             break
           }
           case 'updateMeeting': {
@@ -294,7 +296,7 @@ export class Studio {
             const attendees = this.attendees(input.hostId, input.attendeeIds)
             if (meeting.speaking && !attendees.includes(meeting.speaking)) throw new Error('Wait until the current speaker finishes')
             Object.assign(meeting, { title: input.title, agenda: input.agenda, hostId: input.hostId, attendeeIds: attendees,
-              queue: meeting.queue.filter(id => attendees.includes(id)) })
+              queue: meeting.queue.filter(id => attendees.includes(id)), topicProjectId: this.topic(meeting.workspaceId, input.topicProjectId) })
             break
           }
           case 'meetingMessage': {
@@ -518,6 +520,12 @@ export class Studio {
     })
   }
 
+  private topic(workspaceId: StudioWorkspaceId, id: string): StudioProjectId | null {
+    if (!id) return null
+    if (this.project(id).workspaceId !== workspaceId) throw new Error('A meeting can only be about a project of its company workspace')
+    return id as StudioProjectId
+  }
+
   private attendees(hostId: string, ids: string[]): StudioEmployeeId[] {
     const attendees = [...new Set([hostId, ...ids])].map(id => this.employee(id))
     if (attendees.some(employee => !employee.enabled)) throw new Error('Invite only enabled employees')
@@ -556,19 +564,23 @@ export class Studio {
 
   private meetingPrompt(meeting: Meeting, employee: Employee, drafting: boolean): string {
     const name = (id: string): string => id === 'user' ? '甲方（用户）' : this.state.employees.find(value => value.id === id)?.name ?? id
+    const topic = meeting.topicProjectId ? this.state.projects.find(value => value.id === meeting.topicProjectId) : undefined
     const header = [
       `你是软件公司的员工 ${employee.name}，岗位：${employee.role}。职责：${employee.responsibilities}`,
       `你正在参加会议「${meeting.title}」。${meeting.hostId === employee.id ? '你是本次会议主持人：引导讨论，澄清甲方需求，必要时点名合适的同事发言。' : `主持人是 ${name(meeting.hostId)}。`}`,
       `会议议题：${meeting.agenda || '（未填写，按讨论内容推进）'}`,
+      topic ? `本次会议讨论的项目：「${topic.name}」，目录 ${topic.cwd}。\n项目目标：${topic.objective}\n验收标准：${topic.acceptanceCriteria || '（未填写）'}`
+        : '本次会议不针对已有项目，讨论的是新产品或独立的工作。',
       '甲方（用户）是提出需求的客户。会议只讨论，不写代码，不修改任何文件。',
       `参会者：${JSON.stringify(meeting.attendeeIds.map(id => ({ employeeId: id, name: name(id), role: this.employee(id).role, host: id === meeting.hostId })))}`,
-      this.companyBrief(meeting.workspaceId, Math.floor(this.config.maxTextBytes / 4)),
+      this.companyBrief(meeting.workspaceId, Math.floor(this.config.maxTextBytes / 4), topic ? { projectId: topic.id, skip: new Set(), label: '本次会议讨论的项目' } : undefined),
     ].filter(Boolean).join('\n\n')
     const instruction = drafting ? [
       '讨论已结束。请作为主持人整理会议纪要，供甲方确认后直接建立项目。',
       '仅返回 JSON：{"message":"<纪要 JSON 字符串>","files":[],"handoffs":[]}。message 必须是一个 JSON 字符串，结构为：',
       '{"summary":"会议结论概述","decisions":["已确定的需求或决定"],"projectName":"项目名称","objective":"项目目标","acceptanceCriteria":"逐条验收标准","tasks":[{"employeeId":"参会者真实 employeeId","title":"任务标题","instruction":"具体任务安排"}]}',
       'tasks 按交付顺序排列，每项交给最合适的参会者。不得包含推理过程。',
+      ...topic ? [`这些任务将追加到项目「${topic.name}」：不要重复已完成的工作，基于现有成果安排后续；projectName 填该项目名称。`] : [],
     ].join('\n') : [
       '现在轮到你发言。请以你的岗位视角，像会议中那样简洁地口头发言：回应最新的问题，提出需要甲方澄清的问题、风险、估算或建议。',
       '仅返回 JSON：{"message":"你的发言","files":[],"handoffs":[{"employeeId":"需要接着发言的参会同事 employeeId","message":"想请他回答的问题"}]}。不需要别人接话时 handoffs 为 []。不得包含推理过程、思考日志或工具调用轨迹。',
@@ -688,7 +700,7 @@ export class Studio {
    * @param focus - Project of the current task, and its tasks already described in full by the caller.
    * @returns The brief, or an empty string when there is nothing to report or no room.
    */
-  private companyBrief(workspaceId: StudioWorkspaceId, budget: number, focus?: { projectId: StudioProjectId; skip: ReadonlySet<string> }): string {
+  private companyBrief(workspaceId: StudioWorkspaceId, budget: number, focus?: { projectId: StudioProjectId; skip: ReadonlySet<string>; label: string }): string {
     const clip = (text: string, max: number): string => {
       const value = text.replace(/\s+/g, ' ').trim()
       return value.length > max ? `${value.slice(0, max)}…` : value
@@ -715,11 +727,11 @@ export class Studio {
       const done = tasks.filter(task => task.status === 'completed' && task.reviewStatus !== 'superseded')
       const open = tasks.filter(task => task.status !== 'completed' && task.status !== 'cancelled')
       if (current && !done.length && !open.length) continue
-      const label = current ? `- 本项目「${project.name}」的其他任务：` : `- 项目「${project.name}」（${projectStatus[project.status]}；目录 ${project.cwd}）目标：${clip(project.objective, 200)}`
+      const label = current ? `- ${focus.label}「${project.name}」（${projectStatus[project.status]}）的任务：` : `- 项目「${project.name}」（${projectStatus[project.status]}；目录 ${project.cwd}）目标：${clip(project.objective, 200)}`
       if (!add(label)) { omitted = true; break }
       for (const task of [...done].reverse()) {
         const files = task.outputFiles.length ? `；交付文件：${task.outputFiles.join('、')}` : ''
-        if (!add(`  - 已完成：${task.title}（${role(task)}）：${clip(task.result, 160)}${files}`)) { omitted = true; break }
+        if (!add(`  - 已完成：${task.title}（${role(task)}）：${clip(task.result, current ? 320 : 160)}${files}`)) { omitted = true; break }
       }
       if (omitted) break
       if (open.length && !add(`  - 未完成：${clip(open.map(task => `${task.title}（${role(task)}·${taskStatus[task.status]}）`).join('；'), 400)}`)) { omitted = true; break }
@@ -750,7 +762,7 @@ export class Studio {
     ].join('\n\n')
     if (Buffer.byteLength(prompt) > this.config.maxTextBytes) throw new Error('Assignment exceeds the configured text limit; reduce the task or its dependencies')
     const room = Math.min(Math.floor(this.config.maxTextBytes / 4), this.config.maxTextBytes - Buffer.byteLength(prompt) - 2)
-    const brief = this.companyBrief(project.workspaceId, room, { projectId: project.id, skip: new Set([task.id, ...task.dependsOn]) })
+    const brief = this.companyBrief(project.workspaceId, room, { projectId: project.id, skip: new Set([task.id, ...task.dependsOn]), label: '本项目' })
     return brief ? `${prompt}\n\n${brief}` : prompt
   }
 

@@ -149,7 +149,10 @@ export interface Meeting {
   error: string
   messages: MeetingMessage[]
   minutes: MeetingMinutes | null
+  /** Project the minutes created or extended. */
   projectId: StudioProjectId | null
+  /** Project this meeting is about; null for a new product or unrelated discussion. */
+  topicProjectId: StudioProjectId | null
   createdAt: string
 }
 /** Template identity minted by Studio or the browser editor. */
@@ -166,7 +169,7 @@ export interface TeamTemplate {
 }
 /** Studio's versioned local document; public HTTP responses use the same records. */
 export interface StudioState {
-  version: 5
+  version: 6
   revision: number
   workspaces: StudioWorkspace[]
   activeWorkspaceId: StudioWorkspaceId | null

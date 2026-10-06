@@ -35,6 +35,7 @@ export function MeetingRoom({ state, workspace, busy, error, t, command, onOpenP
           const last = value.messages.at(-1)
           return <li key={value.id}><button className={css.meetingItem} aria-current={meeting?.id === value.id && !creating ? 'true' : undefined} onClick={() => { setSelected(value.id); setCreating(false) }}>
             <span className={css.meetingItemHead}><strong>{value.title}</strong><span className={css.badge} data-meeting={value.status}><i aria-hidden="true" />{t(statusKey[value.status])}</span></span>
+            {value.topicProjectId && <small className={css.reason}>{t('topicLabel', { name: state.projects.find(project => project.id === value.topicProjectId)?.name ?? '' })}</small>}
             <span className={css.avatarStack}>{value.attendeeIds.map(id => <Avatar key={id} id={id} name={name(id)} size="sm" />)}</span>
             <small>{last ? `${last.from === 'user' ? t('user') : name(last.from)}：${last.message.slice(0, 60)}` : t('meetingNoMessages')}</small>
             {value.speaking && <small className={css.reason} data-kind="speaking">{t('speakingNow', { name: name(value.speaking) })}</small>}
@@ -65,11 +66,14 @@ interface MeetingFormProps {
   onDone: (id: string | null) => void
   meeting?: Meeting
 }
-/** Create a meeting, or edit the title, agenda, host, and attendees of an open one. */
+/** Create a meeting, or edit the title, agenda, project, host, and attendees of an open one. */
 function MeetingForm({ state, workspace, busy, error, t, command, first, onDone, meeting }: MeetingFormProps) {
   const enabled = state.employees.filter(employee => employee.enabled || meeting?.attendeeIds.includes(employee.id))
   const [title, setTitle] = useState(meeting?.title ?? '')
   const [agenda, setAgenda] = useState(meeting?.agenda ?? '')
+  const projects = state.projects.filter(value => value.workspaceId === workspace.id)
+  // A new meeting is usually about the company's newest project; it can be set to none for a new product.
+  const [topic, setTopic] = useState<string>(meeting ? meeting.topicProjectId ?? '' : projects.at(-1)?.id ?? '')
   const [hostId, setHostId] = useState<string>(meeting?.hostId ?? enabled[0]?.id ?? '')
   const [attendees, setAttendees] = useState<string[]>(meeting?.attendeeIds ?? enabled.map(employee => employee.id))
   const [failed, setFailed] = useState(false)
@@ -78,7 +82,7 @@ function MeetingForm({ state, workspace, busy, error, t, command, first, onDone,
   const chosen = [...new Set([hostId, ...attendees])].filter(Boolean)
   return <form className={css.editorCard} aria-labelledby={`${id}-title`} onSubmit={(event) => {
     event.preventDefault()
-    const input = { title, agenda, hostId, attendeeIds: chosen }
+    const input = { title, agenda, hostId, attendeeIds: chosen, topicProjectId: topic }
     void run('save', () => command(meeting ? 'updateMeeting' : 'createMeeting', meeting ? { ...input, id: meeting.id } : { ...input, workspaceId: workspace.id })).then((ok) => {
       setFailed(!ok)
       if (!ok) return
@@ -90,6 +94,10 @@ function MeetingForm({ state, workspace, busy, error, t, command, first, onDone,
       {!meeting && <p className={css.muted}>{t(first ? 'meetingIntro' : 'meetingHelp')}</p>}
     </div></header>
     <label className={css.field}><span>{t('meetingTitle')}</span><input required value={title} placeholder={t('meetingTitlePlaceholder')} onChange={(event) => { setTitle(event.target.value) }} /></label>
+    <label className={css.field}><span>{t('topicProject')}</span><select value={topic} onChange={(event) => { setTopic(event.target.value) }}>
+      {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+      <option value="">{t('topicNone')}</option>
+    </select><small className={css.muted}>{t('topicHelp')}</small></label>
     <label className={css.field}><span>{t('agenda')}</span><textarea rows={3} value={agenda} placeholder={t('agendaPlaceholder')} onChange={(event) => { setAgenda(event.target.value) }} /></label>
     <label className={css.field}><span>{t('host')}</span><select required value={hostId} onChange={(event) => { setHostId(event.target.value) }}>
       {enabled.map(employee => <option key={employee.id} value={employee.id}>{employee.name}{employee.role && ` · ${employee.role}`}</option>)}
@@ -177,6 +185,7 @@ function MeetingThread({ meeting, state, busy, error, t, command, onOpenProject 
         <h2 id={`meeting-${meeting.id}`}>{meeting.title}</h2>
         <span className={css.badge} data-meeting={meeting.status}><i aria-hidden="true" />{t(statusKey[meeting.status])}</span>
       </div>
+      {meeting.topicProjectId && <p className={css.muted}>{t('topicLabel', { name: state.projects.find(value => value.id === meeting.topicProjectId)?.name ?? '' })}</p>}
       {meeting.agenda && <p className={css.agenda}>{meeting.agenda}</p>}
       <ul className={css.attendeeRow}>{meeting.attendeeIds.map(id => <li key={id} data-host={id === meeting.hostId}>
         <Avatar id={id} name={name(id)} size="sm" /><span>{name(id)}</span>{id === meeting.hostId && <em>{t('hostTag')}</em>}
@@ -268,8 +277,8 @@ function MinutesEditor({ meeting, minutes, state, busy, error, t, command }: Min
   const [cwd, setCwd] = useState('')
   const [sessionMode, setSessionMode] = useState<'employee-project' | 'new-task'>('employee-project')
   const projects = state.projects.filter(value => value.workspaceId === meeting.workspaceId)
-  // The newest project of this company is the usual target; an empty id creates a new project.
-  const [target, setTarget] = useState(projects.at(-1)?.id ?? '')
+  // The meeting's own project is the default target, then the newest project; an empty id creates a new project.
+  const [target, setTarget] = useState(meeting.topicProjectId ?? projects.at(-1)?.id ?? '')
   const replaceable = state.tasks.filter(task => task.projectId === target && task.status === 'pending' && task.attempt === 0).length
   const [replacePending, setReplacePending] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -301,7 +310,7 @@ function MinutesEditor({ meeting, minutes, state, busy, error, t, command }: Min
     <fieldset className={css.optionCards}>
       <legend>{t('minutesTarget')}</legend>
       {!!projects.length && <label>
-        <input type="radio" name={`${id}-target`} checked={!!target} onChange={() => { setTarget(projects.at(-1)?.id ?? '') }} />
+        <input type="radio" name={`${id}-target`} checked={!!target} onChange={() => { setTarget(meeting.topicProjectId ?? projects.at(-1)?.id ?? '') }} />
         <span><strong>{t('targetExisting')}</strong><small>{t('targetExistingHelp')}</small></span>
       </label>}
       <label>

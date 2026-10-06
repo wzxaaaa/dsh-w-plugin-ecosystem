@@ -251,7 +251,7 @@ var minutesSchema = z.object({
   acceptanceCriteria: text,
   tasks: z.array(z.object({ employeeId: id, title: short, instruction: text })).required()
 });
-var meeting = z.object({
+var meetingV3Fields = {
   id,
   workspaceId: id,
   title: short,
@@ -273,13 +273,14 @@ var meeting = z.object({
   minutes: z.union([minutesSchema, z.const(null)]),
   projectId: z.union([id, z.const(null)]),
   createdAt: short
-});
+};
+var meeting = z.object(meetingV3Fields);
 var stateV3Fields = { ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() };
 var stateV3Schema = z.object(stateV3Fields);
 var templateSchema = z.object({ id, name: short, description: text, members: z.array(memberSchema).required(), createdAt: short });
 var stateV4Fields = { ...stateV3Fields, version: z.const(4).required(), templates: z.array(templateSchema).required() };
 var stateV4Schema = z.object(stateV4Fields);
-var stateSchema = z.object({
+var stateV5Fields = {
   ...stateV4Fields,
   version: z.const(5).required(),
   tasks: z.array(z.object({
@@ -288,6 +289,12 @@ var stateSchema = z.object({
     question: text,
     reply: text
   })).required()
+};
+var stateV5Schema = z.object(stateV5Fields);
+var stateSchema = z.object({
+  ...stateV5Fields,
+  version: z.const(6).required(),
+  meetings: z.array(z.object({ ...meetingV3Fields, topicProjectId: z.union([id, z.const(null)]) })).required()
 });
 
 // src/validation.ts
@@ -341,7 +348,7 @@ function parseState(input) {
   identities(state.meetings);
   for (const meeting2 of state.meetings) {
     const people = new Set(meeting2.attendeeIds);
-    if (!workspaces.has(meeting2.workspaceId) || !people.has(meeting2.hostId) || people.size !== meeting2.attendeeIds.length || meeting2.attendeeIds.some((id2) => !employees.has(id2)) || meeting2.queue.some((id2) => !people.has(id2)) || meeting2.speaking !== null && !people.has(meeting2.speaking) || meeting2.projectId !== null && !projects.has(meeting2.projectId)) throw new Error("Stored meeting refers to a missing participant, workspace, or project");
+    if (!workspaces.has(meeting2.workspaceId) || !people.has(meeting2.hostId) || people.size !== meeting2.attendeeIds.length || meeting2.attendeeIds.some((id2) => !employees.has(id2)) || meeting2.queue.some((id2) => !people.has(id2)) || meeting2.speaking !== null && !people.has(meeting2.speaking) || meeting2.projectId !== null && !projects.has(meeting2.projectId) || meeting2.topicProjectId !== null && projects.get(meeting2.topicProjectId)?.workspaceId !== meeting2.workspaceId) throw new Error("Stored meeting refers to a missing participant, workspace, or project");
     identities(meeting2.messages);
     for (const message of meeting2.messages) {
       if (message.from !== "user" && !employees.has(message.from) || message.mentions.some((id2) => !employees.has(id2))) throw new Error("Stored meeting message refers to a missing employee");
@@ -370,7 +377,11 @@ function migrateStateV3(input) {
 }
 function migrateStateV4(input) {
   const old = parseFields(stateV4Schema, input);
-  return parseState({ ...old, version: 5, tasks: old.tasks.map((task) => ({ ...task, question: "", reply: "" })) });
+  return migrateStateV5({ ...old, version: 5, tasks: old.tasks.map((task) => ({ ...task, question: "", reply: "" })) });
+}
+function migrateStateV5(input) {
+  const old = parseFields(stateV5Schema, input);
+  return parseState({ ...old, version: 6, meetings: old.meetings.map((meeting2) => ({ ...meeting2, topicProjectId: null })) });
 }
 function migrateStateV1(input) {
   const old = parseFields(stateV1Schema, input);
@@ -1886,6 +1897,7 @@ var messageInput = z2.object({
 var meetingFields = {
   title: z2.string().min(1).max(500).required(),
   agenda: z2.string().max(1e5).required(),
+  topicProjectId: z2.string().required(),
   hostId: z2.string().required(),
   attendeeIds: z2.array(z2.string()).required()
 };
@@ -1914,7 +1926,7 @@ function identity(input) {
 }
 function freshState() {
   return {
-    version: 5,
+    version: 6,
     revision: 0,
     workspaces: [],
     activeWorkspaceId: null,
@@ -1964,7 +1976,8 @@ var Studio = class _Studio {
       }
     };
     const journals = [
-      ["studio.v5.json", parseState],
+      ["studio.v6.json", parseState],
+      ["studio.v5.json", migrateStateV5],
       ["studio.v4.json", migrateStateV4],
       ["studio.v3.json", migrateStateV3],
       ["studio.v2.json", migrateStateV2],
@@ -2014,7 +2027,7 @@ var Studio = class _Studio {
     return next;
   }
   async persist() {
-    const path = join5(this.config.storageRoot, "studio.v5.json");
+    const path = join5(this.config.storageRoot, "studio.v6.json");
     await writeFileAtomic(path, `${JSON.stringify(this.state, null, 2)}
 `, { mode: 384, dirMode: 448 });
   }
@@ -2196,6 +2209,7 @@ var Studio = class _Studio {
               messages: [],
               minutes: null,
               projectId: null,
+              topicProjectId: this.topic(workspace.id, input.topicProjectId),
               createdAt: (/* @__PURE__ */ new Date()).toISOString()
             });
             break;
@@ -2211,7 +2225,8 @@ var Studio = class _Studio {
               agenda: input.agenda,
               hostId: input.hostId,
               attendeeIds: attendees,
-              queue: meeting2.queue.filter((id2) => attendees.includes(id2))
+              queue: meeting2.queue.filter((id2) => attendees.includes(id2)),
+              topicProjectId: this.topic(meeting2.workspaceId, input.topicProjectId)
             });
             break;
           }
@@ -2501,6 +2516,11 @@ var Studio = class _Studio {
       return this.snapshot();
     });
   }
+  topic(workspaceId, id2) {
+    if (!id2) return null;
+    if (this.project(id2).workspaceId !== workspaceId) throw new Error("A meeting can only be about a project of its company workspace");
+    return id2;
+  }
   attendees(hostId, ids) {
     const attendees = [.../* @__PURE__ */ new Set([hostId, ...ids])].map((id2) => this.employee(id2));
     if (attendees.some((employee) => !employee.enabled)) throw new Error("Invite only enabled employees");
@@ -2543,19 +2563,24 @@ var Studio = class _Studio {
   }
   meetingPrompt(meeting2, employee, drafting) {
     const name2 = (id2) => id2 === "user" ? "\u7532\u65B9\uFF08\u7528\u6237\uFF09" : this.state.employees.find((value) => value.id === id2)?.name ?? id2;
+    const topic = meeting2.topicProjectId ? this.state.projects.find((value) => value.id === meeting2.topicProjectId) : void 0;
     const header = [
       `\u4F60\u662F\u8F6F\u4EF6\u516C\u53F8\u7684\u5458\u5DE5 ${employee.name}\uFF0C\u5C97\u4F4D\uFF1A${employee.role}\u3002\u804C\u8D23\uFF1A${employee.responsibilities}`,
       `\u4F60\u6B63\u5728\u53C2\u52A0\u4F1A\u8BAE\u300C${meeting2.title}\u300D\u3002${meeting2.hostId === employee.id ? "\u4F60\u662F\u672C\u6B21\u4F1A\u8BAE\u4E3B\u6301\u4EBA\uFF1A\u5F15\u5BFC\u8BA8\u8BBA\uFF0C\u6F84\u6E05\u7532\u65B9\u9700\u6C42\uFF0C\u5FC5\u8981\u65F6\u70B9\u540D\u5408\u9002\u7684\u540C\u4E8B\u53D1\u8A00\u3002" : `\u4E3B\u6301\u4EBA\u662F ${name2(meeting2.hostId)}\u3002`}`,
       `\u4F1A\u8BAE\u8BAE\u9898\uFF1A${meeting2.agenda || "\uFF08\u672A\u586B\u5199\uFF0C\u6309\u8BA8\u8BBA\u5185\u5BB9\u63A8\u8FDB\uFF09"}`,
+      topic ? `\u672C\u6B21\u4F1A\u8BAE\u8BA8\u8BBA\u7684\u9879\u76EE\uFF1A\u300C${topic.name}\u300D\uFF0C\u76EE\u5F55 ${topic.cwd}\u3002
+\u9879\u76EE\u76EE\u6807\uFF1A${topic.objective}
+\u9A8C\u6536\u6807\u51C6\uFF1A${topic.acceptanceCriteria || "\uFF08\u672A\u586B\u5199\uFF09"}` : "\u672C\u6B21\u4F1A\u8BAE\u4E0D\u9488\u5BF9\u5DF2\u6709\u9879\u76EE\uFF0C\u8BA8\u8BBA\u7684\u662F\u65B0\u4EA7\u54C1\u6216\u72EC\u7ACB\u7684\u5DE5\u4F5C\u3002",
       "\u7532\u65B9\uFF08\u7528\u6237\uFF09\u662F\u63D0\u51FA\u9700\u6C42\u7684\u5BA2\u6237\u3002\u4F1A\u8BAE\u53EA\u8BA8\u8BBA\uFF0C\u4E0D\u5199\u4EE3\u7801\uFF0C\u4E0D\u4FEE\u6539\u4EFB\u4F55\u6587\u4EF6\u3002",
       `\u53C2\u4F1A\u8005\uFF1A${JSON.stringify(meeting2.attendeeIds.map((id2) => ({ employeeId: id2, name: name2(id2), role: this.employee(id2).role, host: id2 === meeting2.hostId })))}`,
-      this.companyBrief(meeting2.workspaceId, Math.floor(this.config.maxTextBytes / 4))
+      this.companyBrief(meeting2.workspaceId, Math.floor(this.config.maxTextBytes / 4), topic ? { projectId: topic.id, skip: /* @__PURE__ */ new Set(), label: "\u672C\u6B21\u4F1A\u8BAE\u8BA8\u8BBA\u7684\u9879\u76EE" } : void 0)
     ].filter(Boolean).join("\n\n");
     const instruction = drafting ? [
       "\u8BA8\u8BBA\u5DF2\u7ED3\u675F\u3002\u8BF7\u4F5C\u4E3A\u4E3B\u6301\u4EBA\u6574\u7406\u4F1A\u8BAE\u7EAA\u8981\uFF0C\u4F9B\u7532\u65B9\u786E\u8BA4\u540E\u76F4\u63A5\u5EFA\u7ACB\u9879\u76EE\u3002",
       '\u4EC5\u8FD4\u56DE JSON\uFF1A{"message":"<\u7EAA\u8981 JSON \u5B57\u7B26\u4E32>","files":[],"handoffs":[]}\u3002message \u5FC5\u987B\u662F\u4E00\u4E2A JSON \u5B57\u7B26\u4E32\uFF0C\u7ED3\u6784\u4E3A\uFF1A',
       '{"summary":"\u4F1A\u8BAE\u7ED3\u8BBA\u6982\u8FF0","decisions":["\u5DF2\u786E\u5B9A\u7684\u9700\u6C42\u6216\u51B3\u5B9A"],"projectName":"\u9879\u76EE\u540D\u79F0","objective":"\u9879\u76EE\u76EE\u6807","acceptanceCriteria":"\u9010\u6761\u9A8C\u6536\u6807\u51C6","tasks":[{"employeeId":"\u53C2\u4F1A\u8005\u771F\u5B9E employeeId","title":"\u4EFB\u52A1\u6807\u9898","instruction":"\u5177\u4F53\u4EFB\u52A1\u5B89\u6392"}]}',
-      "tasks \u6309\u4EA4\u4ED8\u987A\u5E8F\u6392\u5217\uFF0C\u6BCF\u9879\u4EA4\u7ED9\u6700\u5408\u9002\u7684\u53C2\u4F1A\u8005\u3002\u4E0D\u5F97\u5305\u542B\u63A8\u7406\u8FC7\u7A0B\u3002"
+      "tasks \u6309\u4EA4\u4ED8\u987A\u5E8F\u6392\u5217\uFF0C\u6BCF\u9879\u4EA4\u7ED9\u6700\u5408\u9002\u7684\u53C2\u4F1A\u8005\u3002\u4E0D\u5F97\u5305\u542B\u63A8\u7406\u8FC7\u7A0B\u3002",
+      ...topic ? [`\u8FD9\u4E9B\u4EFB\u52A1\u5C06\u8FFD\u52A0\u5230\u9879\u76EE\u300C${topic.name}\u300D\uFF1A\u4E0D\u8981\u91CD\u590D\u5DF2\u5B8C\u6210\u7684\u5DE5\u4F5C\uFF0C\u57FA\u4E8E\u73B0\u6709\u6210\u679C\u5B89\u6392\u540E\u7EED\uFF1BprojectName \u586B\u8BE5\u9879\u76EE\u540D\u79F0\u3002`] : []
     ].join("\n") : [
       "\u73B0\u5728\u8F6E\u5230\u4F60\u53D1\u8A00\u3002\u8BF7\u4EE5\u4F60\u7684\u5C97\u4F4D\u89C6\u89D2\uFF0C\u50CF\u4F1A\u8BAE\u4E2D\u90A3\u6837\u7B80\u6D01\u5730\u53E3\u5934\u53D1\u8A00\uFF1A\u56DE\u5E94\u6700\u65B0\u7684\u95EE\u9898\uFF0C\u63D0\u51FA\u9700\u8981\u7532\u65B9\u6F84\u6E05\u7684\u95EE\u9898\u3001\u98CE\u9669\u3001\u4F30\u7B97\u6216\u5EFA\u8BAE\u3002",
       '\u4EC5\u8FD4\u56DE JSON\uFF1A{"message":"\u4F60\u7684\u53D1\u8A00","files":[],"handoffs":[{"employeeId":"\u9700\u8981\u63A5\u7740\u53D1\u8A00\u7684\u53C2\u4F1A\u540C\u4E8B employeeId","message":"\u60F3\u8BF7\u4ED6\u56DE\u7B54\u7684\u95EE\u9898"}]}\u3002\u4E0D\u9700\u8981\u522B\u4EBA\u63A5\u8BDD\u65F6 handoffs \u4E3A []\u3002\u4E0D\u5F97\u5305\u542B\u63A8\u7406\u8FC7\u7A0B\u3001\u601D\u8003\u65E5\u5FD7\u6216\u5DE5\u5177\u8C03\u7528\u8F68\u8FF9\u3002'
@@ -2734,14 +2759,14 @@ var Studio = class _Studio {
       const done = tasks.filter((task) => task.status === "completed" && task.reviewStatus !== "superseded");
       const open = tasks.filter((task) => task.status !== "completed" && task.status !== "cancelled");
       if (current && !done.length && !open.length) continue;
-      const label = current ? `- \u672C\u9879\u76EE\u300C${project.name}\u300D\u7684\u5176\u4ED6\u4EFB\u52A1\uFF1A` : `- \u9879\u76EE\u300C${project.name}\u300D\uFF08${projectStatus[project.status]}\uFF1B\u76EE\u5F55 ${project.cwd}\uFF09\u76EE\u6807\uFF1A${clip(project.objective, 200)}`;
+      const label = current ? `- ${focus.label}\u300C${project.name}\u300D\uFF08${projectStatus[project.status]}\uFF09\u7684\u4EFB\u52A1\uFF1A` : `- \u9879\u76EE\u300C${project.name}\u300D\uFF08${projectStatus[project.status]}\uFF1B\u76EE\u5F55 ${project.cwd}\uFF09\u76EE\u6807\uFF1A${clip(project.objective, 200)}`;
       if (!add(label)) {
         omitted = true;
         break;
       }
       for (const task of [...done].reverse()) {
         const files = task.outputFiles.length ? `\uFF1B\u4EA4\u4ED8\u6587\u4EF6\uFF1A${task.outputFiles.join("\u3001")}` : "";
-        if (!add(`  - \u5DF2\u5B8C\u6210\uFF1A${task.title}\uFF08${role(task)}\uFF09\uFF1A${clip(task.result, 160)}${files}`)) {
+        if (!add(`  - \u5DF2\u5B8C\u6210\uFF1A${task.title}\uFF08${role(task)}\uFF09\uFF1A${clip(task.result, current ? 320 : 160)}${files}`)) {
           omitted = true;
           break;
         }
@@ -2781,7 +2806,7 @@ ${task.instruction}`,
     ].join("\n\n");
     if (Buffer.byteLength(prompt) > this.config.maxTextBytes) throw new Error("Assignment exceeds the configured text limit; reduce the task or its dependencies");
     const room = Math.min(Math.floor(this.config.maxTextBytes / 4), this.config.maxTextBytes - Buffer.byteLength(prompt) - 2);
-    const brief = this.companyBrief(project.workspaceId, room, { projectId: project.id, skip: /* @__PURE__ */ new Set([task.id, ...task.dependsOn]) });
+    const brief = this.companyBrief(project.workspaceId, room, { projectId: project.id, skip: /* @__PURE__ */ new Set([task.id, ...task.dependsOn]), label: "\u672C\u9879\u76EE" });
     return brief ? `${prompt}
 
 ${brief}` : prompt;

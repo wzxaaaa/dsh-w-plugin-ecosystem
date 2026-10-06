@@ -92,13 +92,14 @@ export const stateV2Schema = z.object(stateV2Fields)
 /** Editable meeting outcome; also the `saveMinutes` input. */
 export const minutesSchema = z.object({ summary: text, decisions: z.array(text).required(), projectName: short, objective: text,
   acceptanceCriteria: text, tasks: z.array(z.object({ employeeId: id, title: short, instruction: text })).required() })
-const meeting = z.object({ id, workspaceId: id, title: short, agenda: text, hostId: id, attendeeIds: z.array(id).required(),
+const meetingV3Fields = { id, workspaceId: id, title: short, agenda: text, hostId: id, attendeeIds: z.array(id).required(),
   status: z.union(['open', 'drafting', 'review', 'closed'] as const).required(),
   queue: z.array(id).required(), speaking: z.union([id, z.const(null)]), error: text,
   messages: z.array(z.object({ id, from: id, message: text, mentions: z.array(id).required(), createdAt: short,
     nativeSession: z.union([nativeSession, z.const(null)]) })).required(),
   minutes: z.union([minutesSchema, z.const(null)]),
-  projectId: z.union([id, z.const(null)]), createdAt: short })
+  projectId: z.union([id, z.const(null)]), createdAt: short }
+const meeting = z.object(meetingV3Fields)
 
 const stateV3Fields = { ...stateV2Fields, version: z.const(3).required(), meetings: z.array(meeting).required() }
 /** Frozen v3 fields (v2 plus meetings) used only to read the predecessor journal. */
@@ -109,8 +110,12 @@ export const templateSchema = z.object({ id, name: short, description: text, mem
 const stateV4Fields = { ...stateV3Fields, version: z.const(4).required(), templates: z.array(templateSchema).required() }
 /** Frozen v4 fields (v3 plus editable team templates) used only to read the predecessor journal. */
 export const stateV4Schema = z.object(stateV4Fields)
-/** Current document: v4 plus tasks that wait for the user and resume with the reply. */
-export const stateSchema = z.object({ ...stateV4Fields, version: z.const(5).required(),
+const stateV5Fields = { ...stateV4Fields, version: z.const(5).required(),
   tasks: z.array(z.object({ ...taskV2Fields,
     status: z.union(['pending', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'] as const).required(),
-    question: text, reply: text })).required() })
+    question: text, reply: text })).required() }
+/** Frozen v5 fields (v4 plus tasks that wait for the user) used only to read the predecessor journal. */
+export const stateV5Schema = z.object(stateV5Fields)
+/** Current document: v5 plus the project each meeting is about. */
+export const stateSchema = z.object({ ...stateV5Fields, version: z.const(6).required(),
+  meetings: z.array(z.object({ ...meetingV3Fields, topicProjectId: z.union([id, z.const(null)]) })).required() })

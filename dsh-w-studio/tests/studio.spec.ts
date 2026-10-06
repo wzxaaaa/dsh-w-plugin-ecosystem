@@ -122,7 +122,7 @@ describe('public employee handoffs', () => {
     expect(run).not.toHaveBeenCalled()
     await symlink(fixture.config.storageRoot, join(fixture.cwd, '.studio'), process.platform === 'win32' ? 'junction' : 'dir')
     await expect(fixture.command('exportProject', { id: fixture.project.id })).rejects.toThrow('inside the company')
-    expect(await readdir(fixture.config.storageRoot)).toEqual(['studio.v5.json'])
+    expect(await readdir(fixture.config.storageRoot)).toEqual(['studio.v6.json'])
   })
 
   it('migrates the v1 journal into a successor while preserving the predecessor bytes', async () => {
@@ -135,7 +135,7 @@ describe('public employee handoffs', () => {
       tasks: current.tasks.map(({ nativeSessions: _sessions, reviewStatus: _review, question: _question, reply: _reply, ...task }) => task),
       messages: current.messages, artifacts: current.artifacts }
     const bytes = JSON.stringify(old)+'\n'
-    await rm(join(fixture.config.storageRoot, 'studio.v5.json'))
+    await rm(join(fixture.config.storageRoot, 'studio.v6.json'))
     await writeFile(join(fixture.config.storageRoot, 'studio.v1.json'), bytes)
     const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-migration-')) })
@@ -144,7 +144,7 @@ describe('public employee handoffs', () => {
     expect(reopened.snapshot().projects[0]!.sessionMode).toBe('new-task')
     expect(reopened.snapshot().workspaces[0]!.path).toBe(fixture.cwd)
     expect(await readFile(join(fixture.config.storageRoot, 'studio.v1.json'), 'utf8')).toBe(bytes)
-    expect(parseState(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v5.json'), 'utf8'))).version).toBe(5)
+    expect(parseState(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v6.json'), 'utf8'))).version).toBe(6)
   })
   it('publishes image bytes unchanged and gives a dependent employee the immutable image path', async () => {
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jOZkAAAAASUVORK5CYII=', 'base64')
@@ -276,7 +276,7 @@ describe('public employee handoffs', () => {
     await expect(fixture.command('editTask', { id: task.id, task: { ...taskFields(task), dependsOn: [fixture.tasks[1]!.id] } })).rejects.toThrow('cycle')
     await expect(fixture.studio.command({ action: 'applyTemplate', input: { id: 'stale' }, expectedRevision: 0 })).rejects.toThrow('refresh')
     expect(fixture.studio.snapshot()).toEqual(before)
-    expect(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v5.json'), 'utf8'))).toEqual(before)
+    expect(JSON.parse(await readFile(join(fixture.config.storageRoot, 'studio.v6.json'), 'utf8'))).toEqual(before)
     await expect(fixture.command('saveEmployee', { ...fixture.roster[0], id: '../bad' })).rejects.toThrow()
   })
 
@@ -286,15 +286,15 @@ describe('public employee handoffs', () => {
     const state = fixture.studio.snapshot()
     state.tasks[0]!.status = 'running'
     state.projects[0]!.status = 'running'
-    await writeFile(join(fixture.config.storageRoot, 'studio.v5.json'), JSON.stringify(state))
+    await writeFile(join(fixture.config.storageRoot, 'studio.v6.json'), JSON.stringify(state))
     const run = vi.fn(async () => summary)
     const reopened = await Studio.open(fixture.config, { run })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-reopen-')) })
     expect(reopened.snapshot().tasks[0]!.status).toBe('interrupted')
     expect(reopened.snapshot().projects[0]!.status).toBe('paused')
     expect(run).not.toHaveBeenCalled()
-    expect(parseState(reopened.snapshot()).version).toBe(5)
-    expect(() => parseState({ ...state, version: 6 })).toThrow()
+    expect(parseState(reopened.snapshot()).version).toBe(6)
+    expect(() => parseState({ ...state, version: 7 })).toThrow()
   })
 
   it('refuses malformed durable relationships and extra private protocol fields', async () => {
@@ -483,7 +483,7 @@ describe('meeting room', () => {
   async function meeting(fixture: Awaited<ReturnType<typeof setup>>) {
     const [host, guest] = fixture.roster
     const state = await fixture.command('createMeeting', { workspaceId: fixture.project.workspaceId, title: 'Kickoff',
-      agenda: 'A habit tracker app', hostId: host!.id, attendeeIds: [guest!.id] })
+      agenda: 'A habit tracker app', hostId: host!.id, attendeeIds: [guest!.id], topicProjectId: '' })
     return { host: host!, guest: guest!, id: state.meetings[0]!.id }
   }
   const spoken = (studio: Studio, count: number) => vi.waitFor(() => {
@@ -497,14 +497,14 @@ describe('meeting room', () => {
     await fixture.studio.close()
     const { meetings: _meetings, templates: _templates, ...current } = fixture.studio.snapshot()
     const bytes = JSON.stringify({ ...current, version: 2, tasks: current.tasks.map(({ question: _question, reply: _reply, ...task }) => task) })+'\n'
-    await rm(join(fixture.config.storageRoot, 'studio.v5.json'))
+    await rm(join(fixture.config.storageRoot, 'studio.v6.json'))
     await writeFile(join(fixture.config.storageRoot, 'studio.v2.json'), bytes)
     const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-v2-')) })
     expect(reopened.snapshot().meetings).toEqual([])
     expect(reopened.snapshot().tasks).toEqual(current.tasks)
     expect(await readFile(join(fixture.config.storageRoot, 'studio.v2.json'), 'utf8')).toBe(bytes)
-    expect((await readdir(fixture.config.storageRoot)).sort()).toEqual(['studio.v2.json', 'studio.v5.json'])
+    expect((await readdir(fixture.config.storageRoot)).sort()).toEqual(['studio.v2.json', 'studio.v6.json'])
   })
 
   it('lets the host answer by default, follows mentions and handoffs, and runs every turn read-only in the company directory', async () => {
@@ -532,7 +532,7 @@ describe('meeting room', () => {
     expect(turns.at(-1)!.name).toBe(guest.name)
     const visitor = teamTemplate('lean')[2]!
     await fixture.command('saveEmployee', visitor)
-    await fixture.command('updateMeeting', { id, title: 'Kickoff', agenda: 'A habit tracker app', hostId: host.id, attendeeIds: [guest.id, visitor.id] })
+    await fixture.command('updateMeeting', { id, title: 'Kickoff', agenda: 'A habit tracker app', hostId: host.id, attendeeIds: [guest.id, visitor.id], topicProjectId: '' })
     await expect(fixture.command('deleteEmployee', { id: visitor.id })).rejects.toThrow('meeting history')
     await expect(fixture.command('meetingMessage', { id, message: 'x', mentions: [fixture.project.id] })).rejects.toThrow('attendees')
     // Background turns advance the revision; chat messages must not fail as stale while other edits still do.
@@ -661,11 +661,40 @@ describe('meeting room', () => {
     await fixture.command('startProject', { id: fixture.project.id })
     await completed(fixture.studio, 4)
     const stepTwo = prompts.at(-1)!
-    expect(stepTwo).toContain('本项目「Delivery」的其他任务')
+    expect(stepTwo).toContain('本项目「Delivery」')
     expect(stepTwo).toContain(`${fixture.tasks[1]!.title} result`)
     expect(stepTwo).not.toContain('Vague follow-up')
     // The dependency is already described in full, so the brief does not repeat it.
     expect(stepTwo.split('Concrete step one result')).toHaveLength(2)
+  })
+
+  it('tells attendees which project the meeting is about, and rejects a project of another company', async () => {
+    const prompts: string[] = []
+    const fixture = await setup({ async run(employee, project, task) {
+      prompts.push(task.assignment)
+      if (!project.name.startsWith('会议')) { await report(project.cwd, task); return { ...summary, message: `${task.title} result` } }
+      return { ...summary, message: `${employee.name} speaks` }
+    } })
+    await fixture.command('startProject', { id: fixture.project.id })
+    await completed(fixture.studio, 2)
+    const [host, guest] = fixture.roster
+    const about = await fixture.command('createMeeting', { workspaceId: fixture.project.workspaceId, title: 'Round two', agenda: '',
+      hostId: host!.id, attendeeIds: [guest!.id], topicProjectId: fixture.project.id })
+    const id = about.meetings.at(-1)!.id
+    expect(about.meetings.at(-1)!.topicProjectId).toBe(fixture.project.id)
+    await fixture.command('meetingMessage', { id, message: 'Continue the product.', mentions: [] })
+    await vi.waitFor(() => { expect(fixture.studio.snapshot().meetings.at(-1)!.messages).toHaveLength(2) })
+    expect(prompts.at(-1)).toContain('本次会议讨论的项目：「Delivery」')
+    expect(prompts.at(-1)).toContain('项目目标：Ship the product')
+    expect(prompts.at(-1)).toContain(`${fixture.tasks[0]!.title} result`)
+
+    const other = join(fixture.root, 'other')
+    await mkdir(other)
+    const company = await fixture.command('createWorkspace', { name: 'Other', path: other })
+    await expect(fixture.command('createMeeting', { workspaceId: company.activeWorkspaceId, title: 'Wrong', agenda: '',
+      hostId: host!.id, attendeeIds: [], topicProjectId: fixture.project.id })).rejects.toThrow('company workspace')
+    const cleared = await fixture.command('updateMeeting', { id, title: 'Round two', agenda: '', hostId: host!.id, attendeeIds: [guest!.id], topicProjectId: '' })
+    expect(cleared.meetings.find(value => value.id === id)!.topicProjectId).toBeNull()
   })
 
   it('keeps unstructured minutes as text, and stops or restarts a speaker without leaving a stale turn', async () => {
@@ -700,7 +729,7 @@ describe('meeting room', () => {
     crashed.meetings[0]!.speaking = fixture.roster[0]!.id
     crashed.meetings[0]!.queue = [fixture.roster[1]!.id]
     await fixture.studio.close()
-    await writeFile(join(fixture.config.storageRoot, 'studio.v5.json'), JSON.stringify(crashed))
+    await writeFile(join(fixture.config.storageRoot, 'studio.v6.json'), JSON.stringify(crashed))
     const run = vi.fn(async () => summary)
     const reopened = await Studio.open(fixture.config, { run })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-meeting-')) })
@@ -776,8 +805,9 @@ describe('team templates', () => {
 
     await fixture.studio.close()
     const { templates: _templates, ...current } = fixture.studio.snapshot()
-    const bytes = JSON.stringify({ ...current, version: 3, tasks: current.tasks.map(({ question: _question, reply: _reply, ...task }) => task) })+'\n'
-    await rm(join(fixture.config.storageRoot, 'studio.v5.json'))
+    const bytes = JSON.stringify({ ...current, version: 3, tasks: current.tasks.map(({ question: _question, reply: _reply, ...task }) => task),
+      meetings: current.meetings.map(({ topicProjectId: _topic, ...meeting }) => meeting) })+'\n'
+    await rm(join(fixture.config.storageRoot, 'studio.v6.json'))
     await writeFile(join(fixture.config.storageRoot, 'studio.v3.json'), bytes)
     const reopened = await Studio.open(fixture.config, { async run() { throw new Error('Migration must not start work') } })
     owners.push({ studio: reopened, root: await mkdtemp(join(tmpdir(), 'dsh-studio-v3-')) })
