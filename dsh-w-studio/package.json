@@ -1,6 +1,6 @@
 {
   "name": "dsh-w-studio",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "A software-company Studio for configurable Codex, Claude Code, DeepSeek Harness and compatible-model employees, shared workspaces, task handoffs, review and delivery.",
   "type": "module",
   "license": "MIT",

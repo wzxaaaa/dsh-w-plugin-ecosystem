@@ -186,7 +186,7 @@ function MeetingThread({ meeting, state, busy, error, t, command, onOpenProject 
         <span className={css.badge} data-meeting={meeting.status}><i aria-hidden="true" />{t(statusKey[meeting.status])}</span>
       </div>
       {meeting.topicProjectId && <p className={css.muted}>{t('topicLabel', { name: state.projects.find(value => value.id === meeting.topicProjectId)?.name ?? '' })}</p>}
-      {meeting.agenda && <p className={css.agenda}>{meeting.agenda}</p>}
+      {meeting.agenda && <p className={css.agenda} title={meeting.agenda}>{meeting.agenda}</p>}
       <ul className={css.attendeeRow}>{meeting.attendeeIds.map(id => <li key={id} data-host={id === meeting.hostId}>
         <Avatar id={id} name={name(id)} size="sm" /><span>{name(id)}</span>{id === meeting.hostId && <em>{t('hostTag')}</em>}
       </li>)}</ul>

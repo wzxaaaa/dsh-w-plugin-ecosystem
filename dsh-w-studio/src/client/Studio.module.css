@@ -427,10 +427,11 @@ li[data-status="waiting"] .step { border-color: var(--s-warn); color: var(--s-wa
 .badge[data-meeting="closed"] { color: var(--s-faint); }
 .reason[data-kind="speaking"] { color: var(--s-accent); }
 .meetingCard { display: grid; gap: 14px; max-width: 900px; }
-.meetingHead { display: grid; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--s-line-soft); }
+/* The meeting head stays under the tabs so its actions (stop speaker, minutes) remain reachable in a long thread. */
+.meetingHead { position: sticky; top: 45px; z-index: 2; display: grid; gap: 10px; margin-top: -20px; padding: 20px 0 14px; border-bottom: 1px solid var(--s-line-soft); background: var(--s-bg); }
 .meetingTitle { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .meetingTitle h2 { font-size: 18px; overflow-wrap: anywhere; }
-.agenda { color: var(--s-ink-2); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agenda { color: var(--s-ink-2); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .attendeeRow { display: flex; flex-wrap: wrap; gap: 6px; }
 .attendeeRow li { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px 2px 2px; border-radius: 14px; border: 1px solid var(--s-line); font-size: 12px; max-width: 100%; }
 .attendeeRow li[data-host="true"] { border-color: var(--s-accent); }
