@@ -23,6 +23,15 @@ const resultSchema = {
   }, required: ['message', 'files', 'handoffs', 'needsUser'],
 }
 
+/** The native runtime cannot continue an existing session id; Studio retries the task in a fresh session. */
+export class ResumeUnsupportedError extends Error {
+  /** @param engine - Engine whose runtime refused the continuation. */
+  constructor(readonly engine: Employee['engine']) {
+    super(`${engine} runtime cannot continue an existing session`)
+    this.name = 'ResumeUnsupportedError'
+  }
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -185,7 +194,11 @@ export function createExecutor(ctx: Context, config: StudioConfig): StudioExecut
             if (!record(event) || event.type !== 'assistant/message' || !record(event.data) || !record(event.data.message)) return
             const text = progressLine(event.data.message.content)
             if (text) execution.progress?.(text)
-          } })
+          } }).catch((error: unknown) => {
+            // A runtime without the session-resume patch refuses a known id before doing any work.
+            if (execution.resumeSessionId && error instanceof Error && /session ".*" already exists/.test(error.message)) throw new ResumeUnsupportedError(employee.engine)
+            throw error
+          })
           await execution.recordSession(result.sessionId as StudioNativeSessionId)
           const reason = result.events.findLast(event => event.type === 'turn/end')
           if (reason?.type !== 'turn/end' || reason.data.reason.kind !== 'completed') throw new Error(`Harness task ended: ${reason?.type === 'turn/end' ? reason.data.reason.kind : 'missing completion'}`)

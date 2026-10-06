@@ -8,6 +8,7 @@ import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import type { Artifact, StudioArtifactId, Employee, StudioEmployeeId, EmployeeResult, StudioMessageId, Project, StudioProjectId, StudioConfig, StudioExecutor, StudioState, Task, StudioTaskId, StudioWorkspaceId, StudioNativeSessionId, Meeting, MeetingMinutes, StudioMeetingId, StudioNativeSession, StudioTemplateId, TeamTemplate } from './types.ts'
 import { employeeSchema, outputName, parseState, migrateStateV1, migrateStateV2, migrateStateV3, migrateStateV4, validateEmployee, validateMember, withinDirectory } from './validation.ts'
 import { exportProject } from './workspace.ts'
+import { ResumeUnsupportedError } from './executor.ts'
 import { minutesSchema, parseFields, templateSchema } from './schema.ts'
 import { defaultTemplates } from './templates.ts'
 import { hasHistory, planTemplate } from './roster.ts'
@@ -64,6 +65,8 @@ export class Studio {
   private readonly meetingRuns = new Map<StudioMeetingId, { controller: AbortController; done: Promise<void> }>()
   /** Latest progress line of each running task; transient, so it never advances the revision. */
   private readonly live = new Map<StudioTaskId, { text: string; at: string }>()
+  /** Engines whose installed runtime refused to continue a session; their tasks start fresh until the host restarts. */
+  private readonly freshOnly = new Set<Employee['engine']>()
   private closing = false
   private constructor(private readonly config: StudioConfig, private readonly executor: StudioExecutor) {}
 
@@ -722,30 +725,44 @@ export class Studio {
         if (!withinDirectory(await realpath(workspace.path), cwd)) throw new Error('Employee directory must stay inside the company workspace')
         // A reply continues the session that asked for it, and a retry continues the session that failed, so finished work is not redone.
         // Without a continuable session, the full assignment carries the reply as a message.
-        const resumed = task.reply || task.error ? task.nativeSessions.findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined
-        task.assignment = resumed ? task.reply ? this.continuation(task) : this.recovery(task) : this.assignment(employee, project, task)
+        const resumed = (task.reply || task.error) && !this.freshOnly.has(employee.engine)
+          ? task.nativeSessions.findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined
+        // Kept for a fresh restart if the runtime refuses the continuation; an oversized one only matters when no session can continue.
+        const full = resumed ? (() => { try { return this.assignment(employee, project, task) } catch { return '' } })() : this.assignment(employee, project, task)
+        task.assignment = resumed ? task.reply ? this.continuation(task) : this.recovery(task) : full
         task.status = 'running'; task.attempt += 1; task.startedAt = new Date().toISOString(); task.finishedAt = ''
         task.question = ''; task.reply = ''; task.error = ''
         await this.commit()
-        return structuredClone({ task, employee, project, resumed })
+        return structuredClone({ task, employee, project, resumed, full })
       })
-      const { task, employee, project, resumed } = prepared
-      const prior = resumed ?? (project.sessionMode === 'employee-project' ? this.state.tasks
+      const { task, employee, project, resumed, full } = prepared
+      const prior = this.freshOnly.has(employee.engine) ? undefined : resumed ?? (project.sessionMode === 'employee-project' ? this.state.tasks
         .filter(value => value.projectId === project.id && value.employeeId === employee.id && value.status === 'completed')
         .flatMap(value => value.nativeSessions)
         .findLast(value => value.engine === employee.engine && value.cwd === (employee.cwd || project.cwd)) : undefined)
-      const result = await this.executor.run(employee, project, task, controller.signal, {
-        resumeSessionId: prior?.id ?? null,
-        progress: (text: string) => { this.live.set(id, { text, at: new Date().toISOString() }) },
-        recordSession: (sessionId: StudioNativeSessionId) => this.enqueue(async () => {
-          if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(sessionId)) throw new Error('Native session identity is invalid')
-          const live = this.task(id)
-          if (!live.nativeSessions.some(value => value.id === sessionId && value.attempt === live.attempt)) {
-            live.nativeSessions.push({ id: sessionId, engine: employee.engine, cwd: employee.cwd || project.cwd,
-              attempt: live.attempt, continued: prior?.id === sessionId })
-            await this.commit()
-          }
-        }),
+      const run = (assignment: string, resume: StudioNativeSession | undefined): Promise<EmployeeResult> =>
+        this.executor.run(employee, project, { ...task, assignment }, controller.signal, {
+          resumeSessionId: resume?.id ?? null,
+          progress: (text: string) => { this.live.set(id, { text, at: new Date().toISOString() }) },
+          recordSession: (sessionId: StudioNativeSessionId) => this.enqueue(async () => {
+            if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(sessionId)) throw new Error('Native session identity is invalid')
+            const live = this.task(id)
+            if (!live.nativeSessions.some(value => value.id === sessionId && value.attempt === live.attempt)) {
+              live.nativeSessions.push({ id: sessionId, engine: employee.engine, cwd: employee.cwd || project.cwd,
+                attempt: live.attempt, continued: resume?.id === sessionId })
+              await this.commit()
+            }
+          }),
+        })
+      const result = await run(task.assignment, prior).catch(async (error: unknown) => {
+        if (!(error instanceof ResumeUnsupportedError) || !prior || !full) throw error
+        // The refusal happens before any work, so the same attempt starts over in a fresh session with the complete assignment.
+        this.freshOnly.add(error.engine)
+        await this.enqueue(async () => {
+          this.task(id).assignment = full
+          await this.commit()
+        })
+        return run(full, undefined)
       })
       controller.signal.throwIfAborted()
       if (result.needsUser) {

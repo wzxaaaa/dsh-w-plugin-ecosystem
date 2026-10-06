@@ -12,4 +12,4 @@
 pnpm exec vitest run packages/sdk/server/tests/server.spec.ts packages/sdk/server/tests/plugin-apply.spec.ts
 ```
 
-随后构建 SDK server，并通过员工的两次实际任务核对同一会话 ID。此补丁不属于插件安装事务；没有确认 SDK 支持时，Harness/兼容模型选择每项任务新建会话。Codex、Claude Code 自己的 CLI 会话续接不需要此补丁。
+随后构建 SDK server，并通过员工的两次实际任务核对同一会话 ID。此补丁不属于插件安装事务；未打补丁的运行时会拒绝续接（`session … already exists`）；工作室 0.4.2 起会在同一次执行中改用新会话和完整任务指令重跑，并在本次 Host 运行期间不再为该引擎尝试续接。Codex、Claude Code 自己的 CLI 会话续接不需要此补丁。

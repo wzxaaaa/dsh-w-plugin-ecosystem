@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import z from '@deepseek-ai/schemastery'
 import { Studio } from '../src/studio.ts'
 import { Config } from '../src/index.ts'
-import { finalHandoff } from '../src/executor.ts'
+import { finalHandoff, ResumeUnsupportedError } from '../src/executor.ts'
 import { teamTemplate } from '../src/templates.ts'
 import { outputName, parseState } from '../src/validation.ts'
 import { planTemplate, redundantEmployees, toMember } from '../src/roster.ts'
@@ -195,6 +195,29 @@ describe('public employee handoffs', () => {
     await expect(fixture.studio.artifact('../studio.v1.json')).rejects.toThrow('does not exist')
   })
 
+  it('starts fresh in the same attempt when the runtime cannot continue a session, then stops trying for that engine', async () => {
+    const calls: (string | null)[] = []
+    const fixture = await setup({ async run(employee, project, task, _signal, execution) {
+      calls.push(execution.resumeSessionId)
+      if (execution.resumeSessionId) throw new ResumeUnsupportedError(employee.engine)
+      await execution.recordSession(`session-${task.id}` as StudioNativeSessionId)
+      await report(project.cwd, task)
+      return summary
+    } })
+    await fixture.command('startProject', { id: fixture.project.id })
+    await completed(fixture.studio, 2)
+    const first = fixture.tasks[0]!
+    for (const title of ['Acceptance test', 'Second acceptance test']) {
+      await fixture.command('createTask', { ...taskFields(first), title, dependsOn: [] })
+      await fixture.command('startProject', { id: fixture.project.id })
+      await completed(fixture.studio, fixture.studio.snapshot().tasks.length)
+    }
+    expect(calls).toEqual([null, null, `session-${first.id}`, null, null])
+    const retried = fixture.studio.snapshot().tasks.at(-2)!
+    expect(retried).toMatchObject({ status: 'completed', attempt: 1, error: '' })
+    expect(retried.assignment).toContain('领导安排的任务')
+    expect(retried.nativeSessions.map(session => session.continued)).toEqual([false])
+  })
   it('retries in the failed native session, but starts fresh for a different employee', async () => {
     const calls: { employee: string; resume: string | null; assignment: string }[] = []
     let fail = true

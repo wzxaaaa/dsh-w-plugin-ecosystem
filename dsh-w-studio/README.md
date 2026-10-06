@@ -2,7 +2,7 @@
 
 DeepSeek Harness W 系列工作室插件。在原有对话之外增加公司工作台：配置岗位与员工模型、选择共享工作区、建立项目与任务，通过工作报告、交接消息和文件协作，支持返工、验收与项目导出。
 
-当前版本：`0.4.1`。发布包：`dsh-w-studio-0.4.1.tgz`（旧版本安装包保留在同目录）。已验证环境：Windows、本地 Harness `0.1.5-rc.2` Web profile。官方桌面 `desktop` profile 尚未验证；本版本的界面通信使用 Web Connection HTTP 接口。
+当前版本：`0.4.2`。发布包：`dsh-w-studio-0.4.2.tgz`（旧版本安装包保留在同目录）。已验证环境：Windows、本地 Harness `0.1.5-rc.2` Web profile。官方桌面 `desktop` profile 尚未验证；本版本的界面通信使用 Web Connection HTTP 接口。
 
 ## 功能
 
