@@ -79,7 +79,7 @@ test('stores each novel in its own workspace folder, binds conversations, and ex
   assert.match(host, /finalizeContent: mutationFailureContent\('project'\)/)
   assert.match(host, /noDataWritten: true/)
   assert.match(host, /contract: novelToolContract\(\)/)
-  assert.match(host, /changed: false, stop: true/)
+  assert.match(host, /changed: false, stop: false/)
   assert.match(host, /concludeStoppedMutation/)
   assert.match(host, /replace_progress/)
   assert.match(host, /project\.progress = current\.project\.progress/)

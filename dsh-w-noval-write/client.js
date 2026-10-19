@@ -464,6 +464,7 @@ window.__ModuleLoader__.load({
         descriptor("getState", [parameter("workspaceId")]),
         descriptor("saveProject", [parameter("workspaceId"), parameter("input"), parameter("expectedRevision")]),
         descriptor("exportProject", [parameter("workspaceId")]),
+        descriptor("exportWriting", [parameter("workspaceId"), parameter("kind"), parameter("format"), parameter("expectedRevision")]),
         descriptor("importProject", [parameter("workspaceId"), parameter("input"), parameter("expectedRevision")]),
         descriptor("resetProject", [parameter("workspaceId"), parameter("expectedRevision")]),
         descriptor("getLink", [parameter("sessionId")]),
@@ -2459,6 +2460,10 @@ window.__ModuleLoader__.load({
                 React.createElement(InputField, { label: props.t("outlineStatus"), value: volume.status, onChange: function (v) { props.onPatchVolume(volume.id, "status", v); } })
               ),
               React.createElement(TextField, { label: props.t("volumeSummary"), value: volume.summary, onChange: function (v) { props.onPatchVolume(volume.id, "summary", v); } }),
+              React.createElement("label", { className: "dshwnw-field" },
+                React.createElement("span", { className: "dshwnw-label" }, props.t("plannedChapterCount") + " · " + volume.chapters.length),
+                React.createElement("input", { className: "dshwnw-input", type: "number", min: 0, max: 500, step: 1, value: volume.plannedChapterCount || "", placeholder: props.t("countUnknown"), onChange: function (event) { var count = Number(event.target.value); if (Number.isInteger(count) && count >= 0 && count <= 500) props.onPatchVolume(volume.id, "plannedChapterCount", count); } })
+              ),
               React.createElement(CustomFieldsEditor, { t: props.t, value: volume.customFields, onChange: function (value) { props.onPatchVolume(volume.id, "customFields", value); } })
             ),
             React.createElement("div", { className: "dshwnw-outline-list" },
@@ -3677,7 +3682,26 @@ window.__ModuleLoader__.load({
                   )
             )
           )
-        )
+        ),
+        React.createElement(WritingExportCards, { t: props.t, locked: locked, onExport: props.onExportWriting })
+      );
+    }
+
+    function WritingExportCards(props) {
+      return React.createElement("div", { className: "dshwnw-settings", "data-writing-exports": true },
+        ["outline", "detail"].map(function (kind) {
+          return React.createElement("div", { className: "dshwnw-setting-card", key: kind },
+            React.createElement("div", { className: "dshwnw-setting-icon", "aria-hidden": true }, React.createElement(SettingIcon, { kind: "export" })),
+            React.createElement("div", { className: "dshwnw-setting-main" },
+              React.createElement("div", { className: "dshwnw-setting-title" }, props.t(kind === "outline" ? "writingOutlineTitle" : "writingDetailTitle")),
+              React.createElement("div", { className: "dshwnw-setting-copy" }, props.t(kind === "outline" ? "writingOutlineHint" : "writingDetailHint")),
+              React.createElement("div", { className: "dshwnw-setting-actions" }, ["docx", "xlsx", "md"].map(function (format) {
+                var label = { docx: "Word (.docx)", xlsx: "Excel (.xlsx)", md: "Markdown (.md)" }[format];
+                return React.createElement("button", { key: format, type: "button", className: "dshwnw-button", disabled: props.locked, "aria-label": props.t(kind === "outline" ? "writingOutlineTitle" : "writingDetailTitle") + " · " + label, onClick: function () { props.onExport(kind, format); } }, label);
+              }))
+            )
+          );
+        })
       );
     }
 
@@ -4157,6 +4181,26 @@ window.__ModuleLoader__.load({
         }).finally(function () { if (currentRequest(requestId, workspaceId)) { busyRef.current = false; setBusy(false); } });
       }
 
+      function exportWriting(kind, format) {
+        if (!workspaceId || !state || busyRef.current || libraryBusyRef.current || dirtyRef.current) return;
+        var requestId = ++requestRef.current;
+        setBusy(true); busyRef.current = true;
+        writer.exportWriting(workspaceId, kind, format, state.revision).then(function (file) {
+          if (!currentRequest(requestId, workspaceId)) return;
+          var binary = atob(file.base64);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          var url = URL.createObjectURL(new Blob([bytes], { type: file.mime }));
+          var anchor = document.createElement("a");
+          anchor.href = url; anchor.download = file.filename;
+          document.body.appendChild(anchor); anchor.click(); anchor.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+          setNotice({ kind: "ok", text: t("writingExported") + (file.issues ? " " + t("writingExportIssues").replace("{n}", file.issues) : "") });
+        }).catch(function (error) {
+          if (currentRequest(requestId, workspaceId)) setNotice({ kind: "error", text: t("exportFailed") + ": " + failureText(error) });
+        }).finally(function () { if (currentRequest(requestId, workspaceId)) { busyRef.current = false; setBusy(false); } });
+      }
+
       function importProject(file) {
         if (!workspaceId || !state || busyRef.current || libraryBusyRef.current || dirtyRef.current || !file) return;
         if (file.size > 5 * 1024 * 1024) {
@@ -4434,7 +4478,7 @@ window.__ModuleLoader__.load({
           }, libraryHandlers) : null,
           onRestore: restoreSnapshot,
           onError: function (text) { setNotice({ kind: "error", text: text }); },
-          onExport: exportProject, onImport: importProject, onClear: resetProject,
+          onExport: exportProject, onExportWriting: exportWriting, onImport: importProject, onClear: resetProject,
         });
       }
 
@@ -4507,6 +4551,10 @@ window.__ModuleLoader__.load({
     var NS = "dshWNovalWrite";
     var inject = ["slots", "locale", "remote", "uiConversation"];
     var zh = {
+      plannedChapterCount: "计划章数（0 为未确定）／已有章数", countUnknown: "未确定",
+      writingOutlineTitle: "导出大纲", writingOutlineHint: "供手写正文参考：全书设定、人物关系、故事主线、分卷与逐章概要，以及线索总表。保留全部章节，缺项会明确标注。",
+      writingDetailTitle: "导出细纲", writingDetailHint: "供逐章写作参考：完整事件、场景拆分、对话备注、结尾衔接、本章线索和人物变化，并留出手写备注。导出已保存内容。",
+      writingExported: "写作参考文件已导出。", writingExportIssues: "文件内已标注 {n} 项待补充或待核对内容。",
       castTitle: "人物图谱", castView_graph: "图谱", castTools: "图谱工具", toolSelect: "选择", toolSelectHint: "点球看人物卡，拖动球摆位置，拖空白处平移", toolConnect: "连线",
       toolAddCharacter: "角色", toolAddCharacterHint: "在画布中央放一个新角色（也可以双击空白处）", toolRelayout: "重新自动布局（解除所有固定位置）", toolFit: "缩放到全部可见", toolListView: "切换到卡片列表",
       toolHideMinor: "隐藏龙套", toolLegend: "图例", zoomIn: "放大", zoomOut: "缩小", close: "关闭", castSearch: "找人…",
@@ -4641,6 +4689,10 @@ window.__ModuleLoader__.load({
       progressTitle: "写作进展", progressEmpty: "还没有推进记录。AI 可在写作后自动写入。", progressEntry: "进展", canonChanges: "设定变更", openThreads: "待续线索",
     };
     var en = {
+      plannedChapterCount: "Planned chapters (0 = undecided) / existing", countUnknown: "Undecided",
+      writingOutlineTitle: "Export outline", writingOutlineHint: "A writing reference with book setup, cast, plot, volumes, every chapter synopsis and the thread ledger. Missing content is marked.",
+      writingDetailTitle: "Export detailed outline", writingDetailHint: "A chapter-by-chapter reference with full events, scenes, dialogue notes, hooks, threads, character changes and space for handwritten notes. Uses saved content.",
+      writingExported: "Writing reference exported.", writingExportIssues: "The file marks {n} items to complete or review.",
       castTitle: "Cast graph", castView_graph: "Graph", castTools: "Graph tools", toolSelect: "Select", toolSelectHint: "Click a sphere for its card, drag spheres to place them, drag empty space to pan", toolConnect: "Connect",
       toolAddCharacter: "Character", toolAddCharacterHint: "Place a new character in the middle (or double-click empty space)", toolRelayout: "Auto-layout again (unpins every sphere)", toolFit: "Zoom to fit", toolListView: "Switch to the card list",
       toolHideMinor: "Hide walk-ons", toolLegend: "Legend", zoomIn: "Zoom in", zoomOut: "Zoom out", close: "Close", castSearch: "Find…",
@@ -4795,6 +4847,7 @@ window.__ModuleLoader__.load({
           getState: function (workspaceId) { return unwrap("getState", [workspaceId]); },
           saveProject: function (workspaceId, input, revision) { return unwrap("saveProject", [workspaceId, input, revision]); },
           exportProject: function (workspaceId) { return unwrap("exportProject", [workspaceId]); },
+          exportWriting: function (workspaceId, kind, format, revision) { return unwrap("exportWriting", [workspaceId, kind, format, revision]); },
           importProject: function (workspaceId, input, revision) { return unwrap("importProject", [workspaceId, input, revision]); },
           resetProject: function (workspaceId, revision) { return unwrap("resetProject", [workspaceId, revision]); },
           getLink: function (sessionId) { return unwrap("getLink", [sessionId]); },

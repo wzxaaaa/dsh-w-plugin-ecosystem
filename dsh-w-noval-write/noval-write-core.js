@@ -16,7 +16,7 @@ const MAX_TIERS = 60
 const MAX_PROGRESSION_TEMPLATES = 100
 const MAX_PROGRESSION_RECORDS = 3000
 
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 export const PROJECT_EXPORT_FORMAT = 'dsh-w-noval-write/project'
 export const PROJECT_EXPORT_VERSION = 1
 export const WRITE_LINK_STORE_VERSION = 1
@@ -110,7 +110,7 @@ const CHAPTER_KEYS = Object.freeze([
   'id', 'number', 'title', 'targetWords', 'status', 'summary', 'locations', 'events', 'dialogueNotes',
   'endingHook', 'manuscriptFile', 'scenes', 'customFields',
 ])
-const VOLUME_KEYS = Object.freeze(['id', 'title', 'summary', 'status', 'chapters', 'customFields'])
+const VOLUME_KEYS = Object.freeze(['id', 'title', 'summary', 'status', 'plannedChapterCount', 'chapters', 'customFields'])
 export const THREAD_KINDS = Object.freeze(['foreshadowing', 'mystery', 'promise', 'chekhov', 'subplot', 'other'])
 export const THREAD_IMPORTANCE = Object.freeze(['core', 'major', 'minor'])
 export const THREAD_STATUSES = Object.freeze(['open', 'partial', 'resolved', 'dropped'])
@@ -146,6 +146,9 @@ export const NOVEL_TOOL_RETRY_PROTOCOL = Object.freeze([
   'Do not claim that data was saved until the mutation tool returns ok: true with a newer revision.',
   'Prefer novel_patch for focused changes. Use novel_write only when every existing project field will be preserved or intentionally replaced.',
   'Use novel_character_patch, novel_relationship_patch, novel_volume_upsert, and novel_chapter_upsert for ID-targeted changes; do not resend whole arrays.',
+  'Plan all chapter slots first: agree a chapter count, record each volume plannedChapterCount, and create the complete ordered chapter directory before expanding details in small batches. Never silently skip chapters or lower the count to pass checks.',
+  'Write complete, unambiguous sentences in every requested module: who acts, why, what happens, and what changes. No placeholder, ellipsis, same-as-above or teaser-only fields. Optional/inapplicable fields may remain empty; do not invent filler merely to fill the UI.',
+  'Before promising completion, call novel_quality_check(require_complete:true) for each requested scope. Read every issues page and fix errors; review warnings for dangling sentences. detail includes every chapter and its scenes. If interrupted, state exactly which chapters/modules remain unfinished.',
   'Genre-specific data belongs in customFields as string key/value pairs. Structured long-form outlines belong in volumes[].chapters[], not one long chapterPlan string.',
   'When the user requests a chapter file, call novel_save_chapter with the full prose. Never claim a file exists unless it returns ok: true and verified: true.',
   'When saving prose for an outline chapter, pass volume_id and chapter_id to novel_save_chapter so the outline links the file and tracks its word count.',
@@ -269,6 +272,7 @@ export function volumePatchToolSchema({ required = true } = {}) {
     additionalProperties: false,
     properties: {
       ...schemaProperties(['title', 'summary', 'status'], false),
+      plannedChapterCount: { type: 'integer', description: '本卷约定的计划章数，0 表示未确定，最多 500。先确定完整章目，再逐章补齐。不得为通过检查而下调。' },
       customFields: customFieldsSchema(),
     },
   }
@@ -281,6 +285,7 @@ function volumeToolSchema(required = false) {
     additionalProperties: false,
     properties: {
       ...schemaProperties(['id', 'title', 'summary', 'status'], false),
+      plannedChapterCount: { type: 'integer' },
       id: { type: 'string', required: true },
       chapters: { type: 'array', items: chapterToolSchema({ required: false }) },
       customFields: customFieldsSchema(),
@@ -589,6 +594,7 @@ function validateVolume(value, path, issues) {
   const allowed = new Set(VOLUME_KEYS)
   for (const key of Object.keys(value)) if (!allowed.has(key)) issues.push(`${path}.${key} is not part of the canonical structure`)
   if (!Object.hasOwn(value, 'id')) issues.push(`${path}.id is required`)
+  if (Object.hasOwn(value, 'plannedChapterCount') && (!Number.isSafeInteger(value.plannedChapterCount) || value.plannedChapterCount < 0 || value.plannedChapterCount > MAX_CHAPTERS_PER_VOLUME)) issues.push(`${path}.plannedChapterCount must be an integer from 0 to ${MAX_CHAPTERS_PER_VOLUME}`)
   for (const key of ['id', 'title', 'summary', 'status']) {
     if (Object.hasOwn(value, key) && typeof value[key] !== 'string') issues.push(`${path}.${key} must be a string; received ${receivedType(value[key])}`)
   }
@@ -988,7 +994,7 @@ export function defaultChapter() {
 }
 
 export function defaultVolume() {
-  return { id: '', title: '', summary: '', status: 'planned', chapters: [], customFields: {} }
+  return { id: '', title: '', summary: '', status: 'planned', plannedChapterCount: 0, chapters: [], customFields: {} }
 }
 
 function normalizeOutlineScene(value, index, characterReferences) {
@@ -1180,6 +1186,7 @@ function normalizeChapter(value, index, characterReferences) {
 
 function normalizeVolume(value, index, characterReferences) {
   const item = isPlainObject(value) ? value : {}
+  if (item.plannedChapterCount !== undefined && (!Number.isSafeInteger(item.plannedChapterCount) || item.plannedChapterCount < 0 || item.plannedChapterCount > MAX_CHAPTERS_PER_VOLUME)) throw new RangeError('plannedChapterCount must be an integer from 0 to 500')
   const chapters = boundedArray(item.chapters, MAX_CHAPTERS_PER_VOLUME, 'volume.chapters')
     .map((chapter, chapterIndex) => normalizeChapter(chapter, chapterIndex, characterReferences))
   return {
@@ -1187,6 +1194,7 @@ function normalizeVolume(value, index, characterReferences) {
     title: text(item.title, MAX_SHORT),
     summary: text(item.summary),
     status: text(item.status, MAX_SHORT) || 'planned',
+    plannedChapterCount: item.plannedChapterCount ?? 0,
     chapters,
     customFields: normalizeCustomFields(item.customFields),
   }
@@ -2658,7 +2666,7 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts, ca
     let remainingChapters = 80
     let outlineTruncated = false
     for (const volume of project.volumes) {
-      lines.push(`- Volume ${volume.title || volume.id}${volume.summary ? `: ${compact(volume.summary)}` : ''}`)
+      lines.push(`- Volume ${volume.title || volume.id} (planned chapters: ${volume.plannedChapterCount || 'undecided'}; existing: ${volume.chapters.length})${volume.summary ? `: ${compact(volume.summary)}` : ''}`)
       for (const chapter of volume.chapters) {
         if (remainingChapters <= 0) {
           outlineTruncated = true
@@ -2752,7 +2760,7 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts, ca
   add(lines, 'Additional notes', project.notes)
   // The inbox rides with the protocol so truncating long canon never hides it.
   const inboxLines = castInboxPromptLines(project, castInbox)
-  const protocol = [
+  let protocol = [
     ...(inboxLines.length ? ['', ...inboxLines] : []),
     '',
     'Writing protocol:',
@@ -2764,6 +2772,9 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts, ca
     '- With outline targets, novel_save_chapter requires a chapter_id and volume_id.',
     '- Length: 3000字 means at least 3000, no ceiling; ranges obey min/max. Use plugin-counted words. If rejected, expand/revise prose and retry until it passes. No unlinked-file or other-tool bypass.',
     '- Persist canon/progress; use outline/character/relationship tools rather than replacing arrays.',
+    '- Complete work in small saved batches. First record the agreed plannedChapterCount per volume and create every chapter slot; then expand each requested chapter. Read all novel_outline_read pages using hasMore/nextOffset. Never overwrite a full array with a partial page.',
+    '- Every requested setting/detail must express complete thoughts and causal links; no placeholders, abrupt half-sentences, vague pronouns, ellipsis or “same as above” to save tokens. Do not invent irrelevant optional fields. A title or one-line teaser is not a detailed outline.',
+    '- Before claiming a scope finished, novel_quality_check(scope, require_complete:true); paginate every issue and fix errors. Use detail for detailed outlines, outline for chapter synopses, and each requested module for settings. Review possible_cutoff warnings manually. A structural pass is not proof of semantic completeness. If incomplete, report remaining chapter IDs/modules honestly.',
     ...(project.threads.length > 0 ? ['- Threads: novel_threads(chapter_id) before writing; pay off or reschedule. Afterwards novel_thread_upsert setups/echoes/payoffs; keep truths hidden.'] : []),
     ...(isProgressionProject(project) && project.progression.systems.length > 0 ? [
       '- Progression: novel_progression_read(as_of_chapter_id, character_ids of the cast) before writing; preserve state. Afterwards novel_progression_record changes; drops/skips need notes.',
@@ -2773,16 +2784,38 @@ export function projectPrompt(projectValue, maxChars = 12_000, { manuscripts, ca
     '- Arguments are direct JSON objects, never strings, Markdown or wrappers.',
     '- Prefer novel_patch. novel_write is complete canon replacement and preserves progress unless replace_progress is true.',
     '- Validation failure: novel_schema, rebuild, retry once. Success requires ok: true and a newer revision.',
-    '- changed: false or stop: true: stop tool calls and answer the user.',
+    '- changed: false means this item is already saved: continue remaining work without repeating it. stop: true means stop tool calls and answer the user.',
     '- novel_write and novel_advance are mutually exclusive per turn; advance only new story events.',
   ].join('\n')
+  const limit = Number.isFinite(maxChars) ? Math.max(2_000, Math.floor(maxChars)) : 12_000
+  if (protocol.length > limit - 300) protocol = [
+    'Writing protocol:',
+    '- Preserve canon, causality and complete sentences. kb_search/kb_read for style; never copy distinctive wording.',
+    '- Read full facts with novel_read and all novel_outline_read pages (nextOffset). Context excerpts are NOT the full project. Never replace full arrays with partial pages.',
+    '- Agree plannedChapterCount per volume; create all chapter slots, then expand in small saved batches. Do not skip chapters, lower counts, use placeholders or stop mid-sentence.',
+    '- Before delivery, novel_quality_check(scope, require_complete:true) for each requested module; read all issue pages and fix errors, review warnings. A structural pass cannot certify meaning. Report unfinished work honestly.',
+    '- Before mutations, novel_read and copy expected_revision. Prefer targeted tools. Direct JSON objects only; failure: novel_schema, fix, retry once. Success requires ok: true and newer revision.',
+    '- Draft from chapter scenes/targetWords. novel_save_chapter requires a chapter_id with outline targets. 3000字 means at least 3000, ranges obey both bounds. Rejected prose must be revised and saved; no lowered-target or other-tool bypass. Claim files only after ok:true and verified:true.',
+    '- changed:false: continue other items, do not repeat this save. stop:true: stop calls. novel_write and novel_advance are mutually exclusive per turn.',
+    '- novel_search earlier prose before reusing details. Reconcile canon with prose.',
+    ...(project.threads.length ? ['- novel_threads before drafting; novel_thread_upsert setups/payoffs after.'] : []),
+    ...(project.progression.systems.length ? ['- novel_progression_read before drafting; novel_progression_record changes after.'] : []),
+    ...(inboxLines.length ? ['- Pending cast changes: novel_cast_inbox, revise unwritten outline, then novel_cast_ack.'] : []),
+  ].join('\n')
+  // Keep author changes ahead of background facts even under a small budget.
+  if (inboxLines.length && !protocol.includes('## Author cast changes') && inboxLines.join('\n').length + protocol.length <= limit - 200) protocol = inboxLines.join('\n') + '\n' + protocol
   const facts = lines.join('\n')
   const result = facts + '\n' + protocol
-  const limit = Number.isFinite(maxChars) ? Math.max(2_000, Math.floor(maxChars)) : 12_000
   if (result.length <= limit) return result
-  const marker = '\n\n[Novel workspace facts truncated; open the right panel for full details.]\n'
+  const marker = '\n\n[Context truncated at a whole-fact boundary. Read full fields with novel_read and every chapter page with novel_outline_read. Never replace stored text from this excerpt.]\n'
   const factBudget = Math.max(0, limit - marker.length - protocol.length)
-  return facts.slice(0, factBudget) + marker + protocol
+  // Include whole facts only: cutting a long setting mid-sentence creates ambiguous canon.
+  let excerpt = ''
+  for (const line of lines) {
+    if (excerpt.length + line.length + 1 > factBudget) break
+    excerpt += line + '\n'
+  }
+  return excerpt + marker + protocol
 }
 
 const DIFF_SCALAR_KEYS = Object.freeze([

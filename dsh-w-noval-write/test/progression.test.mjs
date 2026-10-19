@@ -51,7 +51,7 @@ function record(project, patch, recordId = '') {
 test('progression is on by default for new and old books', () => {
   assert.deepEqual(defaultProject().progression, { enabled: true, systems: [], records: [] })
   const state = normalizeState({ schemaVersion: 5, revision: 3, project: { title: 'old' } })
-  assert.equal(state.schemaVersion, 7)
+  assert.equal(state.schemaVersion, 8)
   assert.deepEqual(state.project.progression, { enabled: true, systems: [], records: [] })
   assert.equal(progressionActive(state.project), true)
 })

@@ -72,8 +72,10 @@ import {
 } from './noval-write-core.js'
 import { NovelMutationRoundGuard } from './noval-mutation-guard.js'
 import { NovelCompletionGuard } from './noval-completion-guard.js'
+import { auditNovel, assertOutlinePreserved, NovelQualityGuard, QUALITY_SCOPES } from './noval-quality.js'
+import { exportWritingDocument } from './noval-writing-export.js'
 
-export const PLUGIN_VERSION = '0.15.0'
+export const PLUGIN_VERSION = '0.16.0'
 import { searchManuscripts } from './noval-search-core.js'
 import {
   NOVEL_DIR,
@@ -257,6 +259,7 @@ let NovalWriterService = (() => {
   let _getState_decorators
   let _saveProject_decorators
   let _exportProject_decorators
+  let _exportWriting_decorators
   let _importProject_decorators
   let _resetProject_decorators
   let _getLink_decorators
@@ -293,6 +296,11 @@ let NovalWriterService = (() => {
         access: { has: obj => 'saveProject' in obj, get: obj => obj.saveProject }, metadata: _metadata,
       }, null, _instanceExtraInitializers)
       _exportProject_decorators = [Remote('exportProject')]
+      _exportWriting_decorators = [Remote('exportWriting')]
+      __esDecorate(this, null, _exportWriting_decorators, {
+        kind: 'method', name: 'exportWriting', static: false, private: false,
+        access: { has: obj => 'exportWriting' in obj, get: obj => obj.exportWriting }, metadata: _metadata,
+      }, null, _instanceExtraInitializers)
       __esDecorate(this, null, _exportProject_decorators, {
         kind: 'method', name: 'exportProject', static: false, private: false,
         access: { has: obj => 'exportProject' in obj, get: obj => obj.exportProject }, metadata: _metadata,
@@ -425,6 +433,7 @@ let NovalWriterService = (() => {
       this.writeLinkTail = Promise.resolve()
       this.mutationRoundGuard = new NovelMutationRoundGuard()
       this.completionGuard = new NovelCompletionGuard()
+      this.qualityGuard = new NovelQualityGuard()
       // Which novel each conversation writes: session id → (workspace, novel).
       this.bindingsPath = join(this.root, 'session-novels.json')
       this.bindings = readBindingStore(this.bindingsPath)
@@ -587,6 +596,7 @@ let NovalWriterService = (() => {
 
     async finishWritingTurn({ agent, turn, signal }) {
       if (signal?.aborted) return
+      if (await this.finishQualityTurn({ agent, turn, signal })) return
       const round = this.completionGuard.round(agent, turn)
       if (!round?.pending.size) return
       const unresolved = []
@@ -614,6 +624,30 @@ let NovalWriterService = (() => {
       const message = error && error.message ? error.message : String(error)
       if (typeof this.ctx.logger === 'function') this.ctx.logger('dsh-w-noval-write').warn(`${what}: ${message}`)
       else console.warn(`dsh-w-noval-write: ${what}: ${message}`)
+    }
+
+    async finishQualityTurn({ agent, turn, signal }) {
+      const round = this.qualityGuard.round(agent, turn)
+      if (!round || signal?.aborted) return false
+      const currentId = this.novelForAgentSync(agent)?.id
+      const issues = []
+      for (const [key, check] of round.checks) {
+        if (currentId !== check.workspaceId) { round.checks.delete(key); continue }
+        const project = this.stateForWorkspace(currentId).project
+        let report
+        try { report = auditNovel(project, check.options) } catch (error) { report = { issues: [{ severity: 'error', path: check.options.volumeId, message: error.message }] } }
+        issues.push(...report.issues.filter(issue => issue.severity === 'error'))
+      }
+      if (!issues.length || signal?.aborted) return false
+      const feedback = 'NOVEL_PLAN_INCOMPLETE: 本次要求完成的内容仍有缺项，不能宣称已经写完。\n' + issues.slice(0, 30).map(i => `${i.path}: ${i.message}`).join('\n') + `\n共 ${issues.length} 项；调用 novel_quality_check 分页查看。按章、按模块补齐完整内容后重新检查；不能删除章目或降低计划数以通过检查。`
+      if (round.retries >= 2 || typeof agent.inject !== 'function') {
+        const error = new Error(feedback + '\n本轮仍未完成，已保存的草稿保留。')
+        error.code = 'NOVEL_PLAN_INCOMPLETE'
+        throw error
+      }
+      round.retries++
+      agent.inject(createUserMessage({ content: [{ type: 'text', text: feedback }], source: { kind: 'dsh-w-noval-write', form: 'notice', summary: '大纲或设定仍有缺项，继续补齐' } }))
+      return true
     }
 
     linkForAgent(agent) {
@@ -912,7 +946,9 @@ let NovalWriterService = (() => {
       const key = String(workspace.id)
       const next = normalizeState(nextValue)
       if (JSON.stringify(next.project) === JSON.stringify(current.project)) {
-        return { ok: true, changed: false, stop: true, ...this.view(workspace, current) }
+        // An idempotent save of one chapter does not finish a multi-chapter task.
+        // The exclusive write/advance guard still returns stop:true on actual loops.
+        return { ok: true, changed: false, stop: false, guidance: 'This item already matches the saved data. Continue with remaining chapters/modules; do not repeat this unchanged mutation.', ...this.view(workspace, current) }
       }
       next.revision = current.revision + 1
       next.updatedAt = new Date().toISOString()
@@ -1158,6 +1194,13 @@ let NovalWriterService = (() => {
       return projectExportDocument(state, workspace)
     }
 
+    async exportWriting(workspaceId, kind, format, expectedRevision) {
+      const workspace = this.workspaceRecord(workspaceId)
+      const state = this.stateForWorkspace(String(workspace.id))
+      if (!Number.isSafeInteger(expectedRevision) || state.revision !== expectedRevision) throw new Error('项目已变化，请载入最新内容后导出。')
+      return exportWritingDocument(state.project, kind, format, state.revision)
+    }
+
     async importProject(workspaceId, input, expectedRevision) {
       const project = projectFromImportDocument(input)
       return this.mutateAs({ actor: 'user', operation: 'import' }, workspaceId, expectedRevision, current => ({ ...current, project, castInbox: [] }))
@@ -1371,6 +1414,7 @@ let NovalWriterService = (() => {
         description: '安全地局部修改当前工作区小说设定。先 novel_read；patch 必须是直接 JSON 对象，禁止字符串化或包裹整个工具参数。失败时调用 novel_schema、修正并重试一次。对象部分深度合并；提供的数组整体替换。',
         parameters: {
           patch: projectToolSchema({ partial: true, required: true }),
+          allow_outline_removal: { type: 'boolean', description: '仅用户明确要求删章或重构时为 true。默认拒绝整数组替换时漏掉已有章节。' },
           expected_revision: { type: 'integer', required: true, description: '必填并发保护；复制最近一次 novel_read 返回的 revision。' },
         },
         output: toolOutput('小说设定已修改'),
@@ -1381,6 +1425,7 @@ let NovalWriterService = (() => {
           const expectedRevision = assertExpectedRevision(args?.expected_revision)
           const result = await self.mutateAs({ actor: 'ai', operation: 'novel_patch' }, String(workspace.id), expectedRevision, current => {
             const project = mergeProject(current.project, args?.patch)
+            if (args?.allow_outline_removal !== true) assertOutlinePreserved(current.project, project)
             assertProjectShape(project, { partial: false })
             return { ...current, project }
           })
@@ -1458,7 +1503,7 @@ let NovalWriterService = (() => {
 
       this.ctx.tools.register(defineTool({
         name: 'novel_outline_read',
-        description: '按卷或章节读取结构化大纲，避免把几十章塞进一个长字符串。默认返回所有卷的概要和每卷前 50 章。',
+        description: '按卷或章节读取结构化大纲，避免把几十章塞进一个长字符串。默认返回所有卷的概要和每卷前 50 章。每卷 hasMore 为真时，继续用该卷 volume_id 和 nextOffset 读取下一页，直到完整；不得用部分分页覆盖全卷。',
         parameters: {
           volume_id: { type: 'string', description: '可选；只读取这个卷。' },
           chapter_id: { type: 'string', description: '可选；只读取这个章节，必须同时提供 volume_id。' },
@@ -1495,9 +1540,32 @@ let NovalWriterService = (() => {
               if (!chapter) throw new Error(`unknown chapter '${chapterId}'`)
               return { ...volume, chapters: [withManuscript(chapter)], totalChapters: volume.chapters.length }
             }
-            return { ...volume, chapters: volume.chapters.slice(offset, offset + limit).map(withManuscript), totalChapters: volume.chapters.length }
+            const chapters = volume.chapters.slice(offset, offset + limit).map(withManuscript)
+            const nextOffset = offset + chapters.length < volume.chapters.length ? offset + chapters.length : null
+            return { ...volume, chapters, totalChapters: volume.chapters.length, offset, returnedChapters: chapters.length, hasMore: nextOffset !== null, nextOffset }
           })
           return { workspace: { id: String(workspace.id), title: workspace.title }, revision: state.revision, volumes: value }
+        },
+      }))
+
+      this.ctx.tools.register(defineTool({
+        name: 'novel_quality_check',
+        description: '交付前逐模块核对缺项、计划章数、章号跳号、占位内容和疑似断句。detail 检查全部章节概要、事件、场景目标/冲突/推进/结果及结尾。先按用户要求记录每卷 plannedChapterCount，并读取所有分页。一次只检查本次要求完成的模块，不强制无关的可选模块。不能把 complete 当作语义和文笔质量保证。',
+        parameters: {
+          scope: { type: 'string', enum: QUALITY_SCOPES, description: '默认 detail；outline 只检查章纲，其他值检查指定模块。' },
+          volume_id: { type: 'string' }, chapter_id: { type: 'string' },
+          require_complete: { type: 'boolean', description: '本轮承诺交付完整内容时设 true；检查失败后，结束前最多两次自动提示补齐。只查看现状或阶段草稿时 false。' },
+          offset: { type: 'integer' }, limit: { type: 'integer' },
+        },
+        output: toolOutput('完整性检查结果', { includeValue: true }),
+        async execute(args, exec) {
+          const { workspace, state } = await self.modelState(exec)
+          const options = { scope: args?.scope || 'detail', volumeId: args?.volume_id || '', chapterId: args?.chapter_id || '' }
+          const report = auditNovel(state.project, options)
+          if (args?.require_complete === true) self.qualityGuard.require(exec.agent, workspace.id, options)
+          const offset = Number.isSafeInteger(args?.offset) ? Math.max(0, args.offset) : 0
+          const limit = Number.isSafeInteger(args?.limit) ? Math.min(100, Math.max(1, args.limit)) : 50
+          return { ...report, revision: state.revision, totalIssues: report.issues.length, issues: report.issues.slice(offset, offset + limit), nextOffset: offset + limit < report.issues.length ? offset + limit : null }
         },
       }))
 
@@ -1809,6 +1877,7 @@ let NovalWriterService = (() => {
         description: '完整替换当前工作区小说项目，仅用于大规模重构。先 novel_read 并保留全部字段；project 必须是直接的完整 JSON 对象，禁止字符串化、Markdown 或再次包裹 {expected_revision, project}。失败时调用 novel_schema、修正并重试一次。',
         parameters: {
           project: projectToolSchema({ partial: false, required: true }),
+          allow_outline_removal: { type: 'boolean', description: '仅用户明确要求删章或重构时为 true。不要把读取分页中的部分章节作为全书覆盖。' },
           expected_revision: { type: 'integer', required: true, description: '必填并发保护；复制最近一次 novel_read 返回的 revision。' },
           replace_progress: { type: 'boolean', description: '默认 false，完整重写仍保留不可追加式的进展账本。只有明确要重建历史时才传 true。' },
         },
@@ -1835,6 +1904,7 @@ let NovalWriterService = (() => {
           const keepsProgression = !Object.hasOwn(args.project, 'progression')
           const result = await self.mutateAs({ actor: 'ai', operation: 'novel_write' }, String(workspace.id), expectedRevision, current => {
             const project = normalizeProject(args?.project)
+            if (args?.allow_outline_removal !== true) assertOutlinePreserved(current.project, project)
             if (args?.replace_progress !== true) project.progress = current.project.progress
             if (keepsThreads) project.threads = current.project.threads
             if (keepsProgression) project.progression = current.project.progression

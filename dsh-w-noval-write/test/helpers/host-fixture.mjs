@@ -11,6 +11,8 @@ import * as library from '../../noval-library.js'
 import * as search from '../../noval-search-core.js'
 import * as guard from '../../noval-mutation-guard.js'
 import * as completion from '../../noval-completion-guard.js'
+import * as quality from '../../noval-quality.js'
+import * as writingExport from '../../noval-writing-export.js'
 
 // Exercise the actual Host methods and filesystem; only Harness registration
 // and decorators are stubbed, so no profile, model or user session is loaded.
@@ -33,7 +35,7 @@ export async function hostFixture(t) {
     get: () => registry, logger: () => ({ warn() {}, info() {} }) }
   const schema = new Proxy(function () { return schema }, { get() { return schema } })
   const context = vm.createContext({
-    ...crypto, ...fs, ...fsp, ...path, ...core, ...files, ...library, ...search, ...guard, ...completion,
+    ...crypto, ...fs, ...fsp, ...path, ...core, ...files, ...library, ...search, ...guard, ...completion, ...quality, ...writingExport,
     console, process, Buffer, Schema: schema, Remote: () => method => method,
     TypertRemoteService: class { constructor(scope) { this.ctx = scope } },
     createUserMessage: value => value, defineTool: value => value,
