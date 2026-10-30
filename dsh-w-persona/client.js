@@ -31,6 +31,15 @@ window.__ModuleLoader__.load({
       ".pw-field{position:relative;display:flex;flex-direction:column;gap:6px}",
       ".pw-field-head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
       ".pw-field-label{font-size:13px;font-weight:600;line-height:19px}",
+      ".pw-help{position:relative;display:inline-flex;flex:none;margin-left:auto}",
+      ".pw-help-trigger{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:1px solid currentColor;border-radius:50%;background:transparent;color:var(--dsw-alias-label-secondary);font:600 12px/1 sans-serif;cursor:help}",
+      ".pw-help-trigger:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:3px}",
+      ".pw-help-tip{display:none;position:absolute;right:0;bottom:calc(100% + 8px);z-index:50;box-sizing:border-box;width:min(310px,calc(100vw - 64px));padding:12px 14px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-2,#fff);color:var(--dsw-alias-label-primary);box-shadow:0 6px 24px #0002;font-size:12px;font-weight:400;line-height:19px;white-space:pre-wrap;overflow-wrap:anywhere}",
+      ".pw-help:hover .pw-help-tip,.pw-help:focus-within .pw-help-tip{display:block}",
+      ".pw-new-fields{display:flex;flex-direction:column;gap:14px;padding:14px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px}",
+      ".pw-new-field{display:flex;flex-direction:column;gap:7px;min-width:0}",
+      ".pw-new-field .pw-preset-input{min-height:90px}",
+      ".pw-status{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;font-size:12px;line-height:19px;overflow-wrap:anywhere}",
       ".pw-reset{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border-radius:7px;cursor:pointer;font-size:15px;line-height:1;padding:0}",
       ".pw-reset:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}",
       ".pw-reset:disabled{cursor:default;opacity:.5}",
@@ -94,7 +103,7 @@ window.__ModuleLoader__.load({
         descriptor("getState"),
         descriptor("save", [parameter("text")]),
         descriptor("saveDialoguePreset", [parameter("value")]),
-        descriptor("saveConfiguration", [parameter("text"), parameter("value")]),
+        descriptor("saveConfiguration", [parameter("text"), parameter("value"), parameter("settings")]),
         descriptor("saveTemplate", [parameter("value")]),
         descriptor("deleteTemplate", [parameter("id")]),
         descriptor("applyTemplate", [parameter("id")]),
@@ -132,6 +141,19 @@ window.__ModuleLoader__.load({
       }) : [];
     }
 
+    function normalizeSettings(value) {
+      var source = value || {};
+      return { applyMode: source.applyMode || "immediate", textMode: source.textMode || "template",
+        characterName: source.characterName || "", userName: source.userName || "", suffix: source.suffix || "" };
+    }
+
+    function Help(props) {
+      var id = React.useId();
+      return React.createElement("span", { className: "pw-help" },
+        React.createElement("button", { type: "button", className: "pw-help-trigger", "aria-label": props.label, "aria-describedby": id }, "!"),
+        React.createElement("span", { id: id, className: "pw-help-tip", role: "tooltip" }, props.text));
+    }
+
     function PersonaSection(props) {
       var getState = props.getState;
       var saveConfiguration = props.saveConfiguration;
@@ -156,6 +178,9 @@ window.__ModuleLoader__.load({
       var presetSlot = React.useState(emptyPreset());
       var preset = presetSlot[0];
       var setPreset = presetSlot[1];
+      var settingsSlot = React.useState(normalizeSettings());
+      var settings = settingsSlot[0];
+      var setSettings = settingsSlot[1];
       var selectedSlot = React.useState("");
       var selectedId = selectedSlot[0];
       var setSelectedId = selectedSlot[1];
@@ -196,12 +221,16 @@ window.__ModuleLoader__.load({
               current: state.current,
               defaultText: state.defaultText,
               dialoguePreset: nextPreset,
+              settings: normalizeSettings(state.settings),
+              injectionStatus: state.injectionStatus,
+              currentRevision: state.currentRevision,
               templates: nextTemplates,
               activeTemplateId: state.activeTemplateId || null,
             });
             if (editSeq.current === editAtStart) {
               setText(state.current);
               setPreset(nextPreset);
+              setSettings(normalizeSettings(state.settings));
               setSelectedId(preferredId);
               setTemplateName(preferredTemplate ? preferredTemplate.name : "");
             }
@@ -248,6 +277,9 @@ window.__ModuleLoader__.load({
           current: state.current,
           defaultText: state.defaultText,
           dialoguePreset: nextPreset,
+          settings: normalizeSettings(state.settings),
+          injectionStatus: state.injectionStatus,
+          currentRevision: state.currentRevision,
           templates: nextTemplates,
           activeTemplateId: state.activeTemplateId || null,
         });
@@ -255,6 +287,7 @@ window.__ModuleLoader__.load({
           editSeq.current += 1;
           setText(state.current);
           setPreset(nextPreset);
+          setSettings(normalizeSettings(state.settings));
         }
         return nextTemplates;
       }
@@ -284,7 +317,7 @@ window.__ModuleLoader__.load({
             if (!mountedRef.current) return;
             setSaving(false);
             console.error("dsh-w-persona: operation failed:", err);
-            setHint(t("error"));
+            setHint(t("error") + " " + (err.message || String(err)));
           },
         );
       }
@@ -293,7 +326,7 @@ window.__ModuleLoader__.load({
         var savedText = text;
         var savedPreset = normalizePreset(preset);
         runBusy(
-          function () { return saveConfiguration(savedText, savedPreset); },
+          function () { return saveConfiguration(savedText, savedPreset, settings); },
           function (state) {
             acceptRemoteState(state, true);
             if (state.activeTemplateId) {
@@ -308,7 +341,7 @@ window.__ModuleLoader__.load({
       function onSaveTemplate(overwrite) {
         var name = templateName.trim();
         if (!name) { setHint(t("templateNameRequired")); return; }
-        var input = { name: name, persona: text, dialoguePreset: normalizePreset(preset) };
+        var input = { name: name, persona: text, dialoguePreset: normalizePreset(preset), settings: settings };
         if (overwrite) {
           if (!selectedId) return;
           input.id = selectedId;
@@ -361,7 +394,8 @@ window.__ModuleLoader__.load({
       }
 
       var ready = data.status === "ready";
-      var dirty = ready && (text !== data.current || !samePreset(preset, data.dialoguePreset));
+      var dirty = ready && (text !== data.current || !samePreset(preset, data.dialoguePreset)
+        || JSON.stringify(settings) !== JSON.stringify(normalizeSettings(data.settings)));
       var presetComplete = completePreset(preset);
       var selectedTemplate = data.templates.find(function (template) { return template.id === selectedId; });
       var presetFields = [
@@ -513,6 +547,36 @@ window.__ModuleLoader__.load({
                     },
                   }),
                 ),
+                React.createElement("div", { className: "pw-new-fields" },
+                  ["applyMode", "textMode", "characterName", "userName", "suffix"].map(function (field) {
+                    var choices = field === "applyMode" ? ["immediate", "new-conversations"] : field === "textMode" ? ["template", "plain"] : null;
+                    var label = t(field + "Label");
+                    var inputProps = { className: choices || field !== "suffix" ? "pw-template-name" : "pw-preset-input",
+                      "aria-label": label, value: settings[field], disabled: saving,
+                      onChange: function (event) { var value = event.currentTarget.value; editSeq.current += 1;
+                        setSettings(function (current) { return Object.assign({}, current, { [field]: value }); }); setHint(null); } };
+                    return React.createElement("div", { className: "pw-new-field", key: field },
+                      React.createElement("div", { className: "pw-field-head" }, React.createElement("span", { className: "pw-field-label" }, label),
+                        React.createElement(Help, { label: label + t("helpLabel"), text: t(field + "Help") })),
+                      choices ? React.createElement("select", inputProps, choices.map(function (choice) { return React.createElement("option", { key: choice, value: choice }, t(choice)); }))
+                        : React.createElement(field === "suffix" ? "textarea" : "input", Object.assign({}, inputProps, { placeholder: t(field + "Placeholder") })));
+                  })),
+                React.createElement("div", { className: "pw-status", role: "status" },
+                  React.createElement("div", { className: "pw-field-head" }, React.createElement("strong", null, t("injectionLabel")),
+                    React.createElement(Help, { label: t("injectionLabel") + t("helpLabel"), text: t("injectionHelp") })),
+                  React.createElement("span", null, !data.injectionStatus || data.injectionStatus.state === "pending" ? t("injectionPending")
+                    : data.injectionStatus.state === "error" ? t("error") + " " + data.injectionStatus.message
+                    : t("injectionPrepared") + " · " + data.injectionStatus.model + " · " + t("route-" + data.injectionStatus.route)
+                      + " · " + t("exampleCount") + ": " + data.injectionStatus.exampleMessages),
+                  data.injectionStatus && data.injectionStatus.state === "prepared" && data.injectionStatus.matchesCurrent === false
+                    ? React.createElement("span", { className: "pw-warning" }, t("previousConfiguration")) : null,
+                  data.injectionStatus && data.injectionStatus.revision ? React.createElement("span", { className: "pw-hint" },
+                    t("revision") + ": " + data.injectionStatus.revision + " · " + t("session") + ": " + data.injectionStatus.sessionId
+                    + " · " + new Date(data.injectionStatus.at).toLocaleString()) : null,
+                  React.createElement("button", { type: "button", className: "pw-template-button", disabled: saving,
+                    onClick: function () { runBusy(getState, function (state) {
+                      setData(function (current) { return Object.assign({}, current, { injectionStatus: state.injectionStatus }); });
+                    }, t("statusRefreshed")); } }, t("refreshStatus"))),
                 React.createElement(
                   "div",
                   { className: "pw-preset-head" },
@@ -664,6 +728,51 @@ window.__ModuleLoader__.load({
       },
     };
 
+    Object.assign(dicts.zh, {
+      helpLabel: "：说明与示例",
+      applyModeLabel: "生效范围", immediate: "当前及新对话，下次请求同步更新", "new-conversations": "仅新对话，已有对话保持原人设",
+      applyModeHelp: "正文、行为约束和示例一起切换。正在生成的回复不受影响。\n示例：从侦探切换为老师，选择“当前及新对话”后，旧对话的下一次请求也会使用老师。\n选择“仅新对话”时，本次运行已捕获人设的对话保持原配置；重启后重新捕获。",
+      textModeLabel: "文本解析", template: "变量模板", plain: "普通文本（原样保留双花括号）",
+      textModeHelp: "变量模板支持 {{char}}、{{user}}、{{model}}、{{provider}}、{{cwd}}，保存前检查变量。\n示例：你是 {{char}}，称呼用户为 {{user}}。\n普通文本不会替换任何双花括号。角色名和称呼也会作为独立人设信息注入。",
+      characterNameLabel: "角色名", characterNamePlaceholder: "例如：小鲸",
+      characterNameHelp: "填写后作为角色身份注入，也可用 {{char}} 引用。\n示例：角色名填“小鲸”，正文写“你是 {{char}}，擅长耐心解释问题”。",
+      userNameLabel: "用户称呼", userNamePlaceholder: "例如：阿林",
+      userNameHelp: "填写后作为用户称呼注入，也可用 {{user}} 引用。\n示例：称呼填“阿林”，示例回答写“{{user}}，我们一步一步来”。",
+      suffixLabel: "简短行为约束", suffixPlaceholder: "例如：用中文，语气温和，称呼用户为 {{user}}；技术解释保持准确。",
+      suffixHelp: "追加到 System 提示词末尾，适合简短的语气、称呼与回答习惯。保留官方工具说明。\n示例：默认用中文，先回应情绪，再给出两到三条具体建议。\n完整提示词模式会在请求发送前补入此约束。",
+      injectionLabel: "最近一次请求的注入状态", injectionHelp: "反映最近一次请求准备时的配置，不代表模型保证遵循，也不是服务端接收回执。点击刷新查看。\n示例：“组装注入 · 示例消息: 4”表示本次请求已包含人设和两轮示例。\n切换模型、对话压缩后也会重新检查。",
+      injectionPending: "等待下一次模型请求验证。", injectionPrepared: "已进入待发送请求",
+      previousConfiguration: "此请求使用已有会话保留的旧配置。选择“当前及新对话”并保存，可在下次请求同步更新。",
+      "route-assembly": "组装注入", "route-complete-fallback": "完整提示词模式补入", "route-request-fallback": "请求补入", "route-default": "使用官方默认人设",
+      exampleCount: "示例消息", revision: "人设版本", session: "会话", refreshStatus: "刷新状态", statusRefreshed: "状态已刷新。",
+      templateHelp: "模板保存正文、行为约束、变量、示例与生效范围，可一键切换。",
+      templateApplied: "模板已保存为当前配置，将按所选生效范围用于下一次请求。",
+      applied: "已保存，将按所选生效范围用于下一次请求。",
+      presetHelp: "完整的两轮示例会放在首条 System 之后，随所选生效范围同步切换；不写入聊天记录。",
+    });
+    Object.assign(dicts.en, {
+      helpLabel: ": help and example",
+      applyModeLabel: "Apply to", immediate: "Current and new conversations, from the next request", "new-conversations": "New conversations only",
+      applyModeHelp: "Switch persona, style and examples together. In-flight replies are unaffected.\nExample: switch detective to teacher; current conversations use the teacher on their next request.\nNew-only keeps configurations captured during this runtime; restart captures them again.",
+      textModeLabel: "Text parsing", template: "Variable template", plain: "Plain text (keep braces literally)",
+      textModeHelp: "Supported: {{char}}, {{user}}, {{model}}, {{provider}}, {{cwd}}.\nExample: You are {{char}}. Call the user {{user}}.\nPlain text keeps all braces. Names are also injected as persona facts.",
+      characterNameLabel: "Character name", characterNamePlaceholder: "Example: Whale",
+      characterNameHelp: "Injected as the character identity; use {{char}} in templates.\nExample: You are {{char}}, a patient tutor.",
+      userNameLabel: "User name", userNamePlaceholder: "Example: Alex",
+      userNameHelp: "Injected as the user's preferred name; use {{user}} in templates.\nExample: {{user}}, let's work through this together.",
+      suffixLabel: "Brief behavior rules", suffixPlaceholder: "Example: Be warm and concise. Call the user {{user}}. Keep technical answers accurate.",
+      suffixHelp: "Appended after System guidance; keep this brief.\nExample: Acknowledge feelings, then give two concrete suggestions.\nAlso applied before dispatch in complete-prompt modes.",
+      injectionLabel: "Latest request injection", injectionHelp: "Shows the last prepared request, not a server receipt or a guarantee of model behavior. Refresh to inspect it.\nExample: Assembly injection, 4 example messages means both example turns were included.",
+      injectionPending: "Waiting for the next model request.", injectionPrepared: "Included in prepared request",
+      previousConfiguration: "This request used an older session configuration. Select current and new conversations, then save to switch on the next request.",
+      "route-assembly": "Assembly injection", "route-complete-fallback": "Complete-prompt fallback", "route-request-fallback": "Request fallback", "route-default": "Official default persona",
+      exampleCount: "Example messages", revision: "Persona version", session: "Session", refreshStatus: "Refresh status", statusRefreshed: "Status refreshed.",
+      templateHelp: "Templates store persona, style, variables, examples and application scope.",
+      templateApplied: "Template saved as current configuration; applies according to the selected scope on the next request.",
+      applied: "Saved; applies according to the selected scope on the next request.",
+      presetHelp: "Both example turns follow the leading System message and switch with the selected scope. They are not stored in chat history.",
+    });
+
     async function apply(ctx) {
       ctx.effect(function () { return ctx.locale.register(NS, dicts); });
       var t = ctx.locale.bind(NS);
@@ -682,7 +791,7 @@ window.__ModuleLoader__.load({
           getState: function () { return unwrap("getState", []); },
           save: function (text) { return unwrap("save", [text]); },
           saveDialoguePreset: function (value) { return unwrap("saveDialoguePreset", [value]); },
-          saveConfiguration: function (text, value) { return unwrap("saveConfiguration", [text, value]); },
+          saveConfiguration: function (text, value, settings) { return unwrap("saveConfiguration", [text, value, settings]); },
           saveTemplate: function (value) { return unwrap("saveTemplate", [value]); },
           deleteTemplate: function (id) { return unwrap("deleteTemplate", [id]); },
           applyTemplate: function (id) { return unwrap("applyTemplate", [id]); },

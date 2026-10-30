@@ -1,4 +1,5 @@
 import { normalizeDialoguePreset } from './dialogue-preset-core.js'
+import { normalizePersonaSettings } from './persona-injection-core.js'
 
 export const PERSONA_TEMPLATE_LIBRARY_VERSION = 1
 export const MAX_PERSONA_TEMPLATES = 100
@@ -22,6 +23,7 @@ export function normalizePersonaTemplate(value) {
     id: requiredText(value.id, 'id', 160),
     name: requiredText(value.name, 'name', 80),
     persona: value.persona,
+    settings: normalizePersonaSettings(value.settings),
     dialoguePreset: normalizeDialoguePreset(value.dialoguePreset),
     createdAt: requiredText(value.createdAt, 'createdAt', 80),
     updatedAt: requiredText(value.updatedAt, 'updatedAt', 80),
@@ -64,6 +66,7 @@ export function savePersonaTemplate(libraryValue, input, options = {}) {
     id,
     name,
     persona: input.persona,
+    settings: input.settings,
     dialoguePreset: input.dialoguePreset,
     createdAt: existingIndex === -1 ? now : library.templates[existingIndex].createdAt,
     updatedAt: now,
@@ -82,13 +85,14 @@ export function deletePersonaTemplate(libraryValue, id) {
   return { version: PERSONA_TEMPLATE_LIBRARY_VERSION, templates }
 }
 
-export function personaTemplateMatches(templateValue, persona, dialoguePreset) {
+export function personaTemplateMatches(templateValue, persona, dialoguePreset, settings) {
   const template = normalizePersonaTemplate(templateValue)
   if (typeof persona !== 'string' || template.persona !== persona) return false
   return JSON.stringify(template.dialoguePreset) === JSON.stringify(normalizeDialoguePreset(dialoguePreset))
+    && JSON.stringify(template.settings) === JSON.stringify(normalizePersonaSettings(settings))
 }
 
-export function matchingPersonaTemplateId(libraryValue, persona, dialoguePreset) {
+export function matchingPersonaTemplateId(libraryValue, persona, dialoguePreset, settings) {
   const library = normalizePersonaTemplateLibrary(libraryValue)
-  return library.templates.find(template => personaTemplateMatches(template, persona, dialoguePreset))?.id ?? null
+  return library.templates.find(template => personaTemplateMatches(template, persona, dialoguePreset, settings))?.id ?? null
 }

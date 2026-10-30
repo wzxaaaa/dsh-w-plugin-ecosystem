@@ -11,9 +11,9 @@
  *
  * The override is applied by a GLOBAL `system-prompt/assemble` listener that
  * rewrites the current `deployment:persona-prefix` section (or the legacy
- * `deployment:persona` section) on every model turn, so it applies instantly
- * regardless of the active preset (every preset mounts its own persona row
- * that would shadow a deployment-level config anyway).
+ * `deployment:persona` section). A final request check handles complete-prompt
+ * presets. Persona, style and examples share one per-session configuration;
+ * saved scope controls whether existing sessions switch on their next request.
  *
  * The plugin deliberately never writes the profile's cordis.patch.yml: the
  * Harness hot-reloads that file, a changed `system-prompt` config reloads the
@@ -32,14 +32,13 @@ import {
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import * as sessionProtocol from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { basename, dirname, join } from 'node:path'
 import * as yaml from 'js-yaml'
 import {
   defaultDialoguePreset,
-  dialoguePresetTurns,
   normalizeDialoguePreset,
 } from './dialogue-preset-core.js'
 import {
@@ -51,6 +50,11 @@ import {
 } from './persona-template-core.js'
 import { personaFromConfig, rewritePersonaAssembly, updatePersonaPatch } from './persona-patch-core.js'
 import { migrateLegacyPersona } from './persona-profile-migration.js'
+import {
+  normalizePersonaSettings, normalizeConfiguration, renderConfiguration,
+  sessionConfiguration, enforceRequestPersona, insertDialogueExamples,
+  personaBody, personaStyle,
+} from './persona-injection-core.js'
 
 var __runInitializers = function (thisArg, initializers, value) {
   var useValue = arguments.length > 2
@@ -247,10 +251,11 @@ let PersonaManagerGateway = (() => {
       // undefined = not yet read; true when an older version left its
       // override in cordis.patch.yml.
       this._legacyPatchOverride = undefined
-      // The preset is captured on the first model request per session. Later
-      // setting changes therefore affect new conversations without rewriting
-      // the context of conversations already in progress.
-      this._sessionDialoguePresets = new Map()
+      // New-only retains a whole runtime snapshot; immediate updates the whole
+      // snapshot at the next assembly. Never mix new prose with old examples.
+      this._sessionConfigurations = new Map()
+      this._sessionAssemblies = new Map()
+      this._injectionStatus = { state: 'pending' }
       this._mutationTail = Promise.resolve()
 
       // The `system-prompt` config override alone is NOT enough: every shipped
@@ -261,11 +266,29 @@ let PersonaManagerGateway = (() => {
       // `next()` returns the downstream (inner) result, so we patch that value
       // and return it as authoritative.
       const self = this
-      this.ctx.on('system-prompt/assemble', async (assembly, _context, next) => {
-        const assembled = await next()
-        const custom = await self.getAssemblyPersona()
-        if (custom === null || !assembled || !Array.isArray(assembled.sections)) return assembled
-        return rewritePersonaAssembly(assembled, custom)
+      this.ctx.on('system-prompt/assemble', async (assembly, context, next) => {
+        try {
+          const assembled = await next()
+          if (!context.agent || !assembled || !Array.isArray(assembled.sections)) return assembled
+          const key = String(context.agent.id)
+          const config = await self.getSessionConfiguration(key)
+          const rendered = renderConfiguration(config, assembled.variables)
+          const original = assembled.sections.find(section => ['deployment:persona-prefix', 'deployment:persona'].includes(section.name))
+          let originalPrefix = original?.text
+          if (original && original.interpolate !== false) {
+            originalPrefix = original.text.replace(/\{\{([^{}]*)\}\}/g, (match, key) => assembled.variables[key.trim()] ?? match)
+          }
+          self._sessionAssemblies.set(key, { rendered, originalPrefix })
+          let result = rendered.persona === null ? assembled : rewritePersonaAssembly(assembled, personaBody(rendered.persona))
+          if (rendered.persona !== null) result = { ...result, sections: result.sections.map(section =>
+            ['deployment:persona-prefix', 'deployment:persona'].includes(section.name) ? { ...section, interpolate: false } : section) }
+          if (rendered.suffix) result = { ...result, sections: [...result.sections,
+            { name: 'dsh-w-persona:style', text: personaStyle(rendered.suffix), interpolate: false }] }
+          return result
+        } catch (error) {
+          self._injectionStatus = { state: 'error', message: String(error.message ?? error), at: new Date().toISOString() }
+          throw error
+        }
       })
 
       // Harness loop requests are immutable and reconstructable from the
@@ -276,34 +299,50 @@ let PersonaManagerGateway = (() => {
       this.ctx.on('llm/stream', (options, next) => {
         if (DIALOGUE_BYPASS.has(options) || !isAgentLoopRequest(options)) return next()
         return (async function* () {
-          const preset = await self.getSessionDialoguePreset(options.sessionId)
-          const turns = dialoguePresetTurns(preset)
-          if (turns.length === 0) {
-            yield* next()
-            return
-          }
-          const prefix = turns.map(turn => turn.role === 'user'
-            ? createUserMessage({
-              content: [{ type: 'text', text: turn.text }],
-              source: Number(sessionProtocol.SESSION_FORMAT_VERSION) >= 4
-                ? { kind: 'dsh-w-persona', form: 'recall' }
-                : { kind: 'plugin', plugin: 'dsh-w-persona', form: 'recall' },
+          try {
+            const key = String(options.sessionId)
+            const captured = self._sessionAssemblies.get(key)
+            const rendered = captured?.rendered ?? renderConfiguration(await self.getSessionConfiguration(key), {
+              model: options.model, provider: options.provider, cwd: '',
             })
-            : createAssistantMessage({
-              content: [{ type: 'text', text: turn.text }],
-              source: { provider: options.provider, model: options.model },
-            }))
-          const replacement = deepFreeze({
-            ...options,
-            messages: [...prefix, ...options.messages],
-          })
-          DIALOGUE_BYPASS.add(replacement)
-          yield* self.ctx.llm.stream(replacement)
+            const turns = rendered.turns
+            const enforced = enforceRequestPersona(options.messages, rendered, captured?.originalPrefix)
+            const prefix = turns.map(turn => turn.role === 'user'
+              ? createUserMessage({
+                content: [{ type: 'text', text: turn.text }],
+                source: Number(sessionProtocol.SESSION_FORMAT_VERSION) >= 4
+                  ? { kind: 'dsh-w-persona', form: 'recall' }
+                  : { kind: 'plugin', plugin: 'dsh-w-persona', form: 'recall' },
+              })
+              : createAssistantMessage({
+                content: [{ type: 'text', text: turn.text }],
+                source: { provider: options.provider, model: options.model },
+              }))
+            const replacement = deepFreeze({
+              ...options,
+              messages: insertDialogueExamples(enforced.messages, prefix),
+            })
+            self._injectionStatus = {
+              state: 'prepared', revision: rendered.revision, sessionId: key,
+              provider: options.provider, model: options.model, route: enforced.route,
+              matched: enforced.matched, exampleMessages: prefix.length, at: new Date().toISOString(),
+            }
+            if (replacement.messages === options.messages) {
+              yield* next()
+              return
+            }
+            DIALOGUE_BYPASS.add(replacement)
+            yield* self.ctx.llm.stream(replacement)
+          } catch (error) {
+            self._injectionStatus = { state: 'error', message: String(error.message ?? error), at: new Date().toISOString() }
+            throw error
+          }
         })()
       }, { global: true, prepend: true })
 
       this.ctx.on('agent/disposed', ({ agent }) => {
-        this._sessionDialoguePresets.delete(String(agent.id))
+        this._sessionConfigurations.delete(String(agent.id))
+        this._sessionAssemblies.delete(String(agent.id))
       }, { global: true })
     }
 
@@ -388,7 +427,7 @@ let PersonaManagerGateway = (() => {
       if (persona !== null && typeof persona !== 'string') {
         throw new Error(OVERRIDE_STATE_FILE + ': persona must be a string or null')
       }
-      return { persona }
+      return { persona, settings: normalizePersonaSettings(parsed.settings) }
     }
 
     /**
@@ -398,6 +437,7 @@ let PersonaManagerGateway = (() => {
     async getCustomPersona() {
       if (this._customPersona !== undefined) return this._customPersona
       const state = await this.readOverrideState()
+      this._personaSettings = normalizePersonaSettings(state?.settings)
       this._customPersona = state !== undefined ? state.persona : await this.readOverrideFromPatch()
       return this._customPersona
     }
@@ -422,10 +462,12 @@ let PersonaManagerGateway = (() => {
     }
 
     /** Persist the override (null when `text` is the default) and refresh the cache. */
-    async writeOverrideState(text, defaultText) {
+    async writeOverrideState(text, defaultText, settings = this._personaSettings) {
       const persona = text !== defaultText ? text : null
-      await writeJsonAtomic(this.overrideStatePath(), { version: 1, persona })
+      settings = normalizePersonaSettings(settings)
+      await writeJsonAtomic(this.overrideStatePath(), { version: 2, persona, settings })
       this._customPersona = persona
+      this._personaSettings = settings
     }
 
     /**
@@ -481,12 +523,13 @@ let PersonaManagerGateway = (() => {
       return operation
     }
 
-    async getSessionDialoguePreset(sessionId) {
-      const key = String(sessionId ?? '')
-      if (this._sessionDialoguePresets.has(key)) return this._sessionDialoguePresets.get(key)
-      const preset = await this.readDialoguePreset()
-      this._sessionDialoguePresets.set(key, preset)
-      return preset
+    async getSessionConfiguration(sessionId) {
+      // Never observe one half of a configuration save from an in-flight request.
+      await this._mutationTail
+      const persona = await this.getAssemblyPersona()
+      const config = normalizeConfiguration(persona, await this.readDialoguePreset(), this._personaSettings)
+      config.revision = createHash('sha256').update(JSON.stringify(config)).digest('hex').slice(0, 12)
+      return sessionConfiguration(this._sessionConfigurations, sessionId, config)
     }
 
     async getState() {
@@ -497,26 +540,34 @@ let PersonaManagerGateway = (() => {
         this.readTemplateLibrary(),
       ])
       const current = custom ?? defaultText
+      // Keep legacy invalid templates editable; validation belongs to save and dispatch.
+      const configuration = { persona: await this.getAssemblyPersona(), dialoguePreset, settings: normalizePersonaSettings(this._personaSettings) }
+      const currentRevision = createHash('sha256').update(JSON.stringify(configuration)).digest('hex').slice(0, 12)
       return {
         current,
         defaultText,
         dialoguePreset,
+        settings: normalizePersonaSettings(this._personaSettings),
+        currentRevision,
+        injectionStatus: { ...this._injectionStatus, matchesCurrent: this._injectionStatus.revision === currentRevision },
         templates: library.templates,
-        activeTemplateId: matchingPersonaTemplateId(library, current, dialoguePreset),
+        activeTemplateId: matchingPersonaTemplateId(library, current, dialoguePreset, this._personaSettings),
       }
     }
 
-    validateConfiguration(text, value) {
+    validateConfiguration(text, value, settings) {
       if (typeof text !== 'string') throw new Error('persona text must be a string')
       if (Buffer.byteLength(text, 'utf8') > MAX_PERSONA_BYTES) throw new Error('persona text exceeds the 1 MB limit')
       const preset = normalizeDialoguePreset(value)
+      const normalized = normalizeConfiguration(text, preset, settings)
+      if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > MAX_PERSONA_BYTES + MAX_DIALOGUE_BYTES) throw new Error('persona configuration exceeds the 2 MB limit')
       if (Buffer.byteLength(JSON.stringify(preset), 'utf8') > MAX_DIALOGUE_BYTES) {
         throw new Error('dialogue preset exceeds the 1 MB limit')
       }
       return preset
     }
 
-    async writeConfiguration(text, preset) {
+    async writeConfiguration(text, preset, settings) {
       const defaultText = await this.readDefaultPersona()
       const overridePath = this.overrideStatePath()
       const dialoguePath = this.dialogueStatePath()
@@ -525,54 +576,62 @@ let PersonaManagerGateway = (() => {
           if (error && error.code === 'ENOENT') return undefined
           throw error
         })
-        await this.writeOverrideState(text, defaultText)
+        await this.writeOverrideState(text, defaultText, settings)
         try {
           await writeJsonAtomic(dialoguePath, preset)
         } catch (error) {
           if (before === undefined) await rm(overridePath, { force: true }).catch(() => {})
           else await writeFile(overridePath, before, 'utf8').catch(() => {})
           this._customPersona = undefined
+          this._personaSettings = undefined
           throw error
         }
       })
+      this._injectionStatus = { state: 'pending' }
       return { defaultText }
     }
 
     async save(text) {
       return this.serializeMutation(async () => {
+        await this.getCustomPersona()
+        this.validateConfiguration(text, await this.readDialoguePreset(), this._personaSettings)
         if (typeof text !== 'string') throw new Error('persona text must be a string')
         if (Buffer.byteLength(text, 'utf8') > MAX_PERSONA_BYTES) throw new Error('persona text exceeds the 1 MB limit')
         const defaultText = await this.readDefaultPersona()
         const path = this.overrideStatePath()
         await withPatchLock(path, () => this.writeOverrideState(text, defaultText))
-        return { saved: true, current: text, defaultText, applied: true }
+        this._injectionStatus = { state: 'pending' }
+        return { saved: true, current: text, defaultText, applied: false }
       })
     }
 
     async saveDialoguePreset(value) {
       return this.serializeMutation(async () => {
+        const custom = await this.getCustomPersona()
+        this.validateConfiguration(custom ?? '', value, this._personaSettings)
         const preset = normalizeDialoguePreset(value)
         if (Buffer.byteLength(JSON.stringify(preset), 'utf8') > MAX_DIALOGUE_BYTES) {
           throw new Error('dialogue preset exceeds the 1 MB limit')
         }
         const path = this.dialogueStatePath()
         await withPatchLock(path, () => writeJsonAtomic(path, preset))
-        return { saved: true, dialoguePreset: preset, applied: true }
+        this._injectionStatus = { state: 'pending' }
+        return { saved: true, dialoguePreset: preset, applied: false }
       })
     }
 
-    async saveConfiguration(text, value) {
+    async saveConfiguration(text, value, settings) {
       return this.serializeMutation(async () => {
-        const preset = this.validateConfiguration(text, value)
-        await this.writeConfiguration(text, preset)
-        return { saved: true, applied: true, ...(await this.getState()) }
+        const preset = this.validateConfiguration(text, value, settings)
+        await this.writeConfiguration(text, preset, normalizePersonaSettings(settings))
+        return { saved: true, applied: false, ...(await this.getState()) }
       })
     }
 
     async saveTemplate(value) {
       return this.serializeMutation(async () => {
         if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('persona template input must be an object')
-        const preset = this.validateConfiguration(value.persona, value.dialoguePreset)
+        const preset = this.validateConfiguration(value.persona, value.dialoguePreset, value.settings)
         const path = this.templateStatePath()
         let saved
         await withPatchLock(path, async () => {
@@ -608,8 +667,9 @@ let PersonaManagerGateway = (() => {
         const library = await this.readTemplateLibrary()
         const template = library.templates.find(candidate => candidate.id === String(id ?? ''))
         if (!template) throw new Error(`unknown persona template: ${String(id)}`)
-        await this.writeConfiguration(template.persona, template.dialoguePreset)
-        return { applied: true, appliedTemplateId: template.id, ...(await this.getState()) }
+        const preset = this.validateConfiguration(template.persona, template.dialoguePreset, template.settings)
+        await this.writeConfiguration(template.persona, preset, template.settings)
+        return { applied: false, appliedTemplateId: template.id, ...(await this.getState()) }
       })
     }
   }

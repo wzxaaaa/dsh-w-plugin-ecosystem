@@ -68,5 +68,5 @@ test('host rewrites both current and legacy assembled persona section names', ()
     { name: 'deployment:persona', text: 'custom' },
     { name: 'tool:test', text: 'tool guidance' },
   ])
-  assert.match(host, /rewritePersonaAssembly\(assembled, custom\)/)
+  assert.match(host, /rewritePersonaAssembly\(assembled, personaBody\(rendered.persona\)\)/)
 })
